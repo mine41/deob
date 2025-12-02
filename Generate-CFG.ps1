@@ -164,10 +164,8 @@ function Convert-IfAstNode {
                 }
             }
             # 如果所有分支都以 break/continue 结束，不应该将 prevNodeRef 设置为 End
-            # break/continue 已经连接到循环的适当位置，不应该传播 End 节点到循环控制流
-            # 在这种情况下，不需要创建 merge 节点，因为所有分支都已经通过 break/continue 处理了控制流
-            # 保持 prevNodeRef 不变（指向 break/continue 节点），直接返回
-            return $true  # 返回 false，表示不是所有分支都有 return，但控制流已经处理完毕
+            # 保持 prevNodeRef 不变（指向 break/continue 节点），返回 true 以停止处理后续语句
+            return $true
         }
     }
 
@@ -660,7 +658,7 @@ $finalCFG.Nodes | Select-Object Id, Type, @{
 }, Line, Ast | Format-Table -AutoSize
 $finalCFG.Edges | Format-Table -AutoSize
 #Out-GridView 查看
-$finalCFG.Nodes | Out-GridView -Title 'CFG Nodes'
+# $finalCFG.Nodes | Out-GridView -Title 'CFG Nodes'
 # 示例调用（使用您已有的 $finalCFG）
 $dotPath = Join-Path $PSScriptRoot 'in/in.dot'
 Export-CfgToDot -finalCFG $finalCFG -outputPath $dotPath

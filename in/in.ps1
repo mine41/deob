@@ -1,10 +1,11 @@
 $i = 0
-do {
-    Write-Output $i
-    if ($i -eq 2) { 
+for ($i = 0; $i -lt 8;$i++) {
+    if($i -eq 0){
         continue
-        Write-Output "Break" 
+        Write-Output "Hello"
     }
-    $i++
-} while ($i -lt 5)
+    else{
+        continue
+    }
+}
 Write-Output "Done"
