@@ -560,5 +560,3 @@ $finalCFG.Edges | Format-Table -AutoSize
 # 示例调用（使用您已有的 $finalCFG）
 $dotPath = Join-Path $PSScriptRoot 'in/in.dot'
 Export-CfgToDot -finalCFG $finalCFG -outputPath $dotPath
-
-# $finalCFG.Nodes[1].Ast
