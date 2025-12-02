@@ -12,36 +12,39 @@ digraph G {
 
     // Nodes
     1 [label="Line 0\lStart\lScript Start", shape=oval];
-    2 [label="Line 35\lEnd\lScript End", shape=oval];
-    3 [label="Line 1\lAssignmentStatementAst\l$a = 3", shape=box];
-    4 [label="Line 2\lIf Condition\lIf Condition", shape=box];
-    5 [label="Line 2\lCondition\l$a -gt 0", shape=diamond];
-    6 [label="Line 3\lIf Condition\lIf Condition", shape=box];
-    7 [label="Line 3\lCondition\l$a -eq 3", shape=diamond];
-    8 [label="Line 4\lReturn\lreturn \"3\"", shape=box];
-    9 [label="Line 5\lElse\lImplicit Else", shape=box];
-    10 [label="Line 5\lMerge\lIf-End", shape=point];
-    11 [label="Line 6\lAssignmentStatementAst\l$x = 100", shape=box];
-    12 [label="Line 7\lElse\lElse", shape=box];
-    13 [label="Line 8\lReturn\lreturn \"neg\"", shape=box];
-    14 [label="Line 9\lMerge\lIf-End", shape=point];
-    15 [label="Line 10\lAssignmentStatementAst\l$end = \"finish\"", shape=box];
+    2 [label="Line 6\lEnd\lScript End", shape=oval];
+    3 [label="Line 1\lLoopStart\lfor ($i = 0; $i -lt 5; $i++)", shape=box];
+    4 [label="Line 1\lCondition\lCondition: $i -lt 5", shape=diamond];
+    5 [label="Line 5\lLoopEnd\lEnd For", shape=box];
+    6 [label="Line 2\lIf Condition\lIf Condition", shape=box];
+    7 [label="Line 2\lCondition\l$i -eq 2", shape=diamond];
+    8 [label="Line 2\lContinue\lcontinue", shape=box];
+    9 [label="Line 2\lElse\lImplicit Else", shape=box];
+    10 [label="Line 2\lMerge\lIf-End", shape=point];
+    11 [label="Line 3\lIf Condition\lIf Condition", shape=box];
+    12 [label="Line 3\lCondition\l$i -eq 4", shape=diamond];
+    13 [label="Line 3\lBreak\lbreak", shape=box];
+    14 [label="Line 3\lElse\lImplicit Else", shape=box];
+    15 [label="Line 3\lMerge\lIf-End", shape=point];
+    16 [label="Line 4\lPipelineAst\lWrite-Output $i", shape=box];
 
     // Edges
     1 -> 3;
     3 -> 4;
-    4 -> 5 [label="Condition"];
-    5 -> 6;
+    4 -> 6;
     6 -> 7 [label="Condition"];
     7 -> 8;
-    8 -> 2 [label="Return"];
+    8 -> 4 [label="Continue"];
     6 -> 9 [label="Else"];
     9 -> 10;
     10 -> 11;
-    4 -> 12 [label="Else"];
+    11 -> 12 [label="Condition"];
     12 -> 13;
-    13 -> 2 [label="Return"];
-    11 -> 14;
+    13 -> 5 [label="Break"];
+    11 -> 14 [label="Else"];
     14 -> 15;
-    15 -> 2;
+    15 -> 16;
+    16 -> 4 [label="Next"];
+    4 -> 5 [label="Condition False"];
+    5 -> 2;
 }

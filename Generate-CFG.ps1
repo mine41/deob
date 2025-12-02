@@ -69,7 +69,8 @@ function Convert-IfAstNode {
         [hashtable]$cfg,
         [System.Management.Automation.Language.IfStatementAst]$ifAst,
         [ref]$prevNodeRef,
-        $endNodeRef = $null
+        $endNodeRef = $null,
+        $loopContext = $null
     )
     if ($null -eq $ifAst -or $null -eq $prevNodeRef) {
         Write-Warning "Invalid input: ifAst or prevNodeRef is null"
@@ -94,16 +95,20 @@ function Convert-IfAstNode {
         # 3.2 处理分支代码块（Clause[i].Item2）
         $branchHasReturn = $false
         foreach ($statement in $clause.Item2.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext
             # 如果遇到 return，停止处理后续语句
             if ($hasReturn) {
                 $branchHasReturn = $true
                 break
             }
         }
-        # 只有当分支不以 return 结束时，才添加到分支结束节点集合
-        if (-not $branchHasReturn) {
-            $branchEndNodes += $prevNodeRef.Value
+        # 只有当分支不以 return、break 或 continue 结束时，才添加到分支结束节点集合
+        # break/continue 已经跳出了 if 语句的上下文，不应该连接到 merge 节点
+        if (-not $branchHasReturn -and $null -ne $prevNodeRef.Value) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                $branchEndNodes += $prevNodeRef.Value
+            }
         }
     }
 
@@ -116,16 +121,20 @@ function Convert-IfAstNode {
         # 处理 Else 代码块
         $elseHasReturn = $false
         foreach ($statement in $ifAst.ElseClause.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext
             # 如果遇到 return，停止处理后续语句
             if ($hasReturn) {
                 $elseHasReturn = $true
                 break
             }
         }
-        # 只有当 Else 分支不以 return 结束时，才添加到分支结束节点集合
-        if (-not $elseHasReturn) {
-            $branchEndNodes += $prevNodeRef.Value
+        # 只有当 Else 分支不以 return、break 或 continue 结束时，才添加到分支结束节点集合
+        # break/continue 已经跳出了 if 语句的上下文，不应该连接到 merge 节点
+        if (-not $elseHasReturn -and $null -ne $prevNodeRef.Value) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                $branchEndNodes += $prevNodeRef.Value
+            }
         }
     }
     else {
@@ -262,10 +271,22 @@ function Convert-LoopStatement {
         # 3.1 创建专门的条件节点（放在循环体之后）
         $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
 
+        # 3.1.5 创建循环结束节点（提前创建，供 break 使用）
+        $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $loopAst
+
+        # 3.1.6 创建循环上下文（do-while/do-until 的 continue 应该跳转到条件检查）
+        # 注意：continue 应该跳转到 conditionNode，而不是 loopStart
+        # 因为 do-while/do-until 是先执行循环体，然后检查条件
+        # continue 应该跳过循环体剩余部分，直接进行条件检查
+        $loopContext = [PSCustomObject]@{
+            LoopEnd = $loopEnd
+            LoopContinue = $conditionNode  # do-while/do-until 的 continue 跳转到条件检查
+        }
+
         # 3.2 先处理循环体
         foreach ($statement in $loopAst.Body.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef
-            # 如果遇到 return，停止处理后续语句
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext
+            # 如果遇到 return/break/continue，停止处理后续语句（这些语句不可达）
             if ($hasReturn) {
                 break
             }
@@ -278,9 +299,6 @@ function Convert-LoopStatement {
         #     - 条件满足时继续循环（回到循环开始）
         #     - 条件不满足时退出循环
         Add-Edge -cfg $cfg -from $conditionNode.Id -to $loopStart.Id -label (Get-LoopBackLabel $loopAst)
-
-        # 3.5 创建循环结束节点
-        $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $loopAst
         Add-Edge -cfg $cfg -from $conditionNode.Id -to $loopEnd.Id -label (Get-ExitLabel $loopAst)
 
         $prevNodeRef.Value = $loopEnd
@@ -292,11 +310,20 @@ function Convert-LoopStatement {
     Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
     $currentNode = $conditionNode
 
+    # 4.5 创建循环结束节点（提前创建，供 break 使用）
+    $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $loopAst
+
+    # 4.6 创建循环上下文（非 do-xx 循环的 continue 应该回到 conditionNode）
+    $loopContext = [PSCustomObject]@{
+        LoopEnd = $loopEnd
+        LoopContinue = $conditionNode  # 非 do-xx 循环的 continue 回到条件节点
+    }
+
     # 5. 处理非 do-xx 的循环体（先判断后执行）
     if (-not $isDoLoop) {
         foreach ($statement in $loopAst.Body.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef
-            # 如果遇到 return，停止处理后续语句
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext
+            # 如果遇到 return/break/continue，停止处理后续语句（这些语句不可达）
             if ($hasReturn) {
                 break
             }
@@ -305,8 +332,7 @@ function Convert-LoopStatement {
         Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id -label "Next"
     }
 
-    # 6. 创建循环结束节点
-    $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $loopAst
+    # 6. 连接条件节点到循环结束节点
     Add-Edge -cfg $cfg -from $conditionNode.Id -to $loopEnd.Id -label (Get-ExitLabel $loopAst)
     $prevNodeRef.Value = $loopEnd
 }
@@ -316,7 +342,8 @@ function Convert-AstNode {
         $cfg,
         $node,
         [ref]$prevNodeRef, # 用于跨递归维护上一个节点
-        $endNodeRef = $null # 可选的 End 节点引用（ref 类型），用于 Return 语句连接
+        $endNodeRef = $null, # 可选的 End 节点引用（ref 类型），用于 Return 语句连接
+        $loopContext = $null # 循环上下文，包含 loopEnd 和 loopContinue 节点
     )
 
     # 一、如果是根节点（ScriptBlockAst），处理其直接子节点
@@ -344,7 +371,7 @@ function Convert-AstNode {
                 if ($null -ne $block.Block) {
                 # 3. 处理块内的每个语句
                     foreach ($statement in $block.Block.Statements) {
-                        $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
+                        $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $null
                         # 如果遇到 return，停止处理后续语句
                         if ($hasReturn) {
                             break
@@ -354,10 +381,13 @@ function Convert-AstNode {
             }
         }
 
-        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return 连接）
-        # 如果最后一个节点是 Return 节点，它已经连接到 End，不需要再创建边
-        if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id -and $prevNodeRef.Value.Type -ne "Return") {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
+        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue 连接）
+        # 如果最后一个节点是 Return/Break/Continue 节点，它已经连接到 End，不需要再创建边
+        if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
+            }
         }
         $prevNodeRef.Value = $endNode
     }
@@ -378,9 +408,59 @@ function Convert-AstNode {
         $prevNodeRef.Value = $returnNode
         return $true  # 返回 true 表示遇到了 return
     }
+    # 二点五、如果是BreakStatementAst，创建 Break 节点并连接到循环结束节点或 End
+    elseif ($node -is [System.Management.Automation.Language.BreakStatementAst]) {
+        $breakNode = Add-Node -cfg $cfg -type "Break" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
+        # 连接到上一个节点
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $breakNode.Id
+        }
+        # 如果提供了 loopContext，连接到循环结束节点
+        if ($null -ne $loopContext -and $null -ne $loopContext.LoopEnd) {
+            Add-Edge -cfg $cfg -from $breakNode.Id -to $loopContext.LoopEnd.Id -label "Break"
+            $prevNodeRef.Value = $breakNode
+            return $true  # 在循环中，break 会停止处理后续语句（因为已经跳出循环，后续语句不可达）
+        }
+        else {
+            # 如果不在循环中，连接到 End 节点（类似 return）
+            if ($null -ne $endNodeRef) {
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    Add-Edge -cfg $cfg -from $breakNode.Id -to $endNode.Id -label "Break"
+                }
+            }
+            $prevNodeRef.Value = $breakNode
+            return $true  # 不在循环中时，break 起到 return 的效果，停止处理后续语句
+        }
+    }
+    # 二点六、如果是ContinueStatementAst，创建 Continue 节点并连接到循环继续节点或 End
+    elseif ($node -is [System.Management.Automation.Language.ContinueStatementAst]) {
+        $continueNode = Add-Node -cfg $cfg -type "Continue" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
+        # 连接到上一个节点
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $continueNode.Id
+        }
+        # 如果提供了 loopContext，连接到循环继续节点
+        if ($null -ne $loopContext -and $null -ne $loopContext.LoopContinue) {
+            Add-Edge -cfg $cfg -from $continueNode.Id -to $loopContext.LoopContinue.Id -label "Continue"
+            $prevNodeRef.Value = $continueNode
+            return $true  # 在循环中，continue 会停止处理后续语句（因为已经跳到下一次循环，后续语句不可达）
+        }
+        else {
+            # 如果不在循环中，连接到 End 节点（类似 return）
+            if ($null -ne $endNodeRef) {
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    Add-Edge -cfg $cfg -from $continueNode.Id -to $endNode.Id -label "Continue"
+                }
+            }
+            $prevNodeRef.Value = $continueNode
+            return $true  # 不在循环中时，continue 起到 return 的效果，停止处理后续语句
+        }
+    }
     # 三、如果是IfStatementAst，创建分支
     elseif ($node -is [System.Management.Automation.Language.IfStatementAst]) {
-        $allBranchesReturn = Convert-IfAstNode -cfg $cfg -ifAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
+        $allBranchesReturn = Convert-IfAstNode -cfg $cfg -ifAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext
         # 如果所有分支都有 return，返回 true 以停止处理后续语句
         return $allBranchesReturn
     }
