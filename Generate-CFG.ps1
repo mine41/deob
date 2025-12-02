@@ -148,14 +148,26 @@ function Convert-IfAstNode {
         $prevNodeRef.Value = $implicitElseNode
     }
 
-    # 5. 如果所有分支都以 return 结束（branchEndNodes 为空），不需要创建 merge 节点
-    if ($branchEndNodes.Count -eq 0 -and $null -ne $endNodeRef) {
-        $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-        if ($null -ne $endNode) {
-            # 所有 return 已经直接连接到 End，不需要 merge 节点
-            # 将 prevNodeRef 指向 End，这样后续语句不会被处理
-            $prevNodeRef.Value = $endNode
-            return $true  # 返回 true 表示所有分支都有 return
+    # 5. 如果所有分支都以 return/break/continue 结束（branchEndNodes 为空）
+    if ($branchEndNodes.Count -eq 0) {
+        # 检查最后一个节点的类型，区分 return 和 break/continue
+        if ($null -ne $prevNodeRef.Value) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            # 如果所有分支都以 return 结束，连接到 End 节点
+            if ($lastNodeType -eq "Return" -and $null -ne $endNodeRef) {
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    # 所有 return 已经直接连接到 End，不需要 merge 节点
+                    # 将 prevNodeRef 指向 End，这样后续语句不会被处理
+                    $prevNodeRef.Value = $endNode
+                    return $true  # 返回 true 表示所有分支都有 return
+                }
+            }
+            # 如果所有分支都以 break/continue 结束，不应该将 prevNodeRef 设置为 End
+            # break/continue 已经连接到循环的适当位置，不应该传播 End 节点到循环控制流
+            # 在这种情况下，不需要创建 merge 节点，因为所有分支都已经通过 break/continue 处理了控制流
+            # 保持 prevNodeRef 不变（指向 break/continue 节点），直接返回
+            return $true  # 返回 false，表示不是所有分支都有 return，但控制流已经处理完毕
         }
     }
 
@@ -292,8 +304,14 @@ function Convert-LoopStatement {
             }
         }
 
-        # 3.3 连接循环体到条件节点
-        Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+        # 3.3 连接循环体到条件节点（只有当最后一个节点不是 break/continue 时）
+        # break 节点应该只连接到 loopEnd，continue 应该只连接到循环继续点
+        if ($null -ne $currentNode) {
+            $lastNodeType = $currentNode.Type
+            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+            }
+        }
 
         # 3.4 创建两条边：
         #     - 条件满足时继续循环（回到循环开始）
@@ -328,8 +346,14 @@ function Convert-LoopStatement {
                 break
             }
         }
-        # 添加循环回边
-        Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id -label "Next"
+        # 添加循环回边（只有当最后一个节点不是 break/continue 时）
+        # break 节点应该只连接到 loopEnd，continue 应该只连接到循环继续点
+        if ($null -ne $currentNode) {
+            $lastNodeType = $currentNode.Type
+            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id -label "Next"
+            }
+        }
     }
 
     # 6. 连接条件节点到循环结束节点
@@ -636,7 +660,7 @@ $finalCFG.Nodes | Select-Object Id, Type, @{
 }, Line, Ast | Format-Table -AutoSize
 $finalCFG.Edges | Format-Table -AutoSize
 #Out-GridView 查看
-# $finalCFG.Nodes | Out-GridView -Title 'CFG Nodes'
+$finalCFG.Nodes | Out-GridView -Title 'CFG Nodes'
 # 示例调用（使用您已有的 $finalCFG）
 $dotPath = Join-Path $PSScriptRoot 'in/in.dot'
 Export-CfgToDot -finalCFG $finalCFG -outputPath $dotPath
