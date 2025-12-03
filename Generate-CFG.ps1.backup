@@ -196,111 +196,117 @@ function Convert-SwitchAstNode {
         return
     }
 
-    # 1. 添加 Switch 条件节点（评估条件表达式，可能是数组）
-    # 1.1 获取 switch 的 flags（-Wildcard, -Regex, -CaseSensitive, -Exact, -File, -Parallel）
-    $switchFlags = @()
-    if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::Wildcard) { $switchFlags += "-Wildcard" }
-    if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::Regex) { $switchFlags += "-Regex" }
-    if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::CaseSensitive) { $switchFlags += "-CaseSensitive" }
-    if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::Exact) { $switchFlags += "-Exact" }
-    if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::File) { $switchFlags += "-File" }
-    if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::Parallel) { $switchFlags += "-Parallel" }
-    $flagsText = if ($switchFlags.Count -gt 0) { " " + ($switchFlags -join " ") } else { "" }
-
+    # 1. 添加 Switch 条件节点
     $switchConditionText = if ($null -ne $switchAst.Condition) { $switchAst.Condition.Extent.Text } else { "Switch Condition" }
-    $switchNode = Add-Node -cfg $cfg -type "Switch Condition" -text "Switch$flagsText ($switchConditionText)" -line $switchAst.Extent.StartLineNumber -ast $switchAst
+    $switchNode = Add-Node -cfg $cfg -type "Switch Condition" -text "Switch ($switchConditionText)" -line $switchAst.Extent.StartLineNumber -ast $switchAst
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $switchNode.Id
+    $prevNodeRef.Value = $switchNode
 
-    # 2. 添加 Iterator 节点（遍历检查，类似 foreach 的 Has next?）
-    $iteratorNode = Add-Node -cfg $cfg -type "Switch Iterator" -text "Has next item in ($switchConditionText)?" -line $switchAst.Extent.StartLineNumber -ast $switchAst
-    Add-Edge -cfg $cfg -from $switchNode.Id -to $iteratorNode.Id
-
-    # 3. 提前创建 Switch 的 merge 节点（供 break 和循环退出使用）
+    # 1.5 提前创建 Switch 的 merge 节点（供 break 使用）
     $switchMergeNode = Add-Node -cfg $cfg -type "Merge" -text "Switch-End" -line $switchAst.Extent.EndLineNumber -ast $switchAst
 
-    # 4. 连接 Iterator 的"无更多项"分支到 Switch-End
-    Add-Edge -cfg $cfg -from $iteratorNode.Id -to $switchMergeNode.Id -label "No more items"
-
-    # 5. 创建 Switch 上下文（供 break 和 continue 使用）
-    # break: 跳出整个 switch，连接到 switchMergeNode
-    # continue: 跳过当前元素，继续下一个元素，连接到 iteratorNode
+    # 1.6 创建 Switch 上下文（供 break 和 continue 使用）
     $currentSwitchContext = [PSCustomObject]@{
         SwitchMerge = $switchMergeNode
-        SwitchNode = $iteratorNode  # continue 跳转到 Iterator 节点，继续下一个元素
+        SwitchNode = $switchNode  # switch 条件节点，供 continue 使用
     }
 
-    # 6. 收集所有需要回到 Iterator 的节点（没有以 break/return/exit 结束的分支）
-    $backToIteratorNodes = @()
+    # 2. 初始化分支结束节点集合
+    $branchEndNodes = @()
 
-    # 7. 处理所有 Clause（case 分支）
+    # 3. 处理所有 Clause（case 分支）
     foreach ($clause in $switchAst.Clauses) {
-        # 7.1 添加 case 条件节点
+        # 3.1 添加 case 条件节点
         $caseLabelText = if ($null -ne $clause.Item1) { $clause.Item1.Extent.Text } else { "Case" }
         $caseLineNumber = if ($null -ne $clause.Item1) { $clause.Item1.Extent.StartLineNumber } else { $switchAst.Extent.StartLineNumber }
         $caseNode = Add-Node -cfg $cfg -type "Case" -text "Case $caseLabelText" -line $caseLineNumber -ast $clause.Item1
-        # Iterator 连接到每个 Case（每个元素都会尝试匹配所有 case）
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $caseNode.Id -label "Match?"
+        Add-Edge -cfg $cfg -from $switchNode.Id -to $caseNode.Id -label "Case"
         $prevNodeRef.Value = $caseNode
 
-        # 7.2 处理分支代码块（Clause[i].Item2）
-        $branchHasTerminator = $false
+        # 3.2 处理分支代码块（Clause[i].Item2）
+        $branchHasReturn = $false
         foreach ($statement in $clause.Item2.Statements) {
-            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
             # 如果遇到 return/break/continue/exit，停止处理后续语句
-            if ($hasTerminator) {
-                $branchHasTerminator = $true
+            if ($hasReturn) {
+                $branchHasReturn = $true
                 break
             }
         }
-        # 如果分支没有以 return/break/continue/exit 结束，需要回到 Iterator 继续下一个元素
-        if (-not $branchHasTerminator -and $null -ne $prevNodeRef.Value) {
+        # 只有当分支不以 return、break、continue 或 exit 结束时，才添加到分支结束节点集合
+        # break/continue 已经跳出了 switch 语句的上下文，不应该连接到 merge 节点
+        if (-not $branchHasReturn -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Return" -and $lastNodeType -ne "Exit") {
-                $backToIteratorNodes += $prevNodeRef.Value
+            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                $branchEndNodes += $prevNodeRef.Value
             }
         }
     }
 
-    # 8. 处理 DefaultClause（如果存在 default）
+    # 4. 处理 DefaultClause（如果存在 default）
     if ($null -ne $switchAst.Default) {
         $defaultNode = Add-Node -cfg $cfg -type "Default" -text "Default" -line $switchAst.Default.Extent.StartLineNumber -ast $switchAst.Default
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $defaultNode.Id -label "Default"
+        Add-Edge -cfg $cfg -from $switchNode.Id -to $defaultNode.Id -label "Default"
         $prevNodeRef.Value = $defaultNode
 
         # 处理 Default 代码块
-        $defaultHasTerminator = $false
+        $defaultHasReturn = $false
         foreach ($statement in $switchAst.Default.Statements) {
-            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
             # 如果遇到 return/break/continue/exit，停止处理后续语句
-            if ($hasTerminator) {
-                $defaultHasTerminator = $true
+            if ($hasReturn) {
+                $defaultHasReturn = $true
                 break
             }
         }
-        # 如果 Default 分支没有以 return/break/continue/exit 结束，需要回到 Iterator
-        if (-not $defaultHasTerminator -and $null -ne $prevNodeRef.Value) {
+        # 只有当 Default 分支不以 return、break、continue 或 exit 结束时，才添加到分支结束节点集合
+        # break/continue 已经跳出了 switch 语句的上下文，不应该连接到 merge 节点
+        if (-not $defaultHasReturn -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Return" -and $lastNodeType -ne "Exit") {
-                $backToIteratorNodes += $prevNodeRef.Value
+            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                $branchEndNodes += $prevNodeRef.Value
             }
         }
     }
     else {
-        # 如果没有显式 default，创建一个隐式 default 节点
-        # 隐式 default 表示"当前元素不匹配任何 case"，直接回到 Iterator 继续下一个元素
-        $implicitDefaultNode = Add-Node -cfg $cfg -type "Default" -text "Implicit Default (no match)" -line $switchAst.Extent.EndLineNumber -ast $switchAst
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $implicitDefaultNode.Id -label "No match"
-        $backToIteratorNodes += $implicitDefaultNode
+        # 如果没有显式 default，创建一个隐式 default 节点，表示"所有 case 都不匹配时继续执行"
+        $implicitDefaultNode = Add-Node -cfg $cfg -type "Default" -text "Implicit Default" -line $switchAst.Extent.EndLineNumber -ast $switchAst
+        Add-Edge -cfg $cfg -from $switchNode.Id -to $implicitDefaultNode.Id -label "Default"
+        # 隐式 default 分支总是会继续执行后续代码，所以添加到分支结束节点集合
+        $branchEndNodes += $implicitDefaultNode
+        # 更新 prevNodeRef 为隐式 default 节点，这样后续代码会从这个节点继续
+        $prevNodeRef.Value = $implicitDefaultNode
     }
 
-    # 9. 将所有需要继续迭代的节点连接回 Iterator（形成循环）
-    foreach ($node in $backToIteratorNodes) {
-        Add-Edge -cfg $cfg -from $node.Id -to $iteratorNode.Id -label "Next item"
+    # 5. 如果所有分支都以 return/break/continue/exit 结束（branchEndNodes 为空）
+    if ($branchEndNodes.Count -eq 0) {
+        # 检查最后一个节点的类型，区分 return/exit 和 break/continue
+        if ($null -ne $prevNodeRef.Value) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            # 如果所有分支都以 return/exit 结束，连接到 End 节点
+            if ($lastNodeType -in @("Return", "Exit") -and $null -ne $endNodeRef) {
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    # 所有 return/exit 已经直接连接到 End，不需要 merge 节点
+                    # 将 prevNodeRef 指向 End，这样后续语句不会被处理
+                    $prevNodeRef.Value = $endNode
+                    return $true  # 返回 true 表示所有分支都有 return/exit
+                }
+            }
+            # 如果所有分支都以 break/continue 结束，不应该将 prevNodeRef 设置为 End
+            # 保持 prevNodeRef 不变（指向 break/continue 节点），返回 true 以停止处理后续语句
+            return $true
+        }
     }
 
-    # 10. 更新 prevNodeRef 为汇聚节点，供后续连接
+    # 6. 将所有分支结束节点连接到汇聚节点（使用之前创建的 switchMergeNode）
+    foreach ($endNode in $branchEndNodes) {
+        Add-Edge -cfg $cfg -from $endNode.Id -to $switchMergeNode.Id
+    }
+
+    # 7. 更新 prevNodeRef 为汇聚节点，供后续连接
     $prevNodeRef.Value = $switchMergeNode
-    return $false  # switch 作为循环结构，总是可以正常退出（除非所有路径都 return/exit）
+    return $false  # 返回 false 表示不是所有分支都有 return/exit
 }
 
 function Get-LoopHeaderText {
@@ -646,6 +652,7 @@ function Convert-AstNode {
     # 四、如果是LoopStatementAst，创建循环
     elseif($node -is [System.Management.Automation.Language.LoopStatementAst]){
         Convert-LoopStatement -cfg $cfg -loopAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
+        write-host "foreach"
         return $false
     }
     # 五、其余节点

@@ -12,30 +12,8 @@ digraph G {
 
     // Nodes
     1 [label="Line 0\lStart\lScript Start", shape=oval];
-    2 [label="Line 11\lEnd\lScript End", shape=oval];
-    3 [label="Line 1\lAssignmentStatementAst\l$i = 0", shape=box];
-    4 [label="Line 2\lLoopStart\lfor ($i = 0; $i -lt 8; $i++)", shape=box];
-    5 [label="Line 2\lCondition\lCondition: $i -lt 8", shape=diamond];
-    6 [label="Line 10\lLoopEnd\lEnd For", shape=box];
-    7 [label="Line 3\lIf Condition\lIf Condition", shape=box];
-    8 [label="Line 3\lCondition\l$i -eq 0", shape=diamond];
-    9 [label="Line 4\lContinue\lcontinue", shape=box];
-    10 [label="Line 7\lElse\lElse", shape=box];
-    11 [label="Line 8\lContinue\lcontinue", shape=box];
-    12 [label="Line 11\lPipelineAst\lWrite-Output \"Done\"", shape=box];
+    2 [label="Line 131\lEnd\lScript End", shape=oval];
 
     // Edges
-    1 -> 3;
-    3 -> 4;
-    4 -> 5;
-    5 -> 7;
-    7 -> 8 [label="Condition"];
-    8 -> 9;
-    9 -> 5 [label="Continue"];
-    7 -> 10 [label="Else"];
-    10 -> 11;
-    11 -> 5 [label="Continue"];
-    5 -> 6 [label="Condition False"];
-    6 -> 12;
-    12 -> 2;
+    1 -> 2;
 }
