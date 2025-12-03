@@ -148,13 +148,13 @@ function Convert-IfAstNode {
         $prevNodeRef.Value = $implicitElseNode
     }
 
-    # 5. 如果所有分支都以 return/break/continue 结束（branchEndNodes 为空）
+    # 5. 如果所有分支都以 return/break/continue/exit 结束（branchEndNodes 为空）
     if ($branchEndNodes.Count -eq 0) {
-        # 检查最后一个节点的类型，区分 return 和 break/continue
+        # 检查最后一个节点的类型，区分 return/exit 和 break/continue
         if ($null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            # 如果所有分支都以 return 结束，连接到 End 节点
-            if ($lastNodeType -eq "Return" -and $null -ne $endNodeRef) {
+            # 如果所有分支都以 return/exit 结束，连接到 End 节点
+            if ($lastNodeType -in @("Return", "Exit") -and $null -ne $endNodeRef) {
                 $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
                 if ($null -ne $endNode) {
                     # 所有 return 已经直接连接到 End，不需要 merge 节点
@@ -403,11 +403,11 @@ function Convert-AstNode {
             }
         }
 
-        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue 连接）
-        # 如果最后一个节点是 Return/Break/Continue 节点，它已经连接到 End，不需要再创建边
+        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue/Exit 连接）
+        # 如果最后一个节点是 Return/Break/Continue/Exit 节点，它已经连接到 End，不需要再创建边
         if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Exit") {
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
             }
         }
@@ -429,6 +429,23 @@ function Convert-AstNode {
         }
         $prevNodeRef.Value = $returnNode
         return $true  # 返回 true 表示遇到了 return
+    }
+    # 二点二、如果是 ExitStatementAst，创建 Exit 节点并连接到 End（终止脚本）
+    elseif ($node -is [System.Management.Automation.Language.ExitStatementAst]) {
+        $exitNode = Add-Node -cfg $cfg -type "Exit" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
+        # 连接到上一个节点
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $exitNode.Id
+        }
+        # 连接到 End 节点（如果提供了 endNodeRef）
+        if ($null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $exitNode.Id -to $endNode.Id -label "Exit"
+            }
+        }
+        $prevNodeRef.Value = $exitNode
+        return $true  # 返回 true 表示遇到了 exit，后续语句不可达
     }
     # 二点五、如果是BreakStatementAst，创建 Break 节点并连接到循环结束节点或 End
     elseif ($node -is [System.Management.Automation.Language.BreakStatementAst]) {
