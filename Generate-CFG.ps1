@@ -303,6 +303,176 @@ function Convert-SwitchAstNode {
     return $false  # switch 作为循环结构，总是可以正常退出（除非所有路径都 return/exit）
 }
 
+function Convert-TryAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.TryStatementAst]$tryAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null,
+        $loopContext = $null,
+        $switchContext = $null
+    )
+    if ($null -eq $tryAst -or $null -eq $prevNodeRef) {
+        Write-Warning "Invalid input: tryAst or prevNodeRef is null"
+        return $false
+    }
+
+    # 1. 创建 Try 入口节点
+    $tryNode = Add-Node -cfg $cfg -type "Try" -text "Try" -line $tryAst.Extent.StartLineNumber -ast $tryAst
+    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $tryNode.Id
+    $prevNodeRef.Value = $tryNode
+
+    # 2. 提前创建 Try-End 节点（汇聚点）
+    $tryEndNode = Add-Node -cfg $cfg -type "Merge" -text "Try-End" -line $tryAst.Extent.EndLineNumber -ast $tryAst
+
+    # 3. 提前创建 Finally 节点（如果存在）
+    $finallyNode = $null
+    if ($null -ne $tryAst.Finally) {
+        $finallyNode = Add-Node -cfg $cfg -type "Finally" -text "Finally" -line $tryAst.Finally.Extent.StartLineNumber -ast $tryAst.Finally
+    }
+
+    # 4. 提前创建 Catch 链的第一个节点（用于异常跳转）
+    $firstCatchNode = $null
+    $catchNodes = @()
+
+    foreach ($catchClause in $tryAst.CatchClauses) {
+        # 获取 Catch 的异常类型
+        $catchTypes = if ($catchClause.CatchTypes.Count -gt 0) {
+            ($catchClause.CatchTypes | ForEach-Object { $_.TypeName.Name }) -join ", "
+        } else {
+            "All"  # 没有指定类型表示捕获所有异常
+        }
+
+        # 创建 Catch 节点
+        $catchNode = Add-Node -cfg $cfg -type "Catch" -text "Catch [$catchTypes]" -line $catchClause.Extent.StartLineNumber -ast $catchClause
+        $catchNodes += @{
+            Node = $catchNode
+            Clause = $catchClause
+        }
+
+        if ($null -eq $firstCatchNode) {
+            $firstCatchNode = $catchNode
+        }
+    }
+
+    # 5. 收集所有需要汇聚的分支结束节点
+    $branchEndNodes = @()
+
+    # 6. 记录处理前的节点数量（用于收集try块内生成的所有节点）
+    $nodeCountBefore = $cfg.Nodes.Count
+
+    # 7. 处理 Try 块
+    $tryHasTerminator = $false
+    foreach ($statement in $tryAst.Body.Statements) {
+        $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+
+        if ($hasTerminator) {
+            $tryHasTerminator = $true
+            break
+        }
+    }
+
+    # 8. 收集Try块内生成的所有节点（除了终止语句节点）
+    $tryAllNodes = @()
+    for ($i = $nodeCountBefore; $i -lt $cfg.Nodes.Count; $i++) {
+        $node = $cfg.Nodes[$i]
+        # 排除终止语句节点和特殊节点（Try/Catch/Finally等）
+        if ($node.Type -notin @("Return", "Exit", "Break", "Continue", "Try", "Catch", "Finally", "Merge", "Start", "End")) {
+            $tryAllNodes += $node
+        }
+    }
+
+    # 9. Try块内所有可能执行的节点都连接到第一个Catch（异常路径）
+    if ($null -ne $firstCatchNode) {
+        foreach ($stmtNode in $tryAllNodes) {
+            Add-Edge -cfg $cfg -from $stmtNode.Id -to $firstCatchNode.Id -label "Exception"
+        }
+    }
+
+    # 10. Try 块正常结束（无异常路径）
+    if (-not $tryHasTerminator -and $null -ne $prevNodeRef.Value) {
+        $lastNodeType = $prevNodeRef.Value.Type
+        if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            $branchEndNodes += $prevNodeRef.Value
+        }
+    }
+
+    # 11. 处理 Catch 块（按顺序判断，只进入一个）
+    # 连接 Catch 链：Catch1 --NotMatch--> Catch2 --NotMatch--> Catch3
+    for ($i = 0; $i -lt $catchNodes.Count; $i++) {
+        $catchInfo = $catchNodes[$i]
+        $catchNode = $catchInfo.Node
+        $catchClause = $catchInfo.Clause
+
+        # 如果不是第一个 Catch，从上一个 Catch 连接过来（表示"类型不匹配，继续判断"）
+        if ($i -gt 0) {
+            $prevCatchNode = $catchNodes[$i - 1].Node
+            Add-Edge -cfg $cfg -from $prevCatchNode.Id -to $catchNode.Id -label "Not Match"
+        }
+
+        # 处理 Catch 块内的语句
+        $prevNodeRef.Value = $catchNode
+        $catchHasTerminator = $false
+        foreach ($statement in $catchClause.Body.Statements) {
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+            if ($hasTerminator) {
+                $catchHasTerminator = $true
+                break
+            }
+        }
+
+        # Catch 块正常结束
+        if (-not $catchHasTerminator -and $null -ne $prevNodeRef.Value) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                $branchEndNodes += $prevNodeRef.Value
+            }
+        }
+    }
+
+    # 12. 如果有 Finally 块，所有分支都要经过 Finally
+    if ($null -ne $finallyNode) {
+        # 所有正常结束的分支连接到 Finally
+        foreach ($endNode in $branchEndNodes) {
+            Add-Edge -cfg $cfg -from $endNode.Id -to $finallyNode.Id
+        }
+        $branchEndNodes = @()  # 清空，因为现在从 Finally 继续
+
+        # 处理 Finally 块内的语句
+        $prevNodeRef.Value = $finallyNode
+        $finallyHasTerminator = $false
+        foreach ($statement in $tryAst.Finally.Statements) {
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+            if ($hasTerminator) {
+                $finallyHasTerminator = $true
+                break
+            }
+        }
+
+        # Finally 块正常结束
+        if (-not $finallyHasTerminator -and $null -ne $prevNodeRef.Value) {
+            $lastNodeType = $prevNodeRef.Value.Type
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+                $branchEndNodes += $prevNodeRef.Value
+            }
+        }
+    }
+
+    # 13. 所有分支汇聚到 Try-End
+    foreach ($endNode in $branchEndNodes) {
+        Add-Edge -cfg $cfg -from $endNode.Id -to $tryEndNode.Id
+    }
+
+    # 14. 更新 prevNodeRef
+    $prevNodeRef.Value = $tryEndNode
+
+    # 15. 判断是否所有路径都终止
+    if ($branchEndNodes.Count -eq 0) {
+        return $true  # 所有分支都以 return/exit/break/continue 结束
+    }
+    return $false
+}
+
 function Get-LoopHeaderText {
     param($loopAst)
 
@@ -647,6 +817,11 @@ function Convert-AstNode {
     elseif($node -is [System.Management.Automation.Language.LoopStatementAst]){
         Convert-LoopStatement -cfg $cfg -loopAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
         return $false
+    }
+    # 四点五、如果是TryStatementAst，创建 try/catch/finally 结构
+    elseif ($node -is [System.Management.Automation.Language.TryStatementAst]) {
+        $allBranchesReturn = Convert-TryAstNode -cfg $cfg -tryAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+        return $allBranchesReturn
     }
     # 五、其余节点
     else {
