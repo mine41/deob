@@ -376,7 +376,7 @@ function Convert-TryAstNode {
     $tryAllNodes = @()
     for ($i = $nodeCountBefore; $i -lt $cfg.Nodes.Count; $i++) {
         $node = $cfg.Nodes[$i]
-        # 排除终止语句节点和特殊节点（Try/Catch/Finally等）
+        # 排除终止语句节点和特殊节点（Try/Catch/Finally等），但保留Throw节点，因为Throw需要连接到Catch
         if ($node.Type -notin @("Return", "Exit", "Break", "Continue", "Try", "Catch", "Finally", "Merge", "Start", "End")) {
             $tryAllNodes += $node
         }
@@ -392,7 +392,7 @@ function Convert-TryAstNode {
     # 10. Try 块正常结束（无异常路径）
     if (-not $tryHasTerminator -and $null -ne $prevNodeRef.Value) {
         $lastNodeType = $prevNodeRef.Value.Type
-        if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+        if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
             $branchEndNodes += $prevNodeRef.Value
         }
     }
@@ -424,8 +424,20 @@ function Convert-TryAstNode {
         # Catch 块正常结束
         if (-not $catchHasTerminator -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
                 $branchEndNodes += $prevNodeRef.Value
+            }
+        }
+    }
+
+    # 11.5. 如果有catch块，为最后一个catch添加Uncaught Exception路径
+    if ($catchNodes.Count -gt 0) {
+        $lastCatchNode = $catchNodes[-1].Node
+        # 从最后一个catch连接到End节点，表示"未匹配的异常"
+        if ($null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $lastCatchNode.Id -to $endNode.Id -label "Uncaught Exception"
             }
         }
     }
@@ -452,7 +464,7 @@ function Convert-TryAstNode {
         # Finally 块正常结束
         if (-not $finallyHasTerminator -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
                 $branchEndNodes += $prevNodeRef.Value
             }
         }
@@ -699,7 +711,7 @@ function Convert-AstNode {
         # 如果最后一个节点是 Return/Break/Continue/Exit 节点，它已经连接到 End，不需要再创建边
         if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Exit") {
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Throw") {
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
             }
         }
@@ -800,6 +812,22 @@ function Convert-AstNode {
             $prevNodeRef.Value = $continueNode
             return $true  # 不在 switch 或循环中时，continue 起到 return 的效果，停止处理后续语句
         }
+    }
+    # 二点七、如果是ThrowStatementAst，创建 Throw 节点并处理异常
+    elseif ($node -is [System.Management.Automation.Language.ThrowStatementAst]) {
+        $throwNode = Add-Node -cfg $cfg -type "Throw" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
+        # 连接到上一个节点
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $throwNode.Id
+        }
+
+        # Throw节点本身不连接到End节点
+        # 如果在try-catch块内，throw节点会被收集到tryAllNodes中，自动连接到catch块
+        # 如果不在try-catch块内，由外层的ScriptBlock处理逻辑连接到End节点
+        # 这样确保异常处理逻辑完全由catch链决定
+
+        $prevNodeRef.Value = $throwNode
+        return $true  # 返回 true 表示遇到了 throw，后续语句不可达
     }
     # 三、如果是IfStatementAst，创建分支
     elseif ($node -is [System.Management.Automation.Language.IfStatementAst]) {

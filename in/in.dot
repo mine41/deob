@@ -12,8 +12,24 @@ digraph G {
 
     // Nodes
     1 [label="Line 0\lStart\lScript Start", shape=oval];
-    2 [label="Line 1\lEnd\lScript End", shape=oval];
+    2 [label="Line 124\lEnd\lScript End", shape=oval];
+    3 [label="Line 8\lTry\lTry", shape=box];
+    4 [label="Line 15\lMerge\lTry-End", shape=point];
+    5 [label="Line 13\lCatch\lCatch [All]", shape=box];
+    6 [label="Line 9\lPipelineAst\lWrite-Host \"In try block\"", shape=box];
+    7 [label="Line 10\lThrow\lthrow \"Exception in try\"", shape=box];
+    8 [label="Line 14\lPipelineAst\lWrite-Host \"Caught exception: $_\"", shape=box];
+    9 [label="Line 16\lPipelineAst\lWrite-Host \"After try-catch\"", shape=box];
 
     // Edges
-    1 -> 2;
+    1 -> 3;
+    3 -> 6;
+    6 -> 7;
+    6 -> 5 [label="Exception"];
+    7 -> 5 [label="Exception"];
+    5 -> 8;
+    5 -> 2 [label="Uncaught Exception"];
+    8 -> 4;
+    4 -> 9;
+    9 -> 2;
 }
