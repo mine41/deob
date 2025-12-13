@@ -322,8 +322,8 @@ function Convert-TryAstNode {
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $tryNode.Id
     $prevNodeRef.Value = $tryNode
 
-    # 2. 提前创建 Try-End 节点（汇聚点）
-    $tryEndNode = Add-Node -cfg $cfg -type "Merge" -text "Try-End" -line $tryAst.Extent.EndLineNumber -ast $tryAst
+    # 2. Try-End 汇聚节点（懒创建，只有真的需要汇聚时才创建，避免产生孤立的 Merge 节点）
+    $tryEndNode = $null
 
     # 3. 提前创建 Finally 节点（如果存在）
     $finallyNode = $null
@@ -373,19 +373,63 @@ function Convert-TryAstNode {
     }
 
     # 8. 收集Try块内生成的所有节点（除了终止语句节点）
+    #    只统计“当前 try 直系 body 中”的节点，忽略嵌套的 try 块内部节点，
+    #    否则内层 throw 会被错误地直接连到外层 catch。
     $tryAllNodes = @()
+    $tryExitNodes = @()
     for ($i = $nodeCountBefore; $i -lt $cfg.Nodes.Count; $i++) {
         $node = $cfg.Nodes[$i]
-        # 排除终止语句节点和特殊节点（Try/Catch/Finally等），但保留Throw节点，因为Throw需要连接到Catch
+
+        # 如果节点缺少 AST 信息，保守地认为它属于当前 try
+        $isInNestedTry = $false
+        if ($null -ne $node.Ast) {
+            $ancestor = $node.Ast.Parent
+            while ($null -ne $ancestor) {
+                if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+                    if ($ancestor -ne $tryAst) {
+                        # 该节点处于当前 try 内部的嵌套 try 中
+                        $isInNestedTry = $true
+                    }
+                    break
+                }
+                $ancestor = $ancestor.Parent
+            }
+        }
+
+        if ($isInNestedTry) {
+            continue  # 交由内层 try 自己的 catch 处理异常，不直接连到当前 try 的 catch
+        }
+
+        # 记录 Try 块中的 Exit 节点（无论如何都要触发 finally）
+        if ($node.Type -eq "Exit") {
+            $tryExitNodes += $node
+        }
+
+        # 排除终止语句节点和特殊节点（Try/Catch/Finally等），但保留Throw节点，因为Throw需要连接到Catch/Finally
         if ($node.Type -notin @("Return", "Exit", "Break", "Continue", "Try", "Catch", "Finally", "Merge", "Start", "End")) {
             $tryAllNodes += $node
         }
     }
 
-    # 9. Try块内所有可能执行的节点都连接到第一个Catch（异常路径）
+    # 9. Try块内所有可能执行的节点都连接到异常处理路径（异常边）
+    #    - 如果存在 Catch，则连接到第一个 Catch（后续通过 Catch 链分发）
+    #    - 如果没有 Catch 但存在 Finally（try-finally），则异常直接跳到 Finally
     if ($null -ne $firstCatchNode) {
         foreach ($stmtNode in $tryAllNodes) {
             Add-Edge -cfg $cfg -from $stmtNode.Id -to $firstCatchNode.Id -label "Exception"
+        }
+    }
+    elseif ($null -ne $finallyNode) {
+        # try-finally（无 catch）的情况，异常路径直接进入 finally
+        foreach ($stmtNode in $tryAllNodes) {
+            Add-Edge -cfg $cfg -from $stmtNode.Id -to $finallyNode.Id -label "Exception"
+        }
+    }
+
+    # 9.5. Exit 不是异常，不经过 catch，但在 try 中出现时，仍然必须执行 finally
+    if ($null -ne $finallyNode -and $tryExitNodes.Count -gt 0) {
+        foreach ($exitNode in $tryExitNodes) {
+            Add-Edge -cfg $cfg -from $exitNode.Id -to $finallyNode.Id -label "Exit"
         }
     }
 
@@ -433,11 +477,153 @@ function Convert-TryAstNode {
     # 11.5. 如果有catch块，为最后一个catch添加Uncaught Exception路径
     if ($catchNodes.Count -gt 0) {
         $lastCatchNode = $catchNodes[-1].Node
-        # 从最后一个catch连接到End节点，表示"未匹配的异常"
+        # 从最后一个catch连接到End节点，表示"未匹配的异常"（将来可能被外层 try 重定向到更外层的 catch）
         if ($null -ne $endNodeRef) {
             $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
             if ($null -ne $endNode) {
                 Add-Edge -cfg $cfg -from $lastCatchNode.Id -to $endNode.Id -label "Uncaught Exception"
+            }
+        }
+    }
+
+    # 11.8. 当前 try 有 catch 的情况下，把“内部子结构”产生的
+    #       "Uncaught Exception" 从 End 重定向到本 try 的第一个 catch。
+    #       这里的“内部子结构”包括：
+    #         - 内层嵌套 try/catch/finally
+    #         - 内层 finally 中的 throw
+    #         - 内层 catch 中的 rethrow
+    #       但不包括：
+    #         - 本 try 自己的 catch 节点产生的 Uncaught Exception（11.5 添加的那条边）
+    #         - 本 try 自己的 catch 块内部的 rethrow
+    #       否则会产生 catch -> catch 的自环，或者让“当前层的 rethrow”又被当前层的 catch 接住。
+    # 11.8.C 当前 try 有 catch 的情况下，把“内部子结构”产生的
+    #        "Uncaught Exception" 从 End 重定向到本 try 的第一个 catch。
+    #        注意：即使本 try 同时有 finally，我们仍然优先建模为“先进入本层 catch”，
+    #        finally 的执行统一由 12/11.8.F 中的逻辑保证。
+    if ($catchNodes.Count -gt 0 -and $null -ne $firstCatchNode -and $null -ne $endNodeRef) {
+        $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+        if ($null -ne $endNode) {
+            for ($i = 0; $i -lt $cfg.Edges.Count; $i++) {
+                $edge = $cfg.Edges[$i]
+                if ($edge.Label -ne "Uncaught Exception" -or $edge.To -ne $endNode.Id) {
+                    continue
+                }
+
+                # 找到产生这个 Uncaught Exception 的节点
+                $fromNode = $cfg.Nodes | Where-Object { $_.Id -eq $edge.From }
+                if ($null -eq $fromNode -or $null -eq $fromNode.Ast) {
+                    continue
+                }
+
+                # 1) 如果本身就是 Catch 节点，需要区分：
+                #    - 来自“当前 try 自己的最后一个 catch”（11.5 添加的边）：保持为到 End，避免自环；
+                #    - 来自“内层 try 的 catch”：应该被当前 try 的 catch 捕获（允许重定向）。
+                if ($fromNode.Type -eq "Catch" -and $null -ne $fromNode.Ast) {
+                    $catchAst = $fromNode.Ast
+                    if ($catchAst -is [System.Management.Automation.Language.CatchClauseAst]) {
+                        $parentTryOfCatch = $catchAst.Parent
+                        if ($parentTryOfCatch -is [System.Management.Automation.Language.TryStatementAst] -and
+                            $parentTryOfCatch -eq $tryAst) {
+                            # 本 try 自己的 catch 节点：跳过，不重定向
+                            continue
+                        }
+                    }
+                }
+
+                # 2) 判断该节点是否属于当前 try 的 AST 子树内
+                $hasThisTryAncestor = $false
+                $ancestor = $fromNode.Ast
+                while ($null -ne $ancestor) {
+                    if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+                        if ($ancestor -eq $tryAst) { $hasThisTryAncestor = $true }
+                    }
+                    $ancestor = $ancestor.Parent
+                }
+
+                if (-not $hasThisTryAncestor) {
+                    continue
+                }
+
+                # 3) 如果 Uncaught Exception 源自“当前 try 自己的 catch 块内部”的 rethrow，
+                #    也不要重定向，让它继续冒泡到更外层的 try 或脚本 End。
+                $belongsToThisTryCatch = $false
+                $ancestor = $fromNode.Ast.Parent
+                while ($null -ne $ancestor) {
+                    if ($ancestor -is [System.Management.Automation.Language.CatchClauseAst]) {
+                        $parentTry = $ancestor.Parent
+                        if ($parentTry -is [System.Management.Automation.Language.TryStatementAst] -and
+                            $parentTry -eq $tryAst) {
+                            $belongsToThisTryCatch = $true
+                        }
+                        break
+                    }
+                    $ancestor = $ancestor.Parent
+                }
+
+                if ($belongsToThisTryCatch) {
+                    continue
+                }
+
+                # 4) 剩下的情况：
+                #    - 内层 try/finally 中的 throw（包括 finally 中的 throw）
+                #    - 内层 try 的 catch 中 rethrow
+                #    这些都应该被当前 try 的 catch 捕获，而不是直接到 End。
+                $edge.To = $firstCatchNode.Id
+            }
+        }
+    }
+
+    # 11.8.F 只要当前 try 有 finally，就把“内部子结构”产生的 Uncaught Exception
+    #        从 End 重定向到本 try 的 finally 节点：
+    #        - 有 catch 时：catch 处理/重新抛出的异常，在离开本层前仍然要先执行 finally；
+    #        - 只有 finally（无 catch）时：未捕获异常同样要先执行 finally，再继续往外冒泡。
+    if ($null -ne $finallyNode -and $null -ne $endNodeRef) {
+        $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+        if ($null -ne $endNode) {
+            for ($i = 0; $i -lt $cfg.Edges.Count; $i++) {
+                $edge = $cfg.Edges[$i]
+                if ($edge.Label -ne "Uncaught Exception" -or $edge.To -ne $endNode.Id) {
+                    continue
+                }
+
+                # 找到产生这个 Uncaught Exception 的节点
+                $fromNode = $cfg.Nodes | Where-Object { $_.Id -eq $edge.From }
+                if ($null -eq $fromNode -or $null -eq $fromNode.Ast) {
+                    continue
+                }
+
+                # 1) 判断该节点是否属于当前 try 的 AST 子树内
+                $hasThisTryAncestor = $false
+                $ancestor = $fromNode.Ast
+                while ($null -ne $ancestor) {
+                    if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+                        if ($ancestor -eq $tryAst) { $hasThisTryAncestor = $true }
+                    }
+                    $ancestor = $ancestor.Parent
+                }
+                if (-not $hasThisTryAncestor) {
+                    continue
+                }
+
+                # 2) 如果 Uncaught Exception 源自“本 try 自己的 finally 块内部”的 throw，
+                #    不要重定向，让它继续冒泡到更外层（由外层的 try-finally 处理）。
+                $inThisFinally = $false
+                $ancestor = $fromNode.Ast.Parent
+                while ($null -ne $ancestor) {
+                    if ($ancestor -is [System.Management.Automation.Language.StatementBlockAst] -and
+                        $tryAst.Finally -eq $ancestor) {
+                        $inThisFinally = $true
+                        break
+                    }
+                    $ancestor = $ancestor.Parent
+                }
+                if ($inThisFinally) {
+                    continue
+                }
+
+                # 3) 其余情况（例如内层 try/finally、内层 catch 的 rethrow 等）
+                #    在当前层都应该先执行 finally，然后再继续向外冒泡。
+                $edge.To = $finallyNode.Id
             }
         }
     }
@@ -464,25 +650,50 @@ function Convert-TryAstNode {
         # Finally 块正常结束
         if (-not $finallyHasTerminator -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
-                $branchEndNodes += $prevNodeRef.Value
+
+            # 特例：没有任何 catch（纯 try-finally），并且 Try 块本身已经“终止”
+            #（例如只包含 throw/return/exit/break/throw 或所有分支都终止）
+            # 这种情况下，finally 执行完之后，不应该再继续执行 try 之后的语句，
+            # 而是视为“执行 finally 后终止脚本/函数”。
+            if ($catchNodes.Count -eq 0 -and $tryHasTerminator) {
+                if ($null -ne $endNodeRef) {
+                    $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                    if ($null -ne $endNode) {
+                        # finally 的出口直接连到 Script End / 函数 End，表示未捕获异常终止
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id -label "Uncaught Exception"
+                        # 将当前节点视为 End，这样外层不会再从 Try-End 额外连一条边
+                        $prevNodeRef.Value = $endNode
+                    }
+                }
+                # 不把 finally 的出口加入 $branchEndNodes，这样整个 try-finally 会被视为“终止”（返回 $true）
+            }
+            else {
+                # 有 catch，或者 Try 本身不终止：finally 之后仍可能继续执行
+                if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
+                    $branchEndNodes += $prevNodeRef.Value
+                }
             }
         }
     }
 
-    # 13. 所有分支汇聚到 Try-End
-    foreach ($endNode in $branchEndNodes) {
-        Add-Edge -cfg $cfg -from $endNode.Id -to $tryEndNode.Id
+    # 13. 所有“可继续执行”的分支汇聚到 Try-End
+    if ($branchEndNodes.Count -gt 0) {
+        if ($null -eq $tryEndNode) {
+            $tryEndNode = Add-Node -cfg $cfg -type "Merge" -text "Try-End" -line $tryAst.Extent.EndLineNumber -ast $tryAst
+        }
+        foreach ($endNode in $branchEndNodes) {
+            Add-Edge -cfg $cfg -from $endNode.Id -to $tryEndNode.Id
+        }
+
+        # 14. 只有存在汇聚分支时，才更新 prevNodeRef 为 Try-End
+        $prevNodeRef.Value = $tryEndNode
+
+        # 至少有一条路径可以继续执行
+        return $false
     }
 
-    # 14. 更新 prevNodeRef
-    $prevNodeRef.Value = $tryEndNode
-
-    # 15. 判断是否所有路径都终止
-    if ($branchEndNodes.Count -eq 0) {
-        return $true  # 所有分支都以 return/exit/break/continue 结束
-    }
-    return $false
+    # 没有任何可继续执行的分支：所有路径都在 try/catch/finally 中终止
+    return $true
 }
 
 function Get-LoopHeaderText {
@@ -707,11 +918,11 @@ function Convert-AstNode {
             }
         }
 
-        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue/Exit 连接）
-        # 如果最后一个节点是 Return/Break/Continue/Exit 节点，它已经连接到 End，不需要再创建边
+        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue 连接）
+        # 如果最后一个节点是 Return/Break/Continue 节点，它已经连接到 End，不需要再创建边
         if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Throw") {
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
             }
         }
@@ -734,19 +945,12 @@ function Convert-AstNode {
         $prevNodeRef.Value = $returnNode
         return $true  # 返回 true 表示遇到了 return
     }
-    # 二点二、如果是 ExitStatementAst，创建 Exit 节点并连接到 End（终止脚本）
+    # 二点二、如果是 ExitStatementAst，创建 Exit 节点（终止脚本）
     elseif ($node -is [System.Management.Automation.Language.ExitStatementAst]) {
         $exitNode = Add-Node -cfg $cfg -type "Exit" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
         # 连接到上一个节点
         if ($null -ne $prevNodeRef.Value) {
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $exitNode.Id
-        }
-        # 连接到 End 节点（如果提供了 endNodeRef）
-        if ($null -ne $endNodeRef) {
-            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-            if ($null -ne $endNode) {
-                Add-Edge -cfg $cfg -from $exitNode.Id -to $endNode.Id -label "Exit"
-            }
         }
         $prevNodeRef.Value = $exitNode
         return $true  # 返回 true 表示遇到了 exit，后续语句不可达
@@ -821,10 +1025,37 @@ function Convert-AstNode {
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $throwNode.Id
         }
 
-        # Throw节点本身不连接到End节点
-        # 如果在try-catch块内，throw节点会被收集到tryAllNodes中，自动连接到catch块
-        # 如果不在try-catch块内，由外层的ScriptBlock处理逻辑连接到End节点
-        # 这样确保异常处理逻辑完全由catch链决定
+        # 判断是否位于 catch / finally 块内部（兼容不支持 FinallyClauseAst 的旧版 PowerShell）
+        $inCatch = $false
+        $inFinally = $false
+        $ancestor = $node.Parent
+        while ($null -ne $ancestor) {
+            if ($ancestor -is [System.Management.Automation.Language.CatchClauseAst]) {
+                # 任意层级的 catch（内层或外层）都视为 inCatch
+                $inCatch = $true
+            }
+            elseif ($ancestor -is [System.Management.Automation.Language.StatementBlockAst]) {
+                # 判断这个 StatementBlockAst 是否是某个 TryStatementAst 的 Finally
+                $parentTry = $ancestor.Parent
+                if ($parentTry -is [System.Management.Automation.Language.TryStatementAst] -and
+                    $parentTry.Finally -eq $ancestor) {
+                    $inFinally = $true
+                }
+            }
+            $ancestor = $ancestor.Parent
+        }
+
+        # 如果 throw 出现在 catch / finally 中，则表示“本层 try 不再处理该异常”：
+        # - 对于 catch 中的 throw：这是“重新抛出”（rethrow）；当前 try 的 catch 已经执行过，新的异常只会交给外层 try。
+        # - 对于 finally 中的 throw：finally 总是在 try/catch 之后执行，此时当前 try 的 catch 也不会再参与处理。
+        # 统一建模为一条 Uncaught Exception 到 End，由外层 try（如果存在）在 Convert-TryAstNode 的 11.8 步中
+        # 把这条边重定向到自身的 catch；如果不存在外层 try，则表示脚本/函数在 finally 中抛出未捕获异常后终止。
+        if (($inCatch -or $inFinally) -and $null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
+            }
+        }
 
         $prevNodeRef.Value = $throwNode
         return $true  # 返回 true 表示遇到了 throw，后续语句不可达
@@ -1003,21 +1234,21 @@ $($edgeDefinitions -join "`n")
 
 
 
-# 生成控制流图
-$scriptPath = Join-Path $PSScriptRoot 'in/in.ps1'
-$finalCFG = Get-ScriptControlFlow -ScriptPath $scriptPath
-# 格式化输出节点列表
-$finalCFG.Nodes | Select-Object Id, Type, @{
-    Name="Text"
-    Expression={
-        $text = $_.Text
-        if ($text.Length -gt 20) { $text.Substring(0, 20) + "..." } 
-        else { $text }
-    }
-}, Line, Ast | Format-Table -AutoSize
-$finalCFG.Edges | Format-Table -AutoSize
-#Out-GridView 查看
-# $finalCFG.Nodes | Out-GridView -Title 'CFG Nodes'
-# 示例调用（使用您已有的 $finalCFG）
-$dotPath = Join-Path $PSScriptRoot 'in/in.dot'
-Export-CfgToDot -finalCFG $finalCFG -outputPath $dotPath
+# # 生成控制流图
+# $scriptPath = Join-Path $PSScriptRoot 'in/in.ps1'
+# $finalCFG = Get-ScriptControlFlow -ScriptPath $scriptPath
+# # 格式化输出节点列表
+# $finalCFG.Nodes | Select-Object Id, Type, @{
+#     Name="Text"
+#     Expression={
+#         $text = $_.Text
+#         if ($text.Length -gt 20) { $text.Substring(0, 20) + "..." } 
+#         else { $text }
+#     }
+# }, Line, Ast | Format-Table -AutoSize
+# $finalCFG.Edges | Format-Table -AutoSize
+# #Out-GridView 查看
+# # $finalCFG.Nodes | Out-GridView -Title 'CFG Nodes'
+# # 示例调用（使用您已有的 $finalCFG）
+# $dotPath = Join-Path $PSScriptRoot 'in/in.dot'
+# Export-CfgToDot -finalCFG $finalCFG -outputPath $dotPath

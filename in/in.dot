@@ -12,24 +12,43 @@ digraph G {
 
     // Nodes
     1 [label="Line 0\lStart\lScript Start", shape=oval];
-    2 [label="Line 124\lEnd\lScript End", shape=oval];
-    3 [label="Line 8\lTry\lTry", shape=box];
-    4 [label="Line 15\lMerge\lTry-End", shape=point];
-    5 [label="Line 13\lCatch\lCatch [All]", shape=box];
-    6 [label="Line 9\lPipelineAst\lWrite-Host \"In try block\"", shape=box];
-    7 [label="Line 10\lThrow\lthrow \"Exception in try\"", shape=box];
-    8 [label="Line 14\lPipelineAst\lWrite-Host \"Caught exception: $_\"", shape=box];
-    9 [label="Line 16\lPipelineAst\lWrite-Host \"After try-catch\"", shape=box];
+    2 [label="Line 194\lEnd\lScript End", shape=oval];
+    3 [label="Line 169\lTry\lTry", shape=box];
+    4 [label="Line 189\lFinally\lFinally", shape=box];
+    5 [label="Line 185\lCatch\lCatch [All]", shape=box];
+    6 [label="Line 170\lTry\lTry", shape=box];
+    7 [label="Line 178\lFinally\lFinally", shape=box];
+    8 [label="Line 174\lCatch\lCatch [All]", shape=box];
+    9 [label="Line 171\lPipelineAst\lWrite-Host \"inner try throw\"", shape=box];
+    10 [label="Line 172\lThrow\lthrow \"inner try throw\"", shape=box];
+    11 [label="Line 175\lPipelineAst\lWrite-Host \"inner catch throw\"", shape=box];
+    12 [label="Line 176\lThrow\lthrow \"inner catch throw\"", shape=box];
+    13 [label="Line 179\lPipelineAst\lWrite-Host \"inner finally throw\"", shape=box];
+    14 [label="Line 180\lThrow\lthrow \"inner finally throw\"", shape=box];
+    15 [label="Line 186\lPipelineAst\lWrite-Host \"outer catch throw\"", shape=box];
+    16 [label="Line 187\lThrow\lthrow \"outer catch throw\"", shape=box];
+    17 [label="Line 190\lPipelineAst\lWrite-Host \"outer finally throw\"", shape=box];
+    18 [label="Line 191\lThrow\lthrow \"outer finally throw\"", shape=box];
 
     // Edges
     1 -> 3;
     3 -> 6;
-    6 -> 7;
-    6 -> 5 [label="Exception"];
-    7 -> 5 [label="Exception"];
-    5 -> 8;
-    5 -> 2 [label="Uncaught Exception"];
-    8 -> 4;
-    4 -> 9;
-    9 -> 2;
+    6 -> 9;
+    9 -> 10;
+    9 -> 8 [label="Exception"];
+    10 -> 8 [label="Exception"];
+    8 -> 11;
+    11 -> 12;
+    12 -> 7 [label="Uncaught Exception"];
+    8 -> 7 [label="Uncaught Exception"];
+    7 -> 13;
+    13 -> 14;
+    14 -> 5 [label="Uncaught Exception"];
+    5 -> 15;
+    15 -> 16;
+    16 -> 4 [label="Uncaught Exception"];
+    5 -> 4 [label="Uncaught Exception"];
+    4 -> 17;
+    17 -> 18;
+    18 -> 2 [label="Uncaught Exception"];
 }
