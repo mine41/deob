@@ -993,7 +993,7 @@ function Get-ConditionLabel {
             "Has next $($loopAst.Variable.Extent.Text)?"
         }
         {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} {
-            "Until ($($loopAst.Condition.Extent.Text)"
+            "Until ($($loopAst.Condition.Extent.Text))"
         }
         default {
             if ($null -eq $loopAst.Condition) { "AlwaysTrue" }
@@ -1025,6 +1025,7 @@ function Get-LoopBackLabel {
     switch ($loopAst) {
         {$_ -is [System.Management.Automation.Language.DoWhileStatementAst]} { "While True" }
         {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} { "Until False" }
+        default { "Next Iteration" }
     }
 }
 
@@ -1507,8 +1508,8 @@ function Export-CfgToDot {
             '[\x00-\x1F\x7F]',
             ''
         )
-        # 转义反斜杠和引号（但保留\l换行标记）
-        $escaped = $cleaned -replace '\\', '\\' -replace '"', '\"'
+        # 转义反斜杠和引号
+        $escaped = $cleaned.Replace('\', '\\').Replace('"', '\"')
             # 智能截断：优先在完整单词后截断
         if ($escaped.Length -gt 50) {
             $truncated = $escaped.Substring(0, 47)
