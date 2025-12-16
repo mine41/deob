@@ -32,6 +32,18 @@ function Get-Ast {
     return $ast
 }
 
+# 统一的变量作用域枚举，避免在代码里到处写魔法字符串
+Add-Type -TypeDefinition @"
+public enum VarScope
+{
+    Unspecified = 0,
+    Global      = 1,
+    Script      = 2,
+    Local       = 3,
+    Private     = 4
+}
+"@
+
 # 辅助函数：添加节点
 function Add-Node {
     param(
@@ -42,12 +54,20 @@ function Add-Node {
         $ast = $null
     )
     $node = [PSCustomObject]@{
-        Id    = $cfg.Nodes.Count + 1
-        Type  = $type
-        Text  = $text
-        Line  = $line
-        Ast   = $ast
+        Id          = $cfg.Nodes.Count + 1
+        Type        = $type
+        Text        = $text
+        Line        = $line
+        Ast         = $ast
+        VarsRead    = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
+        VarsWritten = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
     }
+
+    # 如果提供了 AST，分析该节点中的变量读写情况
+    if ($null -ne $ast) {
+        Populate-NodeVariableUsage -node $node
+    }
+
     $cfg.Nodes += $node
     return $node
 }
@@ -61,6 +81,139 @@ function Add-Edge {
         Label = $label
     }
     $cfg.Edges += $edge
+}
+
+function Get-VariableAccessKind {
+    param(
+        [System.Management.Automation.Language.VariableExpressionAst]$VarAst
+    )
+
+    if ($null -eq $VarAst) { return $null }
+
+    $parent = $VarAst.Parent
+
+    # 1) 赋值语句：左边写 / 读写，右边读
+    if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        $assign = $parent
+        $inLeft = $false
+        if ($null -ne $assign.Left) {
+            if ($assign.Left -eq $VarAst) {
+                $inLeft = $true
+            }
+            elseif ($assign.Left -is [System.Management.Automation.Language.Ast]) {
+                $inLeft = $assign.Left.Find({ param($n) $n -eq $VarAst }, $true)
+            }
+        }
+
+        if ($inLeft) {
+            # 复合赋值（+=、-= 等）视为读+写
+            if ($assign.Operator -ne [System.Management.Automation.Language.TokenKind]::Equals) {
+                return "ReadWrite"
+            }
+            else {
+                return "Write"
+            }
+        }
+        else {
+            return "Read"
+        }
+    }
+
+    # 2) 一元运算 ++/-- ：读+写
+    if ($parent -is [System.Management.Automation.Language.UnaryExpressionAst]) {
+        $unary = $parent
+        if ($unary.TokenKind -in @(
+                [System.Management.Automation.Language.TokenKind]::PlusPlus,
+                [System.Management.Automation.Language.TokenKind]::MinusMinus,
+                [System.Management.Automation.Language.TokenKind]::PostfixPlusPlus,
+                [System.Management.Automation.Language.TokenKind]::PostfixMinusMinus
+            )) {
+            return "ReadWrite"
+        }
+        return "Read"
+    }
+
+    # 3) 参数声明：视为写（绑定形参）
+    if ($parent -is [System.Management.Automation.Language.ParameterAst]) {
+        return "Write"
+    }
+
+    # 4) foreach ($x in ...) 的迭代变量：写（绑定变量）
+    if ($parent -is [System.Management.Automation.Language.ForEachStatementAst]) {
+        if ($parent.Variable -eq $VarAst) {
+            return "Write"
+        }
+    }
+
+    # 其它情况统一视为读
+    return "Read"
+}
+
+function Populate-NodeVariableUsage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$node
+    )
+
+    if ($null -eq $node.Ast) {
+        $node.VarsRead    = @()
+        $node.VarsWritten = @()
+        return
+    }
+
+    $reads  = @()
+    $writes = @()
+
+    $varAsts = $node.Ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.VariableExpressionAst]
+        }, $true)
+
+    foreach ($v in $varAsts) {
+        $kind = Get-VariableAccessKind -VarAst $v
+        if (-not $kind) { continue }
+
+        # VariablePath.UserPath 去掉了 $ 和作用域前缀
+        $name = $v.VariablePath.UserPath
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+
+        # 根据 VariablePath 上的标志推断作用域提示（使用统一的 VarScope 枚举）
+        $scope = [VarScope]::Unspecified
+        if     ($v.VariablePath.IsGlobal)  { $scope = [VarScope]::Global }
+        elseif ($v.VariablePath.IsScript)  { $scope = [VarScope]::Script }
+        elseif ($v.VariablePath.IsLocal)   { $scope = [VarScope]::Local }
+        elseif ($v.VariablePath.IsPrivate) { $scope = [VarScope]::Private }
+
+        $entry = [PSCustomObject]@{
+            Name  = $name
+            Scope = $scope
+        }
+
+        switch ($kind) {
+            "Read" {
+                $reads += $entry
+            }
+            "Write" {
+                $writes += $entry
+            }
+            "ReadWrite" {
+                $reads  += $entry
+                $writes += $entry
+            }
+        }
+    }
+
+    # 去重：按 Name + Scope 组合去重
+    $node.VarsRead = @(
+        $reads |
+            Group-Object Name, Scope |
+            ForEach-Object { $_.Group[0] }
+    )
+    $node.VarsWritten = @(
+        $writes |
+            Group-Object Name, Scope |
+            ForEach-Object { $_.Group[0] }
+    )
 }
 
 #处理IfstatementAst
@@ -77,36 +230,55 @@ function Convert-IfAstNode {
         return
     }
 
-    # 1. 添加条件节点（Clause[i].Item1）
-    $ifNode = Add-Node -cfg $cfg -type "If Condition" -text "If Condition" -line $ifAst.Extent.StartLineNumber -ast $ifAst
+    # 1. 添加 If 入口节点
+    #    If Condition 节点只是结构示意，不直接参与表达式求值和变量读写，
+    #    因此不需要携带完整的 IfStatementAst，避免干扰变量分析。
+    $ifNode = Add-Node -cfg $cfg -type "If Condition" -text "If Condition" -line $ifAst.Extent.StartLineNumber -ast $null
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $ifNode.Id
     $prevNodeRef.Value = $ifNode
 
     # 2. 初始化分支结束节点集合
     $branchEndNodes = @()
 
-    # 3. 处理所有 Clause（if/elseif 分支）
+    # 3. 串联式处理所有 Clause（if/elseif 分支）
+    $previousCondNode = $null
+
     foreach ($clause in $ifAst.Clauses) {
         # 3.1 添加条件子节点
         $condNode = Add-Node -cfg $cfg -type "Condition" -text $clause.Item1.Extent.Text -line $clause.Item1.Extent.StartLineNumber -ast $clause.Item1
-        Add-Edge -cfg $cfg -from $ifNode.Id -to $condNode.Id -label "Condition"
+
+        if ($null -eq $previousCondNode) {
+            # 第一个条件从 ifNode 进入
+            Add-Edge -cfg $cfg -from $ifNode.Id -to $condNode.Id -label "Condition"
+        }
+        else {
+            # 后续条件从上一个条件的 false 分支进入
+            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $condNode.Id -label "False"
+        }
+
+        # 当前条件为真时，进入当前分支体
         $prevNodeRef.Value = $condNode
 
         # 3.2 处理分支代码块（Clause[i].Item2）
-        $branchHasReturn = $false
+        $branchHasTerminator = $false
         foreach ($statement in $clause.Item2.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
-            # 如果遇到 return，停止处理后续语句
-            if ($hasReturn) {
-                $branchHasReturn = $true
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+            # 如果遇到 return/break/continue/exit/throw 之类的终止语句，停止处理后续语句
+            if ($hasTerminator) {
+                $branchHasTerminator = $true
                 break
             }
         }
-        # 只有当分支不以 return、break 或 continue 结束时，才添加到分支结束节点集合
-        # break/continue 已经跳出了 if 语句的上下文，不应该连接到 merge 节点
-        if (-not $branchHasReturn -and $null -ne $prevNodeRef.Value) {
+
+        # 3.3 记录当前条件节点为“上一个条件”，供下一个 clause 的 False 分支使用
+        $previousCondNode = $condNode
+
+        # 3.4 如果当前分支可以正常结束，则将其出口加入分支结束集合
+        #     注意：当前分支的入口是 condNode，condNode 的 True 边隐含为“进入当前分支体”，
+        #           因此这里不需要显式添加 True 边标签。
+        if (-not $branchHasTerminator -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            if ($lastNodeType -notin @("Break","Continue","Return","Exit","Throw")) {
                 $branchEndNodes += $prevNodeRef.Value
             }
         }
@@ -114,37 +286,52 @@ function Convert-IfAstNode {
 
     # 4. 处理 ElseClause（如果存在显式 else）
     if ($null -ne $ifAst.ElseClause) {
-        $elseNode = Add-Node -cfg $cfg -type "Else" -text "Else" -line $ifAst.ElseClause.Extent.StartLineNumber
-        Add-Edge -cfg $cfg -from $ifNode.Id -to $elseNode.Id -label "Else"
+        # Else 节点同样只是结构标记，不负责表达式求值，Ast 设为 $null
+        $elseNode = Add-Node -cfg $cfg -type "Else" -text "Else" -line $ifAst.ElseClause.Extent.StartLineNumber -ast $null
+
+        if ($null -ne $previousCondNode) {
+            # 所有条件都为假时，最后一个条件的 False 进入 Else
+            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $elseNode.Id -label "False"
+        }
+        else {
+            # 理论上不会出现没有条件只有 else 的 If，但做个保护：直接从 ifNode 进入 else
+            Add-Edge -cfg $cfg -from $ifNode.Id -to $elseNode.Id -label "Else"
+        }
+
         $prevNodeRef.Value = $elseNode
 
         # 处理 Else 代码块
-        $elseHasReturn = $false
+        $elseHasTerminator = $false
         foreach ($statement in $ifAst.ElseClause.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
-            # 如果遇到 return，停止处理后续语句
-            if ($hasReturn) {
-                $elseHasReturn = $true
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+            if ($hasTerminator) {
+                $elseHasTerminator = $true
                 break
             }
         }
-        # 只有当 Else 分支不以 return、break 或 continue 结束时，才添加到分支结束节点集合
-        # break/continue 已经跳出了 if 语句的上下文，不应该连接到 merge 节点
-        if (-not $elseHasReturn -and $null -ne $prevNodeRef.Value) {
+
+        if (-not $elseHasTerminator -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            if ($lastNodeType -notin @("Break","Continue","Return","Exit","Throw")) {
                 $branchEndNodes += $prevNodeRef.Value
             }
         }
     }
     else {
-        # 如果没有显式 else，创建一个隐式 else 节点，表示"所有条件都不满足时继续执行"
-        # 这个节点直接连接到 if 节点，表示后续代码会继续执行
-        $implicitElseNode = Add-Node -cfg $cfg -type "Else" -text "Implicit Else" -line $ifAst.Extent.EndLineNumber -ast $ifAst
-        Add-Edge -cfg $cfg -from $ifNode.Id -to $implicitElseNode.Id -label "Else"
+        # 如果没有显式 else：当所有条件都为假时，控制流应当直接“跳过 if”继续执行后续语句。
+        # 我们创建一个隐式 Else 节点作为这一情况的入口（同样不携带 Ast）。
+        $implicitElseNode = Add-Node -cfg $cfg -type "Else" -text "Implicit Else" -line $ifAst.Extent.EndLineNumber -ast $null
+
+        if ($null -ne $previousCondNode) {
+            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $implicitElseNode.Id -label "False"
+        }
+        else {
+            # 理论上不会出现没有任何条件的 if，这里做保护
+            Add-Edge -cfg $cfg -from $ifNode.Id -to $implicitElseNode.Id -label "Else"
+        }
+
         # 隐式 else 分支总是会继续执行后续代码，所以添加到分支结束节点集合
         $branchEndNodes += $implicitElseNode
-        # 更新 prevNodeRef 为隐式 else 节点，这样后续代码会从这个节点继续
         $prevNodeRef.Value = $implicitElseNode
     }
 
@@ -170,7 +357,8 @@ function Convert-IfAstNode {
     }
 
     # 6. 创建虚拟汇聚节点（If-End）
-    $mergeNode = Add-Node -cfg $cfg -type "Merge" -text "If-End" -line $ifAst.Extent.EndLineNumber -ast $ifAst
+    #    If-End 仅作为结构汇聚点，不参与表达式求值和变量读写，Ast 设为 $null。
+    $mergeNode = Add-Node -cfg $cfg -type "Merge" -text "If-End" -line $ifAst.Extent.EndLineNumber -ast $null
 
     # 7. 将所有分支结束节点连接到汇聚节点
     foreach ($endNode in $branchEndNodes) {
@@ -863,9 +1051,13 @@ function Convert-LoopStatement {
         {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]}   { "do-until" }
         default { "unknown-loop" }
     }
+    $isForEach = $loopAst -is [System.Management.Automation.Language.ForEachStatementAst]
 
     # 2. 创建循环开始节点
-    $loopStart = Add-Node -cfg $cfg -type "LoopStart" -text (Get-LoopHeaderText $loopAst) -line $loopAst.Extent.StartLineNumber -ast $loopAst
+    #    LoopStart 只是结构示意节点，本身不参与实际执行，因此不需要携带整个循环 AST，
+    #    以免在变量分析时重复/混淆。真正的判断和变量使用信息放在 Condition 节点上。
+    $loopStartAst = if ($isForEach) { $null } else { $loopAst }
+    $loopStart = Add-Node -cfg $cfg -type "LoopStart" -text (Get-LoopHeaderText $loopAst) -line $loopAst.Extent.StartLineNumber -ast $loopStartAst
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $loopStart.Id
     $currentNode = $loopStart
 
@@ -873,10 +1065,15 @@ function Convert-LoopStatement {
     $isDoLoop = $loopType -in "do-while", "do-until"
     if ($isDoLoop) {
         # 3.1 创建专门的条件节点（放在循环体之后）
-        $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
+        #     对于 foreach，Condition 节点承担“是否有下一个元素”的判断，也隐含迭代变量赋值；
+        #     因此将整个 ForEachStatementAst 作为 Ast，便于变量读写分析。
+        $conditionAst = if ($isForEach) { $loopAst } else { $loopAst.Condition }
+        $conditionLine = if ($null -ne $loopAst.Condition) { $loopAst.Condition.Extent.StartLineNumber } else { $loopAst.Extent.StartLineNumber }
+        $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
 
         # 3.1.5 创建循环结束节点（提前创建，供 break 使用）
-        $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $loopAst
+        #       LoopEnd 仅为结构示意节点，不参与实际执行，因此不需要携带完整循环 AST。
+        $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $null
 
         # 3.1.6 创建循环上下文（do-while/do-until 的 continue 应该跳转到条件检查）
         # 注意：continue 应该跳转到 conditionNode，而不是 loopStart
@@ -916,12 +1113,17 @@ function Convert-LoopStatement {
     }
 
     # 4. 添加条件节点
-    $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
+    #    对 foreach，Condition 节点负责“Has next item?” 判断以及隐含的迭代变量绑定，
+    #    因此将整个 ForEachStatementAst 作为 Ast，便于变量读写分析。
+    $conditionAst = if ($isForEach) { $loopAst } else { $loopAst.Condition }
+    $conditionLine = if ($null -ne $loopAst.Condition) { $loopAst.Condition.Extent.StartLineNumber } else { $loopAst.Extent.StartLineNumber }
+    $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
     Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
     $currentNode = $conditionNode
 
     # 4.5 创建循环结束节点（提前创建，供 break 使用）
-    $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $loopAst
+    #     LoopEnd 仅为结构示意节点，不参与实际执行，因此不需要携带完整循环 AST。
+    $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $null
 
     # 4.6 创建循环上下文（非 do-xx 循环的 continue 应该回到 conditionNode）
     $loopContext = [PSCustomObject]@{

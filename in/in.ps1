@@ -1,218 +1,206 @@
-# =========================
-# 8. 最简单的无参函数 + 顶层调用
-# =========================
-# function Test-NoParam {
-#     Write-Host "Test-NoParam: start"
-#     Write-Host "Test-NoParam: end"
-# }
+# Write-Host "==== Var Test 1: 简单赋值 ===="
+# # 1. 简单赋值：左写右读
+# $a = 1
+# $b = $a
+# $c = $a + $b
 
-# Write-Host "Before Test-NoParam"
-# Test-NoParam
-# Write-Host "After Test-NoParam"
+# Write-Host "==== Var Test 2: 复合赋值与一元运算 ===="
+# # 2. 复合赋值：左边读+写
+# $i = 0
+# $i += 1
+# $i -= 2
+# $i *= 3
+# $i /= 4
+
+# # 2.1 一元 ++/-- ：读+写
+# $j = 10
+# ++$j
+# $j
+# $j++
+# $j
+# --$j
+# $j
+# $j--
+# $j
 
 
-# # =========================
-# # 9. 有参数函数 + return
-# # =========================
-# function Test-Add {
+# 3Write-Host "==== Var Test 3: 参数与函数内部变量 ===="
+# function Test-Params-And-Body {
 #     param(
-#         [int]$a,
-#         [int]$b
+#         [int]$p1,
+#         [string]$p2
 #     )
-#     $c = $a + $b
-#     Write-Host "Test-Add: $a + $b = $c"
-#     return $c
+
+#     # p1 / p2 在 param 中应被视为 Write（绑定形参）
+#     # 这里是对参数的读
+#     $local1 = $p1
+#     $local2 = $p2 + "_suffix"
+
+#     # 多次读写
+#     $local1 += 5
+#     $local2 = $local2.ToUpper()
+
+#     Write-Host "p1=$p1 p2=$p2 local1=$local1 local2=$local2"
 # }
 
-# Write-Host "Before Test-Add"
-# $sum = Test-Add -a 1 -b 2
-# Write-Host "After Test-Add: $sum"
+# Test-Params-And-Body -p1 10 -p2 "abc"
 
-
-# # =========================
-# # 10. 函数内部有 if/loop/throw/try-catch-finally
-# # =========================
-# function Test-Complex {
-#     param([int]$n, [string]$str)
-#     Write-Host "Test-Complex: start n=$n"
-
-#     if ($n -lt 0) {
-#         Write-Host "n < 0, throwing" -ForegroundColor Red
-#         throw "n must be >= 0"
-#     }
-
-#     $sum = 0
-#     for ($i = 0; $i -lt $n; $i++) {
-#         $sum += $i
-#     }
-
-#     try {
-#         Write-Host "In try, sum = $sum"
-#         if ($n -eq 3) {
-#             throw "Test-Complex inner error"
-#         }
-#         Write-Host "After possible throw"
-#     }
-#     catch {
-#         Write-Host "Test-Complex caught: $($_.Exception.Message)" -ForegroundColor Yellow
-#     }
-#     finally {
-#         Write-Host "Test-Complex finally" -ForegroundColor Cyan
-#     }
-
-#     Write-Host "Test-Complex: end sum=$sum"
-#     return $sum
+# 4 Write-Host "==== Var Test 4: foreach + 内部读写 ===="
+# $numbers = 1..3
+# $sum = 0
+# foreach ($n in $numbers) {
+#     $sum += $n
 # }
 
-# Write-Host "Call Test-Complex 2"
-# Test-Complex 2
+# Write-Host "sum = $sum"
 
-# Write-Host "Call Test-Complex 3"
-# Test-Complex 3
+# 5 Write-Host "==== Var Test 5: if 中的变量 ===="
+$flag = $true
+$count = 0
 
-# Write-Host "Call Test-Complex -1 (will throw uncaught)"
+if ($flag -and $count -eq 0) {
+    $count = 1
+} elseif (-not $flag) {
+    $count = 2
+}
+write-host $count
+
+#5.1 while变量
+# while ($count -lt 5) {
+#     $count++
+# }
+
+# Write-Host "count = $count"
+
+#5.2 for变量
+# for ($i = 0; $i -lt 5; $i++) {
+#     <# Action that will repeat until the condition is met #>
+#     Write-Host $i
+# }
+
+#5.3 do-while变量
+# do{
+#     Write-Host "dowhile"
+# }while($a -lt 5)
+
+#5.4 do-until变量
+# do{
+#     Write-Host "dowhile"
+# }until($a -lt 5)
+
+
+# Write-Host "==== Var Test 6: try/catch/finally 中的变量 ===="
+# $outer = 0
 # try {
-#     Test-Complex -1
+#     $outer = 10
+#     $inner = 1
+#     $inner++
+#     throw "error with outer=$outer inner=$inner"
 # }
 # catch {
-#     Write-Host "Outer caught from Test-Complex: $($_.Exception.Message)" -ForegroundColor Green
-# }
-
-
-# # =========================
-# # 11. 函数里 rethrow，让外层 catch
-# # =========================
-# function Test-Rethrow {
-#     Write-Host "Test-Rethrow: start"
-#     try {
-#         throw "inner error"
-#     }
-#     catch {
-#         Write-Host "Test-Rethrow: inner catch, rethrow" -ForegroundColor Yellow
-#         throw  # rethrow
-#     }
-#     Write-Host "Test-Rethrow: this will not execute"
-# }
-
-# Write-Host "Call Test-Rethrow with outer catch"
-# try {
-#     Test-Rethrow
-# }
-# catch {
-#     Write-Host "Outer got from Test-Rethrow: $($_.Exception.Message)" -ForegroundColor Green
-# }
-
-
-# # =========================
-# # 12. 函数内部的 try-finally + finally throw
-# # =========================
-# function Test-Finally-Throw {
-#     Write-Host "Test-Finally-Throw: start"
-#     try {
-#         Write-Host "Inner try"
-#     }
-#     finally {
-#         Write-Host "Inner finally throwing" -ForegroundColor Red
-#         throw "from inner finally"
-#     }
-#     Write-Host "After inner try/finally (unreachable)"
-# }
-
-# Write-Host "Call Test-Finally-Throw with outer catch"
-# try {
-#     Test-Finally-Throw
-# }
-# catch {
-#     Write-Host "Outer caught from Test-Finally-Throw: $($_.Exception.Message)" -ForegroundColor Green
-# }
-
-
-# # =========================
-# # 13. 嵌套函数定义 + 调用
-# # =========================
-# function Outer-Func {
-#     Write-Host "Outer-Func: start"
-
-#     function Inner-Func {
-#         param($x)
-#         Write-Host "Inner-Func: x = $x"
-#         return ($x * 2)
-#     }
-
-#     Write-Host "Outer-Func: calling Inner-Func"
-#     $r = Inner-Func 10
-#     Write-Host "Outer-Func: Inner-Func returned $r"
-#     return $r
-# }
-
-# Write-Host "Call Outer-Func"
-# $resultOuter = Outer-Func
-# Write-Host "Result from Outer-Func = $resultOuter"
-
-
-# # =========================
-# # 14. 函数里 exit（脚本级终止）
-# =========================
-# function Test-Exit {
-#     Write-Host "Test-Exit: before exit"
-#     exit  # 终止整个脚本
-#     Write-Host "Test-Exit: after exit (unreachable)"
-# }
-
-# # 注意：这行调用一旦执行，会直接让脚本结束，后面的逻辑不会跑
-# # 需要时再取消注释：
-# Write-Host "Call Test-Exit (will terminate script)"
-# Test-Exit
-# Write-Host "After Test-Exit (unreachable)"
-
-
-# # =========================
-# # 15. 函数里 try-finally 有exit（先跑finally再退出）
-# =========================
-# function Test-Try-finally-exit {
-#     try {
-#         Write-Host "before exit"
-#         Exit
-#         Write-Host "after exit"
-#     }
-#     finally {
-#         write-host "function-finally"
-#     }
-# }
-
-# write-host "before xixi"
-# Test-Try-finally-exit
-# write-host "xixi"
-
-# # =========================
-# # 16. 函数里 try-finally 有return
-# =========================
-# function Test-Try-finally-return {
-#     try {
-#         Write-Host "before return"
-#         Write-Host "after return"
-#     }
-#     finally {
-#         write-host "function-finally"
-#     }
-#     Write-Host "after finally"
-# }
-
-# write-host "before xixi"
-# Test-Try-finally-return
-# write-host "xixi"
-
-# # =========================
-# # 16. try-finally 有exception, finally之后还有
-# =========================
-
-# try {
-#     Write-Host "exception"
-#     return
+#     # $_ 是读写哪种你暂时可以只当读，这里主要关注 $outer/$inner
+#     $catchMsg = $_.Exception.Message
+#     $outer = 20
 # }
 # finally {
-#     Write-Host "finally"
-#     write-host "xixi"
+#     # finally 中既读又写
+#     $outer++
+#     $final = $outer
+#     Write-Host "in finally, outer=$outer final=$final"
 # }
 
-# Write-Host "after finally"
+# Write-Host "after try/catch/finally, outer=$outer"
+
+
+
+
+# Write-Host "==== Var Test 7: 嵌套函数与闭包风格 ===="
+# $globalX = 100
+
+# function Outer-Func {
+#     param([int]$x)
+
+#     $y = $x + 1
+
+#     function Inner-Func {
+#         param([int]$z)
+#         # 这里读 globalX、x、y
+#         $w = $globalX + $x + $y + $z
+#         Write-Host "Inner-Func: w=$w"
+#         return $w
+#     }
+
+#     $resultInner = Inner-Func 5
+#     return $resultInner
+# }
+
+# $outerRes = Outer-Func 3
+# Write-Host "Outer-Func result = $outerRes"
+
+
+
+
+
+# Write-Host "==== Var Test 8: hashtable / array / pipeline 中的变量 ===="
+# $arr = @()
+# $h = @{}
+
+# $arr += 10
+# $arr += 20
+# $h["k1"] = "v1"
+# $h["k2"] = $arr[0]
+
+# # pipeline 中的变量读取
+# $arr | ForEach-Object {
+#     $item = $_
+#     Write-Host "item from arr: $item"
+# }
+
+# Write-Host "==== Var Test 9: Switch 中的变量 ===="
+# $swVar = "B"
+
+# switch ($swVar) {
+#     "A" { $msg = "got A" }
+#     "B" { $msg = "got B"; $swVar = "B-modified" }
+#     default { $msg = "other"; $swVar = "other-modified" }
+# }
+
+# Write-Host "swVar = $swVar msg = $msg"
+
+# Write-Host "==== Var Test 10: return/exit 与变量 ===="
+# function Test-Return-Var {
+#     $r = 1
+#     $r += 2
+#     return $r
+#     $r = 999    # 不可达，看看 CFG 的 VarsWritten 是否还能看到
+# }
+
+# $rv = Test-Return-Var
+# Write-Host "Test-Return-Var = $rv"
+
+# # 注意：下面这个 exit 会终止脚本，平时测试时可以注释掉
+# # $exitVar = 123
+# # exit
+# # $exitVar = 456   # 不可达
+
+# Write-Host "==== Var Test 11: try-finally + return/exit 混合变量 ===="
+# function Test-Try-Finally-Return {
+#     $t = 0
+#     try {
+#         $t = 1
+#         return $t
+#     }
+#     finally {
+#         $t = 2
+#         $t++
+#         Write-Host "finally t=$t"
+#     }
+# }
+
+# $tv = Test-Try-Finally-Return
+# Write-Host "Test-Try-Finally-Return result = $tv"
+
+# Write-Host "==== Var Test 12: 复杂表达式中的变量 ===="
+# $base = 10
+# $result = ($base * 2) + [Math]::Pow($base, 2)
+# Write-Host "result = $result"

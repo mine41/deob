@@ -12,36 +12,30 @@ digraph G {
 
     // Nodes
     1 [label="Line 0\lStart\lScript Start", shape=oval];
-    2 [label="Line 218\lEnd\lScript End", shape=oval];
-    3 [label="Line 190\lFunctionDef\lfunction Test-Try-finally-return", shape=box];
-    4 [label="Line 190\lFuncStart\lfunction Test-Try-finally-return", shape=oval];
-    5 [label="Line 199\lFuncEnd\lEnd function Test-Try-finally-return", shape=oval];
-    6 [label="Line 191\lTry\lTry", shape=box];
-    7 [label="Line 195\lFinally\lFinally", shape=box];
-    8 [label="Line 192\lPipelineAst\lWrite-Host \"before return\"", shape=box];
-    9 [label="Line 193\lPipelineAst\lWrite-Host \"after return\"", shape=box];
-    10 [label="Line 196\lPipelineAst\lwrite-host \"function-finally\"", shape=box];
-    11 [label="Line 197\lMerge\lTry-End", shape=point];
-    12 [label="Line 198\lPipelineAst\lWrite-Host \"after finally\"", shape=box];
-    13 [label="Line 201\lPipelineAst\lwrite-host \"before xixi\"", shape=box];
-    14 [label="Line 202\lPipelineAst\lTest-Try-finally-return", shape=box];
-    15 [label="Line 203\lPipelineAst\lwrite-host \"xixi\"", shape=box];
+    2 [label="Line 207\lEnd\lScript End", shape=oval];
+    3 [label="Line 58\lAssignmentStatementAst\l$flag = $true", shape=box];
+    4 [label="Line 59\lAssignmentStatementAst\l$count = 0", shape=box];
+    5 [label="Line 61\lIf Condition\lIf Condition", shape=box];
+    6 [label="Line 61\lCondition\l$flag -and $count -eq 0", shape=diamond];
+    7 [label="Line 62\lAssignmentStatementAst\l$count = 1", shape=box];
+    8 [label="Line 63\lCondition\l-not $flag", shape=diamond];
+    9 [label="Line 64\lAssignmentStatementAst\l$count = 2", shape=box];
+    10 [label="Line 65\lElse\lImplicit Else", shape=box];
+    11 [label="Line 65\lMerge\lIf-End", shape=point];
+    12 [label="Line 66\lPipelineAst\lwrite-host $count", shape=box];
 
     // Edges
     1 -> 3;
-    4 -> 6;
-    6 -> 8;
+    3 -> 4;
+    4 -> 5;
+    5 -> 6 [label="Condition"];
+    6 -> 7;
+    6 -> 8 [label="False"];
     8 -> 9;
-    8 -> 7 [label="Exception"];
-    9 -> 7 [label="Exception"];
-    9 -> 7;
-    7 -> 10;
-    10 -> 5 [label="Uncaught Exception"];
+    8 -> 10 [label="False"];
+    7 -> 11;
+    9 -> 11;
     10 -> 11;
     11 -> 12;
-    12 -> 5;
-    3 -> 13;
-    13 -> 14;
-    14 -> 15;
-    15 -> 2;
+    12 -> 2;
 }
