@@ -190,12 +190,12 @@
 # function Test-Try-finally-return {
 #     try {
 #         Write-Host "before return"
-#         return
 #         Write-Host "after return"
 #     }
 #     finally {
 #         write-host "function-finally"
 #     }
+#     Write-Host "after finally"
 # }
 
 # write-host "before xixi"
