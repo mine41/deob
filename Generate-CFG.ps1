@@ -303,6 +303,61 @@ function Convert-SwitchAstNode {
     return $false  # switch 作为循环结构，总是可以正常退出（除非所有路径都 return/exit）
 }
 
+function Convert-FunctionDefinitionAst {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.FunctionDefinitionAst]$funcAst
+    )
+    if ($null -eq $funcAst) {
+        return
+    }
+
+    # 为函数体创建独立的入口/出口节点（不从 Script Start 连入）
+    # FuncStart 只显示函数名，参数单独作为一个节点紧跟其后
+    $funcName = $funcAst.Name
+    $funcStart = Add-Node -cfg $cfg -type "FuncStart" -text "function $funcName" -line $funcAst.Extent.StartLineNumber -ast $funcAst
+    $funcEnd   = Add-Node -cfg $cfg -type "FuncEnd"   -text "End function $funcName"        -line $funcAst.Extent.EndLineNumber   -ast $funcAst
+
+    # 在函数内部构建控制流：类似 ScriptBlockAst，但使用 FuncStart/FuncEnd
+    # 如果存在 ParamBlock，则在 FuncStart 后面单独插入一个参数节点
+    $prevNode = $funcStart
+    if ($null -ne $funcAst.Body -and $null -ne $funcAst.Body.ParamBlock) {
+        $paramBlock = $funcAst.Body.ParamBlock
+        # 将 ParamBlock 文本压缩为单行，避免换行和多余空格导致显示难看
+        $rawParamText    = $paramBlock.Extent.Text
+        $singleLineParam = ($rawParamText -split "`r?`n") -join ' '
+        $singleLineParam = ($singleLineParam -replace '\s+', ' ').Trim()
+
+        $paramNode = Add-Node -cfg $cfg -type "FuncParams" -text $singleLineParam -line $paramBlock.Extent.StartLineNumber -ast $paramBlock
+        Add-Edge -cfg $cfg -from $funcStart.Id -to $paramNode.Id
+        $prevNode = $paramNode
+    }
+
+    $prev = [ref]$prevNode
+    $endRef = [ref]$funcEnd
+
+    if ($null -ne $funcAst.Body -and $null -ne $funcAst.Body.EndBlock) {
+        # 目前只考虑函数体中的 EndBlock（最常见的普通函数写法）
+        foreach ($statement in $funcAst.Body.EndBlock.Statements) {
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prev -endNodeRef $endRef -loopContext $null -switchContext $null
+            if ($hasTerminator) {
+                break
+            }
+        }
+    }
+
+    # 如果最后一个节点不是 FuncEnd，并且不是显式终止语句，则连接到 FuncEnd（隐式 return）
+    # 注意：当函数体中出现 exit 且被 try/finally 包裹时，finally 的出口有可能已经被特殊处理为
+    #       直接连到全局 Script End（Type="End"）。这种情况下不能再从 Script End 连一条边到
+    #       FuncEnd，否则就会出现“FuncEnd 接在 Script End 后面”的错误。
+    if ($null -ne $prev.Value -and $prev.Value.Id -ne $funcEnd.Id) {
+        $lastType = $prev.Value.Type
+        if ($lastType -notin @("Return", "Exit", "Throw", "Break", "Continue", "End")) {
+            Add-Edge -cfg $cfg -from $prev.Value.Id -to $funcEnd.Id
+        }
+    }
+}
+
 function Convert-TryAstNode {
     param(
         [hashtable]$cfg,
@@ -377,6 +432,7 @@ function Convert-TryAstNode {
     #    否则内层 throw 会被错误地直接连到外层 catch。
     $tryAllNodes = @()
     $tryExitNodes = @()
+    $tryReturnNodes = @()
     for ($i = $nodeCountBefore; $i -lt $cfg.Nodes.Count; $i++) {
         $node = $cfg.Nodes[$i]
 
@@ -400,9 +456,12 @@ function Convert-TryAstNode {
             continue  # 交由内层 try 自己的 catch 处理异常，不直接连到当前 try 的 catch
         }
 
-        # 记录 Try 块中的 Exit 节点（无论如何都要触发 finally）
+        # 记录 Try 块中的 Exit / Return 节点（无论如何都要触发 finally）
         if ($node.Type -eq "Exit") {
             $tryExitNodes += $node
+        }
+        elseif ($node.Type -eq "Return") {
+            $tryReturnNodes += $node
         }
 
         # 排除终止语句节点和特殊节点（Try/Catch/Finally等），但保留Throw节点，因为Throw需要连接到Catch/Finally
@@ -426,10 +485,17 @@ function Convert-TryAstNode {
         }
     }
 
-    # 9.5. Exit 不是异常，不经过 catch，但在 try 中出现时，仍然必须执行 finally
-    if ($null -ne $finallyNode -and $tryExitNodes.Count -gt 0) {
-        foreach ($exitNode in $tryExitNodes) {
-            Add-Edge -cfg $cfg -from $exitNode.Id -to $finallyNode.Id -label "Exit"
+    # 9.5. Exit / Return 不是异常，不经过 catch，但在 try 中出现时，仍然必须执行 finally
+    if ($null -ne $finallyNode) {
+        if ($tryExitNodes.Count -gt 0) {
+            foreach ($exitNode in $tryExitNodes) {
+                Add-Edge -cfg $cfg -from $exitNode.Id -to $finallyNode.Id -label "Exit"
+            }
+        }
+        if ($tryReturnNodes.Count -gt 0) {
+            foreach ($retNode in $tryReturnNodes) {
+                Add-Edge -cfg $cfg -from $retNode.Id -to $finallyNode.Id -label "Return"
+            }
         }
     }
 
@@ -576,7 +642,7 @@ function Convert-TryAstNode {
     # 11.8.F 只要当前 try 有 finally，就把“内部子结构”产生的 Uncaught Exception
     #        从 End 重定向到本 try 的 finally 节点：
     #        - 有 catch 时：catch 处理/重新抛出的异常，在离开本层前仍然要先执行 finally；
-    #        - 只有 finally（无 catch）时：未捕获异常同样要先执行 finally，再继续往外冒泡。
+    #        - 只有 finally（无 catch）时：未捕获异常同样要先执行 finally，再继续向外冒泡。
     if ($null -ne $finallyNode -and $null -ne $endNodeRef) {
         $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
         if ($null -ne $endNode) {
@@ -625,6 +691,9 @@ function Convert-TryAstNode {
                 #    在当前层都应该先执行 finally，然后再继续向外冒泡。
                 $edge.To = $finallyNode.Id
             }
+
+            # 这里不再从 finally 节点本身连出 Uncaught Exception，
+            # 而是在 finally 块正常结束时，由最后一个语句节点连出（见后面的逻辑）。
         }
     }
 
@@ -651,24 +720,35 @@ function Convert-TryAstNode {
         if (-not $finallyHasTerminator -and $null -ne $prevNodeRef.Value) {
             $lastNodeType = $prevNodeRef.Value.Type
 
-            # 特例：没有任何 catch（纯 try-finally），并且 Try 块本身已经“终止”
-            #（例如只包含 throw/return/exit/break/throw 或所有分支都终止）
-            # 这种情况下，finally 执行完之后，不应该再继续执行 try 之后的语句，
-            # 而是视为“执行 finally 后终止脚本/函数”。
-            if ($catchNodes.Count -eq 0 -and $tryHasTerminator) {
-                if ($null -ne $endNodeRef) {
-                    $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-                    if ($null -ne $endNode) {
-                        # finally 的出口直接连到 Script End / 函数 End，表示未捕获异常终止
-                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id -label "Uncaught Exception"
-                        # 将当前节点视为 End，这样外层不会再从 Try-End 额外连一条边
-                        $prevNodeRef.Value = $endNode
-                    }
+            # ① 异常路径：如果当前有未捕获异常挂起，执行完 finally 内最后一个语句后，
+            #    异常应继续向外冒泡到 End。解释器在运行时根据“是否处于异常状态”
+            #    选择是否走这条边。
+            if ($null -ne $endNodeRef) {
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id -label "Uncaught Exception"
                 }
-                # 不把 finally 的出口加入 $branchEndNodes，这样整个 try-finally 会被视为“终止”（返回 $true）
+            }
+
+            # ② Exit 特例：Try 块中出现过 Exit，说明存在 “Exit 整个脚本” 的路径：
+            #    try { ... exit } finally { ... }  ==>  Exit -> Finally -> ScriptEnd
+            if ($tryExitNodes.Count -gt 0 -and $script:__CFG_ScriptEndNode) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $script:__CFG_ScriptEndNode.Id -label "Exit"
+                $prevNodeRef.Value = $script:__CFG_ScriptEndNode
+                # 不把 finally 的出口加入 $branchEndNodes，这条路径视为终止
+            }
+            # ③ Return 特例：Try 块中出现过 Return，说明存在 “return 当前脚本块/函数” 的路径：
+            #    try { ... return } finally { ... }  ==>  Return -> Finally -> End/FuncEnd
+            elseif ($tryReturnNodes.Count -gt 0 -and $null -ne $endNodeRef) {
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id -label "Return"
+                    $prevNodeRef.Value = $endNode
+                }
+                # 同样不把 finally 的出口加入 $branchEndNodes，这条路径视为终止
             }
             else {
-                # 有 catch，或者 Try 本身不终止：finally 之后仍可能继续执行
+                # ④ 正常路径：finally 之后仍然可能继续执行后续语句
                 if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Exit" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
                     $branchEndNodes += $prevNodeRef.Value
                 }
@@ -892,6 +972,8 @@ function Convert-AstNode {
         # 先创建 End 节点（但不立即连接），供 Return 语句使用
         $endNode = Add-Node -cfg $cfg -type "End" -text "Script End" -line $node.Extent.EndLineNumber
         $endNodeRef = [ref]$endNode
+        # 记录全局 Script End 节点，供 Exit 在任意作用域直接终止脚本使用
+        $script:__CFG_ScriptEndNode = $endNode
 
         # 1. 按顺序处理各个块
         $blocks = @(
@@ -928,20 +1010,37 @@ function Convert-AstNode {
         }
         $prevNodeRef.Value = $endNode
     }
-    # 二、如果是ReturnStatementAst，创建 Return 节点并连接到 End
+    # 二、如果是ReturnStatementAst，创建 Return 节点
     elseif ($node -is [System.Management.Automation.Language.ReturnStatementAst]) {
         $returnNode = Add-Node -cfg $cfg -type "Return" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
         # 连接到上一个节点
         if ($null -ne $prevNodeRef.Value) {
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id
         }
-        # 连接到 End 节点（如果提供了 endNodeRef）
-        if ($null -ne $endNodeRef) {
+
+        # Return 一般终止当前脚本块/函数，但如果它位于“带 finally 的 try”中，
+        # 必须先执行 finally，再在 finally 之后返回。这里检测是否在这样的 try 中，
+        # 如果是，则暂时不连到 End，由 Convert-TryAstNode 负责通过 finally 终止。
+        $inTryWithFinally = $false
+        $ancestor = $node.Parent
+        while ($null -ne $ancestor) {
+            if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+                if ($null -ne $ancestor.Finally) {
+                    $inTryWithFinally = $true
+                }
+                break
+            }
+            $ancestor = $ancestor.Parent
+        }
+
+        if (-not $inTryWithFinally -and $null -ne $endNodeRef) {
+            # 不在任何带 finally 的 try 中：直接连接到 End / FuncEnd
             $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
             if ($null -ne $endNode) {
                 Add-Edge -cfg $cfg -from $returnNode.Id -to $endNode.Id -label "Return"
             }
         }
+
         $prevNodeRef.Value = $returnNode
         return $true  # 返回 true 表示遇到了 return
     }
@@ -951,6 +1050,35 @@ function Convert-AstNode {
         # 连接到上一个节点
         if ($null -ne $prevNodeRef.Value) {
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $exitNode.Id
+        }
+        # Exit 始终终止整个脚本，但如果它位于某个带 finally 的 try 中，
+        # 则必须先执行 finally，再在 finally 之后连到 Script End。
+        # 这里检测是否处于“带 finally 的 try”内部，如果是，就不在这里直接连 Script End，
+        # 由 Convert-TryAstNode 的 9.5 + 12 步负责通过 finally 终止脚本。
+        $inTryWithFinally = $false
+        $ancestor = $node.Parent
+        while ($null -ne $ancestor) {
+            if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+                if ($null -ne $ancestor.Finally) {
+                    $inTryWithFinally = $true
+                }
+                break
+            }
+            $ancestor = $ancestor.Parent
+        }
+
+        if (-not $inTryWithFinally) {
+            # 不在任何带 finally 的 try 中：直接连接到全局 Script End（如果存在）
+            if ($script:__CFG_ScriptEndNode) {
+                Add-Edge -cfg $cfg -from $exitNode.Id -to $script:__CFG_ScriptEndNode.Id -label "Exit"
+            }
+            elseif ($null -ne $endNodeRef) {
+                # 兜底：如果没记录到全局 End，就退回到当前作用域的 endNodeRef
+                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+                if ($null -ne $endNode) {
+                    Add-Edge -cfg $cfg -from $exitNode.Id -to $endNode.Id -label "Exit"
+                }
+            }
         }
         $prevNodeRef.Value = $exitNode
         return $true  # 返回 true 表示遇到了 exit，后续语句不可达
@@ -1028,6 +1156,7 @@ function Convert-AstNode {
         # 判断是否位于 catch / finally 块内部（兼容不支持 FinallyClauseAst 的旧版 PowerShell）
         $inCatch = $false
         $inFinally = $false
+        $hasTryAncestor = $false
         $ancestor = $node.Parent
         while ($null -ne $ancestor) {
             if ($ancestor -is [System.Management.Automation.Language.CatchClauseAst]) {
@@ -1042,6 +1171,10 @@ function Convert-AstNode {
                     $inFinally = $true
                 }
             }
+            elseif ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+                # 标记该 throw 出现在某个 try 块内部（由 Convert-TryAstNode 负责异常路由）
+                $hasTryAncestor = $true
+            }
             $ancestor = $ancestor.Parent
         }
 
@@ -1049,8 +1182,18 @@ function Convert-AstNode {
         # - 对于 catch 中的 throw：这是“重新抛出”（rethrow）；当前 try 的 catch 已经执行过，新的异常只会交给外层 try。
         # - 对于 finally 中的 throw：finally 总是在 try/catch 之后执行，此时当前 try 的 catch 也不会再参与处理。
         # 统一建模为一条 Uncaught Exception 到 End，由外层 try（如果存在）在 Convert-TryAstNode 的 11.8 步中
-        # 把这条边重定向到自身的 catch；如果不存在外层 try，则表示脚本/函数在 finally 中抛出未捕获异常后终止。
+        # 把这条边重定向到自身的 catch / finally；如果不存在外层 try，则表示脚本/函数在 finally 中抛出未捕获异常后终止。
         if (($inCatch -or $inFinally) -and $null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
+            }
+        }
+        # 否则，如果该 throw 不在任何 try 内部，也不在 catch/finally 中，
+        # 则视为“当前脚本/函数作用域内的未捕获异常”：直接连到 End/FuncEnd。
+        # （位于 try 块内部的 throw，其异常路径由 Convert-TryAstNode 的 Exception 边统一处理，
+        #  这里不再额外添加 Uncaught Exception -> End，避免产生重复/错误的路径。）
+        elseif (-not $hasTryAncestor -and $null -ne $endNodeRef) {
             $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
             if ($null -ne $endNode) {
                 Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
@@ -1059,6 +1202,23 @@ function Convert-AstNode {
 
         $prevNodeRef.Value = $throwNode
         return $true  # 返回 true 表示遇到了 throw，后续语句不可达
+    }
+    # 二点八、如果是 FunctionDefinitionAst，创建函数定义节点，并为函数体构建独立的子CFG
+    elseif ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        # 顶层：函数定义本身作为一个顺序节点出现，便于观测
+        $funcName = $node.Name
+        $defText = "function $funcName"
+        $funcDefNode = Add-Node -cfg $cfg -type "FunctionDef" -text $defText -line $node.Extent.StartLineNumber -ast $node
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $funcDefNode.Id
+        }
+        $prevNodeRef.Value = $funcDefNode
+
+        # 为函数体生成独立的 FuncStart/FuncEnd 子图（不影响当前顺序流）
+        Convert-FunctionDefinitionAst -cfg $cfg -funcAst $node
+
+        # 定义函数不会终止脚本后续语句
+        return $false
     }
     # 三、如果是IfStatementAst，创建分支
     elseif ($node -is [System.Management.Automation.Language.IfStatementAst]) {
@@ -1164,7 +1324,7 @@ function Export-CfgToDot {
     $nodeDefinitions = @()
     foreach ($node in $finalCFG.Nodes) {
         $shape = switch ($node.Type) {
-            {$_ -in "Start", "End"}   { "oval" }
+            {$_ -in "Start", "End", "FuncStart", "FuncEnd"}   { "oval" }
             {$_ -in "Condition", "If"} { "diamond" }
             {$_ -in "Merge"} { "point" }
             default                   { "box" }
