@@ -1,4 +1,4 @@
-function Get-Ast {
+﻿function Get-Ast {
     param (
         [object] $InputObject
     )
@@ -997,7 +997,7 @@ function Get-ConditionLabel {
         }
         default {
             if ($null -eq $loopAst.Condition) { "AlwaysTrue" }
-            else { "Condition: $($loopAst.Condition.Extent.Text)" }
+            else { $($loopAst.Condition.Extent.Text) }
         }
     }
 }
@@ -1053,49 +1053,49 @@ function Convert-LoopStatement {
         default { "unknown-loop" }
     }
     $isForEach = $loopAst -is [System.Management.Automation.Language.ForEachStatementAst]
+    $isFor     = $loopAst -is [System.Management.Automation.Language.ForStatementAst]
 
     # 2. 创建循环开始节点
-    #    LoopStart 只是结构示意节点，本身不参与实际执行，因此不需要携带整个循环 AST，
-    #    以免在变量分析时重复/混淆。真正的判断和变量使用信息放在 Condition 节点上。
-    $loopStartAst = if ($isForEach) { $null } else { $loopAst }
-    $loopStart = Add-Node -cfg $cfg -type "LoopStart" -text (Get-LoopHeaderText $loopAst) -line $loopAst.Extent.StartLineNumber -ast $loopStartAst
+    $loopStart = Add-Node -cfg $cfg -type "LoopStart" -text (Get-LoopHeaderText $loopAst) -line $loopAst.Extent.StartLineNumber -ast $null
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $loopStart.Id
     $currentNode = $loopStart
+
+    # 2.5 for 循环的 Initializer 处理
+    #     for ($i = 0; $i -lt $max; $i++) { ... }
+    #     => LoopStart -> (ForInit: $i = 0) -> Condition
+    if ($isFor -and $null -ne $loopAst.Initializer) {
+        $initAst = $loopAst.Initializer
+        $initNode = Add-Node -cfg $cfg -type "ForInit" -text $initAst.Extent.Text -line $initAst.Extent.StartLineNumber -ast $initAst
+        Add-Edge -cfg $cfg -from $currentNode.Id -to $initNode.Id
+        $currentNode = $initNode
+    }
 
     # 3. 处理 do-while/do-until 的首次执行（先执行后判断）
     $isDoLoop = $loopType -in "do-while", "do-until"
     if ($isDoLoop) {
         # 3.1 创建专门的条件节点（放在循环体之后）
-        #     对于 foreach，Condition 节点承担“是否有下一个元素”的判断，也隐含迭代变量赋值；
-        #     因此将整个 ForEachStatementAst 作为 Ast，便于变量读写分析。
-        $conditionAst = if ($isForEach) { $loopAst } else { $loopAst.Condition }
+        $conditionAst = $loopAst.Condition
         $conditionLine = if ($null -ne $loopAst.Condition) { $loopAst.Condition.Extent.StartLineNumber } else { $loopAst.Extent.StartLineNumber }
         $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
 
         # 3.1.5 创建循环结束节点（提前创建，供 break 使用）
-        #       LoopEnd 仅为结构示意节点，不参与实际执行，因此不需要携带完整循环 AST。
         $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $null
 
         # 3.1.6 创建循环上下文（do-while/do-until 的 continue 应该跳转到条件检查）
-        # 注意：continue 应该跳转到 conditionNode，而不是 loopStart
-        # 因为 do-while/do-until 是先执行循环体，然后检查条件
-        # continue 应该跳过循环体剩余部分，直接进行条件检查
         $loopContext = [PSCustomObject]@{
             LoopEnd = $loopEnd
-            LoopContinue = $conditionNode  # do-while/do-until 的 continue 跳转到条件检查
+            LoopContinue = $conditionNode
         }
 
         # 3.2 先处理循环体
         foreach ($statement in $loopAst.Body.Statements) {
             $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
-            # 如果遇到 return/break/continue，停止处理后续语句（这些语句不可达）
             if ($hasReturn) {
                 break
             }
         }
 
-        # 3.3 连接循环体到条件节点（只有当最后一个节点不是 break/continue 时）
-        # break 节点应该只连接到 loopEnd，continue 应该只连接到循环继续点
+        # 3.3 连接循环体到条件节点
         if ($null -ne $currentNode) {
             $lastNodeType = $currentNode.Type
             if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
@@ -1110,7 +1110,7 @@ function Convert-LoopStatement {
         Add-Edge -cfg $cfg -from $conditionNode.Id -to $loopEnd.Id -label (Get-ExitLabel $loopAst)
 
         $prevNodeRef.Value = $loopEnd
-        return  # 提前返回，避免执行通用逻辑
+        return
     }
 
     # 4. 添加条件节点
@@ -1126,29 +1126,46 @@ function Convert-LoopStatement {
     #     LoopEnd 仅为结构示意节点，不参与实际执行，因此不需要携带完整循环 AST。
     $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $null
 
-    # 4.6 创建循环上下文（非 do-xx 循环的 continue 应该回到 conditionNode）
+    # 4.6 for 循环的 Iterator 节点（提前创建，供 continue 跳转使用）
+    #     for 循环的 continue 应该跳到 Iterator 而不是 Condition
+    $iteratorNode = $null
+    if ($isFor -and $null -ne $loopAst.Iterator) {
+        $iterAst = $loopAst.Iterator
+        $iteratorNode = Add-Node -cfg $cfg -type "ForIter" -text $iterAst.Extent.Text -line $iterAst.Extent.StartLineNumber -ast $iterAst
+    }
+
+    # 4.7 创建循环上下文
+    #     - for 循环的 continue 跳到 Iterator 节点（如果存在），否则跳到 Condition
+    #     - 其他循环的 continue 跳到 Condition 节点
     $loopContext = [PSCustomObject]@{
         LoopEnd = $loopEnd
-        LoopContinue = $conditionNode  # 非 do-xx 循环的 continue 回到条件节点
+        LoopContinue = if ($null -ne $iteratorNode) { $iteratorNode } else { $conditionNode }
     }
 
     # 5. 处理非 do-xx 的循环体（先判断后执行）
-    if (-not $isDoLoop) {
-        foreach ($statement in $loopAst.Body.Statements) {
-            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
-            # 如果遇到 return/break/continue，停止处理后续语句（这些语句不可达）
-            if ($hasReturn) {
-                break
-            }
+    foreach ($statement in $loopAst.Body.Statements) {
+        $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+        if ($hasReturn) {
+            break
         }
-        # 添加循环回边（只有当最后一个节点不是 break/continue 时）
-        # break 节点应该只连接到 loopEnd，continue 应该只连接到循环继续点
-        if ($null -ne $currentNode) {
-            $lastNodeType = $currentNode.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+    }
+    # 5.5 连接循环体到下一步
+    if ($null -ne $currentNode) {
+        $lastNodeType = $currentNode.Type
+        if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
+            if ($null -ne $iteratorNode) {
+                # for 循环：body -> Iterator -> Condition
+                Add-Edge -cfg $cfg -from $currentNode.Id -to $iteratorNode.Id
+            } else {
+                # 其他循环：body -> Condition
                 Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id -label "Next"
             }
         }
+    }
+
+    # 5.6 for 循环：Iterator -> Condition
+    if ($null -ne $iteratorNode) {
+        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $conditionNode.Id
     }
 
     # 6. 连接条件节点到循环结束节点

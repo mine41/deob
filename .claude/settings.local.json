@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Content -Path ''Generate-CFG.ps1'' -Raw | Select-Object -First 1 | Format-Hex | Select-Object -First 3\")",
+      "Bash(powershell -Command \"(Get-Content ''Generate-CFG.ps1'')[1072..1094] | ForEach-Object { $_}\")",
+      "Bash(powershell -NoProfile -Command \"$content = Get-Content ''Generate-CFG.ps1'' -Raw; $content = $content -replace ''(?ms)    # 2\\.5 \\r?\\n    #     for \\(\\`$i = 0.*?        \\}\\r?\\n    \\}\\r?\\n\\r?\\n    # 3\\. '', ''    # 3. ''; Set-Content ''Generate-CFG.ps1'' -Value $content -NoNewline\")",
+      "Bash(powershell -NoProfile -Command \"$lines = Get-Content ''c:\\Users\\411\\Documents\\experiment\\new\\deob\\Generate-CFG.ps1''; $newLines = $lines[0..1071] + $lines[1094..($lines.Length-1)]; Set-Content ''c:\\Users\\411\\Documents\\experiment\\new\\deob\\Generate-CFG.ps1'' -Value $newLines\")",
+      "Bash(powershell -NoProfile -Command \"$f=''c:\\Users\\411\\Documents\\experiment\\new\\deob\\Generate-CFG.ps1''; $a=Get-Content $f; $b=$a[0..1071]+$a[1094..($a.Length-1)]; Set-Content $f -Value $b\")",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"c:\\Users\\411\\Documents\\experiment\\new\\deob\\fix-lines.ps1\")",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"run.ps1\")"
+    ]
+  }
+}

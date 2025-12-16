@@ -45,7 +45,86 @@
 
 # Test-Params-And-Body -p1 10 -p2 "abc"
 
-# 4 Write-Host "==== Var Test 4: foreach + 内部读写 ===="
+# 4 Write-Host "==== Var Test 5: if 中的变量 ===="
+# $flag = $true
+# $count = 0
+
+# if ($flag -and $count -eq 0) {
+#     $count = 1
+# } elseif (-not $flag) {
+#     $count = 2
+# }
+# write-host $count
+
+#5.1 while变量
+# $count = 2
+# $max = 5
+# while ($count -lt $max) {
+#     $count++
+#     write-host "555"
+#     Get-Process
+# }
+
+# Write-Host "count = $count"
+
+#5.2 do-while变量
+# do{
+#     Write-Host "dowhile"
+# }while($a -lt 5)
+
+#5.3 do-until变量
+# do{
+#     Write-Host "dowhile"
+# }until($a -lt 5)
+
+#5.4 for变量
+$a = 2
+
+for ($i = 0; $i -lt 4; $i++) {
+
+    Write-Output "Outer start $i"
+
+    # 条件分支 1：continue
+    if ($i -eq 1) {
+        Write-Output "Continue outer"
+        continue
+    }
+
+    # 条件分支 2：嵌套 for
+    for ($j = 0; $j -lt 3; $j++) {
+
+        Write-Output "Inner $i,$j"
+
+        # 内层 continue
+        if ($j -eq 0) {
+            continue
+        }
+
+        # 内层 break
+        if ($j -eq 1 -and $i -eq 2) {
+            break
+        }
+
+        # 条件 exit（全局终止）
+        if ($i -eq 3 -and $j -eq 2) {
+            exit
+        }
+
+        Write-Output "Inner body end"
+    }
+
+    # 外层 break
+    if ($i -eq $a) {
+        Write-Output "Break outer"
+        break
+    }
+
+    Write-Output "Outer end $i"
+}
+
+Write-Output "Script end"
+
+# 5.5 Write-Host "==== foreach + 内部读写 ===="
 # $numbers = 1..3
 # $sum = 0
 # foreach ($n in $numbers) {
@@ -53,41 +132,6 @@
 # }
 
 # Write-Host "sum = $sum"
-
-# 5 Write-Host "==== Var Test 5: if 中的变量 ===="
-$flag = $true
-$count = 0
-
-if ($flag -and $count -eq 0) {
-    $count = 1
-} elseif (-not $flag) {
-    $count = 2
-}
-write-host $count
-
-#5.1 while变量
-# while ($count -lt 5) {
-#     $count++
-# }
-
-# Write-Host "count = $count"
-
-#5.2 for变量
-# for ($i = 0; $i -lt 5; $i++) {
-#     <# Action that will repeat until the condition is met #>
-#     Write-Host $i
-# }
-
-#5.3 do-while变量
-# do{
-#     Write-Host "dowhile"
-# }while($a -lt 5)
-
-#5.4 do-until变量
-# do{
-#     Write-Host "dowhile"
-# }until($a -lt 5)
-
 
 # Write-Host "==== Var Test 6: try/catch/finally 中的变量 ===="
 # $outer = 0
