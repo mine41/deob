@@ -384,8 +384,22 @@ function Convert-SwitchAstNode {
         return
     }
 
-    # 1. 添加 Switch 条件节点（评估条件表达式，可能是数组）
-    # 1.1 获取 switch 的 flags（-Wildcard, -Regex, -CaseSensitive, -Exact, -File, -Parallel）
+    # ============================================================
+    # 新设计：对齐 foreach 的迭代模式
+    # SwitchStart → SwitchInit → SwitchCondition → SwitchBind → [串联Case] → SwitchIter → (回到Condition)
+    # ============================================================
+
+    # 1. 生成唯一变量名（使用 GUID 确保不与用户变量冲突）
+    $guid = [guid]::NewGuid().ToString("N").Substring(0, 12)
+    $collectionVar = "__sw_$guid"
+    $indexVar = "__sw_${guid}_idx"
+
+    # 预定义内部变量的条目（用于手动设置 VarsRead/VarsWritten）
+    $collectionVarEntry = [PSCustomObject]@{ Name = $collectionVar; Scope = [VarScope]::Unspecified }
+    $indexVarEntry = [PSCustomObject]@{ Name = $indexVar; Scope = [VarScope]::Unspecified }
+    $underscoreVarEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
+
+    # 2. 获取 switch 的 flags（-Wildcard, -Regex, -CaseSensitive, -Exact, -File, -Parallel）
     $switchFlags = @()
     if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::Wildcard) { $switchFlags += "-Wildcard" }
     if ($switchAst.Flags -band [System.Management.Automation.Language.SwitchFlags]::Regex) { $switchFlags += "-Regex" }
@@ -396,99 +410,203 @@ function Convert-SwitchAstNode {
     $flagsText = if ($switchFlags.Count -gt 0) { " " + ($switchFlags -join " ") } else { "" }
 
     $switchConditionText = if ($null -ne $switchAst.Condition) { $switchAst.Condition.Extent.Text } else { "Switch Condition" }
-    $switchNode = Add-Node -cfg $cfg -type "Switch Condition" -text "Switch$flagsText ($switchConditionText)" -line $switchAst.Extent.StartLineNumber -ast $switchAst
-    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $switchNode.Id
 
-    # 2. 添加 Iterator 节点（遍历检查，类似 foreach 的 Has next?）
-    $iteratorNode = Add-Node -cfg $cfg -type "Switch Iterator" -text "Has next item in ($switchConditionText)?" -line $switchAst.Extent.StartLineNumber -ast $switchAst
-    Add-Edge -cfg $cfg -from $switchNode.Id -to $iteratorNode.Id
+    # 3. 创建 SwitchStart（装饰节点，ast = null）
+    $switchStart = Add-Node -cfg $cfg -type "SwitchStart" -text "switch$flagsText ($switchConditionText)" -line $switchAst.Extent.StartLineNumber -ast $null
+    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $switchStart.Id
 
-    # 3. 提前创建 Switch 的 merge 节点（供 break 和循环退出使用）
-    $switchMergeNode = Add-Node -cfg $cfg -type "Merge" -text "Switch-End" -line $switchAst.Extent.EndLineNumber -ast $switchAst
+    # 4. 创建 SwitchInit（初始化集合和索引）
+    # VarsRead: 集合表达式中的变量（由 AST 自动分析）
+    # VarsWritten: $__sw_xxx, $__sw_xxx_idx（手动添加）
+    $initText = "`$$collectionVar = $switchConditionText; `$$indexVar = 0"
+    $initNode = Add-Node -cfg $cfg -type "SwitchInit" -text $initText -line $switchAst.Condition.Extent.StartLineNumber -ast $switchAst.Condition
+    # 手动追加内部变量的写入
+    $initNode.VarsWritten = @($initNode.VarsWritten) + @($collectionVarEntry, $indexVarEntry)
+    Add-Edge -cfg $cfg -from $switchStart.Id -to $initNode.Id
 
-    # 4. 连接 Iterator 的"无更多项"分支到 Switch-End
-    Add-Edge -cfg $cfg -from $iteratorNode.Id -to $switchMergeNode.Id -label "No more items"
+    # 5. 创建 SwitchCondition（判断是否还有元素）
+    # VarsRead: $__sw_xxx_idx, $__sw_xxx（手动设置）
+    # ast = $switchAst 仅用于 try/catch 嵌套判断
+    $condText = "`$$indexVar -lt `$$collectionVar.Count"
+    $conditionNode = Add-Node -cfg $cfg -type "SwitchCondition" -text $condText -line $switchAst.Extent.StartLineNumber -ast $switchAst
+    # 清空自动分析的结果，手动设置内部变量的读取
+    $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
+    $conditionNode.VarsWritten = @()
+    Add-Edge -cfg $cfg -from $initNode.Id -to $conditionNode.Id
 
-    # 5. 创建 Switch 上下文（供 break 和 continue 使用）
-    # break: 跳出整个 switch，连接到 switchMergeNode
-    # continue: 跳过当前元素，继续下一个元素，连接到 iteratorNode
+    # 6. 创建 SwitchEnd（提前创建，供 break 和循环退出使用）
+    $switchEnd = Add-Node -cfg $cfg -type "SwitchEnd" -text "End Switch" -line $switchAst.Extent.EndLineNumber -ast $null
+    Add-Edge -cfg $cfg -from $conditionNode.Id -to $switchEnd.Id -label "False"
+
+    # 7. 创建 SwitchBind（绑定当前元素到 $_）
+    # VarsRead: $__sw_xxx, $__sw_xxx_idx
+    # VarsWritten: $_
+    $bindText = "`$_ = `$$collectionVar[`$$indexVar]"
+    $bindNode = Add-Node -cfg $cfg -type "SwitchBind" -text $bindText -line $switchAst.Extent.StartLineNumber -ast $null
+    $bindNode.VarsRead = @($collectionVarEntry, $indexVarEntry)
+    $bindNode.VarsWritten = @($underscoreVarEntry)
+    Add-Edge -cfg $cfg -from $conditionNode.Id -to $bindNode.Id -label "True"
+
+    # 8. 创建 SwitchIter（递增索引，提前创建供 continue 跳转）
+    # VarsRead: $__sw_xxx_idx
+    # VarsWritten: $__sw_xxx_idx
+    $iterText = "`$$indexVar++"
+    $iterNode = Add-Node -cfg $cfg -type "SwitchIter" -text $iterText -line $switchAst.Extent.StartLineNumber -ast $switchAst
+    $iterNode.VarsRead = @($indexVarEntry)
+    $iterNode.VarsWritten = @($indexVarEntry)
+    Add-Edge -cfg $cfg -from $iterNode.Id -to $conditionNode.Id
+
+    # 9. 创建 Switch 上下文（供 break 和 continue 使用）
+    # break: 跳出整个 switch，连接到 switchEnd
+    # continue: 跳到下一个元素，连接到 iterNode
     $currentSwitchContext = [PSCustomObject]@{
-        SwitchMerge = $switchMergeNode
-        SwitchNode = $iteratorNode  # continue 跳转到 Iterator 节点，继续下一个元素
+        SwitchMerge = $switchEnd
+        SwitchNode = $iterNode
     }
 
-    # 6. 收集所有需要回到 Iterator 的节点（没有以 break/return/exit 结束的分支）
-    $backToIteratorNodes = @()
+    # 10. 串联处理所有 Case
+    # 记录上一个节点（用于连接 False 边）
+    $previousCondNode = $null
+    # 记录需要连接到下一个 CaseCondition 的节点列表（包括上一个 CaseBody 的出口）
+    $nodesToNextCase = @()
+    # 记录需要直接连接到 SwitchIter 的节点（最后一个 Case 的出口）
+    $nodesToIter = @()
 
-    # 7. 处理所有 Clause（case 分支）
+    $caseIndex = 0
+    $totalCases = $switchAst.Clauses.Count
+
     foreach ($clause in $switchAst.Clauses) {
-        # 7.1 添加 case 条件节点
+        $caseIndex++
+        $isLastCase = ($caseIndex -eq $totalCases) -and ($null -eq $switchAst.Default)
+
+        # 10.1 创建 CaseCondition 节点
         $caseLabelText = if ($null -ne $clause.Item1) { $clause.Item1.Extent.Text } else { "Case" }
         $caseLineNumber = if ($null -ne $clause.Item1) { $clause.Item1.Extent.StartLineNumber } else { $switchAst.Extent.StartLineNumber }
-        $caseNode = Add-Node -cfg $cfg -type "Case" -text "Case $caseLabelText" -line $caseLineNumber -ast $clause.Item1
-        # Iterator 连接到每个 Case（每个元素都会尝试匹配所有 case）
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $caseNode.Id -label "Match?"
-        $prevNodeRef.Value = $caseNode
+        $caseCondNode = Add-Node -cfg $cfg -type "CaseCondition" -text "Case $caseLabelText" -line $caseLineNumber -ast $clause.Item1
+        # 手动追加 $_ 的读取（CaseCondition 会隐式读取 $_）
+        $caseCondNode.VarsRead = @($caseCondNode.VarsRead) + @($underscoreVarEntry)
 
-        # 7.2 处理分支代码块（Clause[i].Item2）
+        # 10.2 连接到 CaseCondition
+        if ($null -eq $previousCondNode) {
+            # 第一个 Case：从 SwitchBind 连接
+            Add-Edge -cfg $cfg -from $bindNode.Id -to $caseCondNode.Id
+        }
+        else {
+            # 后续 Case：从上一个 CaseCondition 的 False 边连接
+            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $caseCondNode.Id -label "False"
+        }
+
+        # 连接上一个 CaseBody 的出口到当前 CaseCondition
+        foreach ($node in $nodesToNextCase) {
+            Add-Edge -cfg $cfg -from $node.Id -to $caseCondNode.Id
+        }
+        $nodesToNextCase = @()
+
+        # 10.3 处理 Case 分支体
+        $prevNodeRef.Value = $caseCondNode
         $branchHasTerminator = $false
+
+        # 创建一个临时的 prevNode 用于处理分支体
+        $branchPrev = $caseCondNode
+        $firstBodyNodeId = $null
+
         foreach ($statement in $clause.Item2.Statements) {
-            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
-            # 如果遇到 return/break/continue/exit，停止处理后续语句
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$branchPrev) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
+
+            # 记录第一个 body 节点的 ID（用于修改边的标签）
+            if ($null -eq $firstBodyNodeId -and $branchPrev.Id -ne $caseCondNode.Id) {
+                $firstBodyNodeId = $branchPrev.Id
+                # 找到从 caseCondNode 到 firstBodyNode 的边，添加 "True" 标签
+                foreach ($edge in $cfg.Edges) {
+                    if ($edge.From -eq $caseCondNode.Id -and $edge.To -eq $firstBodyNodeId) {
+                        $edge.Label = "True"
+                        break
+                    }
+                }
+            }
+
             if ($hasTerminator) {
                 $branchHasTerminator = $true
                 break
             }
         }
-        # 如果分支没有以 return/break/continue/exit 结束，需要回到 Iterator 继续下一个元素
-        if (-not $branchHasTerminator -and $null -ne $prevNodeRef.Value) {
-            $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Return" -and $lastNodeType -ne "Exit") {
-                $backToIteratorNodes += $prevNodeRef.Value
+
+        # 10.4 如果分支体为空，需要特殊处理
+        # （空分支意味着 CaseCondition 的 True 边直接连到下一个 CaseCondition）
+
+        # 10.5 更新 previousCondNode 和收集出口节点
+        $previousCondNode = $caseCondNode
+
+        if (-not $branchHasTerminator -and $null -ne $branchPrev) {
+            $lastNodeType = $branchPrev.Type
+            if ($lastNodeType -notin @("Break", "Continue", "Return", "Exit", "Throw")) {
+                if ($isLastCase) {
+                    # 最后一个 Case（且没有 default）：出口直接连到 SwitchIter
+                    $nodesToIter += $branchPrev
+                }
+                else {
+                    # 非最后一个 Case：出口连到下一个 CaseCondition
+                    $nodesToNextCase += $branchPrev
+                }
             }
         }
     }
 
-    # 8. 处理 DefaultClause（如果存在 default）
+    # 11. 处理 Default（如果有）
     if ($null -ne $switchAst.Default) {
-        $defaultNode = Add-Node -cfg $cfg -type "Default" -text "Default" -line $switchAst.Default.Extent.StartLineNumber -ast $switchAst.Default
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $defaultNode.Id -label "Default"
-        $prevNodeRef.Value = $defaultNode
+        $defaultNode = Add-Node -cfg $cfg -type "Default" -text "Default" -line $switchAst.Default.Extent.StartLineNumber -ast $null
 
-        # 处理 Default 代码块
+        # 最后一个 CaseCondition 的 False 边连接到 Default
+        if ($null -ne $previousCondNode) {
+            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $defaultNode.Id -label "False"
+        }
+
+        # 上一个 CaseBody 的出口连接到 SwitchIter（不是 Default）
+        foreach ($node in $nodesToNextCase) {
+            $nodesToIter += $node
+        }
+        $nodesToNextCase = @()
+
+        # 处理 Default 分支体
+        $branchPrev = $defaultNode
         $defaultHasTerminator = $false
+
         foreach ($statement in $switchAst.Default.Statements) {
-            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
-            # 如果遇到 return/break/continue/exit，停止处理后续语句
+            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$branchPrev) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
             if ($hasTerminator) {
                 $defaultHasTerminator = $true
                 break
             }
         }
-        # 如果 Default 分支没有以 return/break/continue/exit 结束，需要回到 Iterator
-        if (-not $defaultHasTerminator -and $null -ne $prevNodeRef.Value) {
-            $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Return" -and $lastNodeType -ne "Exit") {
-                $backToIteratorNodes += $prevNodeRef.Value
+
+        # Default 出口连接到 SwitchIter
+        if (-not $defaultHasTerminator -and $null -ne $branchPrev) {
+            $lastNodeType = $branchPrev.Type
+            if ($lastNodeType -notin @("Break", "Continue", "Return", "Exit", "Throw")) {
+                $nodesToIter += $branchPrev
             }
         }
     }
     else {
-        # 如果没有显式 default，创建一个隐式 default 节点
-        # 隐式 default 表示"当前元素不匹配任何 case"，直接回到 Iterator 继续下一个元素
-        $implicitDefaultNode = Add-Node -cfg $cfg -type "Default" -text "Implicit Default (no match)" -line $switchAst.Extent.EndLineNumber -ast $switchAst
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $implicitDefaultNode.Id -label "No match"
-        $backToIteratorNodes += $implicitDefaultNode
+        # 没有 Default：最后一个 CaseCondition 的 False 边直接连到 SwitchIter
+        if ($null -ne $previousCondNode) {
+            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $iterNode.Id -label "False"
+        }
+
+        # 上一个 CaseBody 的出口也连接到 SwitchIter
+        foreach ($node in $nodesToNextCase) {
+            $nodesToIter += $node
+        }
     }
 
-    # 9. 将所有需要继续迭代的节点连接回 Iterator（形成循环）
-    foreach ($node in $backToIteratorNodes) {
-        Add-Edge -cfg $cfg -from $node.Id -to $iteratorNode.Id -label "Next item"
+    # 12. 连接所有出口节点到 SwitchIter
+    foreach ($node in $nodesToIter) {
+        Add-Edge -cfg $cfg -from $node.Id -to $iterNode.Id
     }
 
-    # 10. 更新 prevNodeRef 为汇聚节点，供后续连接
-    $prevNodeRef.Value = $switchMergeNode
-    return $false  # switch 作为循环结构，总是可以正常退出（除非所有路径都 return/exit）
+    # 13. 更新 prevNodeRef 为 SwitchEnd
+    $prevNodeRef.Value = $switchEnd
+    return $false
 }
 
 function Convert-FunctionDefinitionAst {
