@@ -7,7 +7,10 @@
       "Bash(powershell -NoProfile -Command \"$lines = Get-Content ''c:\\Users\\411\\Documents\\experiment\\new\\deob\\Generate-CFG.ps1''; $newLines = $lines[0..1071] + $lines[1094..($lines.Length-1)]; Set-Content ''c:\\Users\\411\\Documents\\experiment\\new\\deob\\Generate-CFG.ps1'' -Value $newLines\")",
       "Bash(powershell -NoProfile -Command \"$f=''c:\\Users\\411\\Documents\\experiment\\new\\deob\\Generate-CFG.ps1''; $a=Get-Content $f; $b=$a[0..1071]+$a[1094..($a.Length-1)]; Set-Content $f -Value $b\")",
       "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"c:\\Users\\411\\Documents\\experiment\\new\\deob\\fix-lines.ps1\")",
-      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"run.ps1\")"
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File \"run.ps1\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File run.ps1)",
+      "Bash(powershell -ExecutionPolicy Bypass -File test-vars.ps1:*)",
+      "Bash(del \"c:\\Users\\411\\Documents\\experiment\\new\\deob\\test-vars.ps1\")"
     ]
   }
 }

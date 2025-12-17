@@ -78,58 +78,16 @@
 # }until($a -lt 5)
 
 #5.4 for变量
-$a = 2
-
-for ($i = 0; $i -lt 4; $i++) {
-
-    Write-Output "Outer start $i"
-
-    # 条件分支 1：continue
-    if ($i -eq 1) {
-        Write-Output "Continue outer"
-        continue
-    }
-
-    # 条件分支 2：嵌套 for
-    for ($j = 0; $j -lt 3; $j++) {
-
-        Write-Output "Inner $i,$j"
-
-        # 内层 continue
-        if ($j -eq 0) {
-            continue
-        }
-
-        # 内层 break
-        if ($j -eq 1 -and $i -eq 2) {
-            break
-        }
-
-        # 条件 exit（全局终止）
-        if ($i -eq 3 -and $j -eq 2) {
-            exit
-        }
-
-        Write-Output "Inner body end"
-    }
-
-    # 外层 break
-    if ($i -eq $a) {
-        Write-Output "Break outer"
-        break
-    }
-
-    Write-Output "Outer end $i"
-}
-
-Write-Output "Script end"
+# for ($i = 0; $i -lt 5; $i++) {
+#     Write-Host $i
+# }
 
 # 5.5 Write-Host "==== foreach + 内部读写 ===="
-# $numbers = 1..3
-# $sum = 0
-# foreach ($n in $numbers) {
-#     $sum += $n
-# }
+$numbers = 1..3
+$sum = 0
+foreach ($n in $numbers) {
+    $sum += $n
+}
 
 # Write-Host "sum = $sum"
 

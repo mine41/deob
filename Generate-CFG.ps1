@@ -989,9 +989,7 @@ function Get-ConditionLabel {
     param($loopAst)
 
     switch ($loopAst) {
-        {$_ -is [System.Management.Automation.Language.ForEachStatementAst]} {
-            "Has next $($loopAst.Variable.Extent.Text)?"
-        }
+        # foreach 现在有专用处理逻辑（ForEachCondition），不再使用此函数
         {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} {
             "Until ($($loopAst.Condition.Extent.Text))"
         }
@@ -1068,6 +1066,95 @@ function Convert-LoopStatement {
         $initNode = Add-Node -cfg $cfg -type "ForInit" -text $initAst.Extent.Text -line $initAst.Extent.StartLineNumber -ast $initAst
         Add-Edge -cfg $cfg -from $currentNode.Id -to $initNode.Id
         $currentNode = $initNode
+    }
+
+    # 2.6 foreach 循环的专用处理
+    #     foreach ($item in $collection) { ... }
+    #     => LoopStart -> ForEachInit -> ForEachCondition -> ForEachBind -> [循环体] -> ForEachIter -> ForEachCondition
+    if ($isForEach) {
+        # 生成唯一变量名（使用 GUID 确保不与用户变量冲突）
+        $guid = [guid]::NewGuid().ToString("N").Substring(0, 12)
+        $collectionVar = "__fe_$guid"
+        $indexVar = "__fe_${guid}_idx"
+
+        # 获取原始变量名（去掉 $ 前缀）
+        $itemVarText = $loopAst.Variable.Extent.Text      # 如 "$item"
+        $itemVarName = $loopAst.Variable.VariablePath.UserPath  # 如 "item"
+        $collectionExpr = $loopAst.Condition.Extent.Text  # 如 "$array" 或 "1..10"
+
+        # 预定义内部变量的条目（用于手动设置 VarsRead/VarsWritten）
+        $collectionVarEntry = [PSCustomObject]@{ Name = $collectionVar; Scope = [VarScope]::Unspecified }
+        $indexVarEntry = [PSCustomObject]@{ Name = $indexVar; Scope = [VarScope]::Unspecified }
+        $itemVarEntry = [PSCustomObject]@{ Name = $itemVarName; Scope = [VarScope]::Unspecified }
+
+        # 节点1: LoopStart (装饰节点，已在上面创建，ast = null)
+
+        # 节点2: ForEachInit (初始化集合和索引)
+        # VarsRead: 集合表达式中的变量（由 AST 自动分析）
+        # VarsWritten: $__fe_xxx, $__fe_xxx_idx（手动添加）
+        $initText = "`$$collectionVar = $collectionExpr; `$$indexVar = 0"
+        $initNode = Add-Node -cfg $cfg -type "ForEachInit" -text $initText -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
+        # 手动追加内部变量的写入
+        $initNode.VarsWritten = @($initNode.VarsWritten) + @($collectionVarEntry, $indexVarEntry)
+        Add-Edge -cfg $cfg -from $currentNode.Id -to $initNode.Id
+        $currentNode = $initNode
+
+        # 节点3: ForEachCondition (判断是否还有元素)
+        # VarsRead: $__fe_xxx_idx, $__fe_xxx（手动设置，因为这些是生成的变量）
+        # VarsWritten: (无)
+        # ast = $loopAst 仅用于 try/catch 嵌套判断，不参与变量分析
+        $condText = "`$$indexVar -lt `$$collectionVar.Count"
+        $conditionNode = Add-Node -cfg $cfg -type "ForEachCondition" -text $condText -line $loopAst.Extent.StartLineNumber -ast $loopAst
+        # 清空自动分析的结果，手动设置内部变量的读取
+        $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
+        $conditionNode.VarsWritten = @()
+        Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+
+        # 节点4: LoopEnd (提前创建，供 break 使用)
+        $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text "End ForEach" -line $loopAst.Extent.EndLineNumber -ast $null
+        Add-Edge -cfg $cfg -from $conditionNode.Id -to $loopEnd.Id -label "No more items"
+
+        # 节点5: ForEachBind (绑定当前元素)
+        # VarsRead: $__fe_xxx, $__fe_xxx_idx（手动添加）
+        # VarsWritten: $item（由 AST 自动分析）+ 手动确保
+        $bindText = "$itemVarText = `$$collectionVar[`$$indexVar]"
+        $bindNode = Add-Node -cfg $cfg -type "ForEachBind" -text $bindText -line $loopAst.Variable.Extent.StartLineNumber -ast $loopAst.Variable
+        # 手动设置：读取内部变量，写入迭代变量
+        $bindNode.VarsRead = @($collectionVarEntry, $indexVarEntry)
+        $bindNode.VarsWritten = @($itemVarEntry)
+        Add-Edge -cfg $cfg -from $conditionNode.Id -to $bindNode.Id -label "Has next"
+        $currentNode = $bindNode
+
+        # 节点6: ForEachIter (递增索引，提前创建供 continue 跳转)
+        # VarsRead: $__fe_xxx_idx（读取当前值）
+        # VarsWritten: $__fe_xxx_idx（写入新值）
+        # ast = $loopAst 仅用于 try/catch 嵌套判断
+        $iterText = "`$$indexVar++"
+        $iterNode = Add-Node -cfg $cfg -type "ForEachIter" -text $iterText -line $loopAst.Extent.StartLineNumber -ast $loopAst
+        # 清空自动分析的结果，手动设置
+        $iterNode.VarsRead = @($indexVarEntry)
+        $iterNode.VarsWritten = @($indexVarEntry)
+        Add-Edge -cfg $cfg -from $iterNode.Id -to $conditionNode.Id
+
+        # 循环上下文：continue 跳到 ForEachIter（和 for 循环一致）
+        $loopContext = [PSCustomObject]@{
+            LoopEnd = $loopEnd
+            LoopContinue = $iterNode
+        }
+
+        # 处理循环体
+        foreach ($statement in $loopAst.Body.Statements) {
+            $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+            if ($hasReturn) { break }
+        }
+
+        # 循环体结束后连到 ForEachIter
+        if ($null -ne $currentNode -and $currentNode.Type -notin @("Break", "Continue")) {
+            Add-Edge -cfg $cfg -from $currentNode.Id -to $iterNode.Id
+        }
+
+        $prevNodeRef.Value = $loopEnd
+        return
     }
 
     # 3. 处理 do-while/do-until 的首次执行（先执行后判断）
@@ -1545,9 +1632,9 @@ function Export-CfgToDot {
     foreach ($node in $finalCFG.Nodes) {
         $shape = switch ($node.Type) {
             {$_ -in "Start", "End", "FuncStart", "FuncEnd"}   { "oval" }
-            {$_ -in "Condition", "If"} { "diamond" }
-            {$_ -in "Merge"} { "point" }
-            default                   { "box" }
+            {$_ -in "Condition", "If", "ForEachCondition"}    { "diamond" }
+            {$_ -in "Merge"}                                  { "point" }
+            default                                           { "box" }
         }
         $label = "Line $($node.Line)\l$($node.Type)\l$(Format-DotLabel $node.Text)"
         $nodeDefinitions += "    $($node.Id) [label=`"$label`", shape=$shape];"
