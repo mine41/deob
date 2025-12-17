@@ -678,23 +678,26 @@ function Convert-TryAstNode {
         return $false
     }
 
-    # 1. 创建 Try 入口节点
-    $tryNode = Add-Node -cfg $cfg -type "Try" -text "Try" -line $tryAst.Extent.StartLineNumber -ast $tryAst
+    # 1. 创建 Try 入口节点（装饰节点，ast = null）
+    $tryNode = Add-Node -cfg $cfg -type "Try" -text "Try" -line $tryAst.Extent.StartLineNumber -ast $null
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $tryNode.Id
     $prevNodeRef.Value = $tryNode
 
     # 2. Try-End 汇聚节点（懒创建，只有真的需要汇聚时才创建，避免产生孤立的 Merge 节点）
     $tryEndNode = $null
 
-    # 3. 提前创建 Finally 节点（如果存在）
+    # 3. 提前创建 Finally 节点（如果存在，装饰节点，ast = null）
     $finallyNode = $null
     if ($null -ne $tryAst.Finally) {
-        $finallyNode = Add-Node -cfg $cfg -type "Finally" -text "Finally" -line $tryAst.Finally.Extent.StartLineNumber -ast $tryAst.Finally
+        $finallyNode = Add-Node -cfg $cfg -type "Finally" -text "Finally" -line $tryAst.Finally.Extent.StartLineNumber -ast $null
     }
 
     # 4. 提前创建 Catch 链的第一个节点（用于异常跳转）
     $firstCatchNode = $null
     $catchNodes = @()
+
+    # 预定义 $_ 变量条目（Catch 会将异常对象绑定到 $_）
+    $underscoreVarEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
 
     foreach ($catchClause in $tryAst.CatchClauses) {
         # 获取 Catch 的异常类型
@@ -704,8 +707,13 @@ function Convert-TryAstNode {
             "All"  # 没有指定类型表示捕获所有异常
         }
 
-        # 创建 Catch 节点
+        # 创建 Catch 节点（保留 ast 用于嵌套判断，但清空自动分析的变量，只保留 $_ 写入）
         $catchNode = Add-Node -cfg $cfg -type "Catch" -text "Catch [$catchTypes]" -line $catchClause.Extent.StartLineNumber -ast $catchClause
+        # Catch 节点会将异常对象绑定到 $_，所以 $_ 是写入
+        # 清空自动分析的结果（避免把 catch 块内的语句变量也算进来）
+        $catchNode.VarsRead = @()
+        $catchNode.VarsWritten = @($underscoreVarEntry)
+
         $catchNodes += @{
             Node = $catchNode
             Clause = $catchClause
@@ -1065,7 +1073,7 @@ function Convert-TryAstNode {
     # 13. 所有“可继续执行”的分支汇聚到 Try-End
     if ($branchEndNodes.Count -gt 0) {
         if ($null -eq $tryEndNode) {
-            $tryEndNode = Add-Node -cfg $cfg -type "Merge" -text "Try-End" -line $tryAst.Extent.EndLineNumber -ast $tryAst
+            $tryEndNode = Add-Node -cfg $cfg -type "Merge" -text "Try-End" -line $tryAst.Extent.EndLineNumber -ast $null
         }
         foreach ($endNode in $branchEndNodes) {
             Add-Edge -cfg $cfg -from $endNode.Id -to $tryEndNode.Id

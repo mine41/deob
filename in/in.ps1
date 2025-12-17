@@ -83,35 +83,39 @@
 # }
 
 # 5.5 Write-Host "==== foreach + 内部读写 ===="
-$numbers = 1..3
-$sum = 0
-foreach ($n in $numbers) {
-    $sum += $n
-}
+# $numbers = 1..3
+# $sum = 0
+# foreach ($n in $numbers) {
+#     $sum += $n
+# }
 
 # Write-Host "sum = $sum"
 
 # Write-Host "==== Var Test 6: try/catch/finally 中的变量 ===="
-# $outer = 0
-# try {
-#     $outer = 10
-#     $inner = 1
-#     $inner++
-#     throw "error with outer=$outer inner=$inner"
-# }
-# catch {
-#     # $_ 是读写哪种你暂时可以只当读，这里主要关注 $outer/$inner
-#     $catchMsg = $_.Exception.Message
-#     $outer = 20
-# }
-# finally {
-#     # finally 中既读又写
-#     $outer++
-#     $final = $outer
-#     Write-Host "in finally, outer=$outer final=$final"
-# }
+$outer = 0
+try {
+    $outer = 10
+    $inner = 1
+    $inner++
+    throw "error with outer=$outer inner=$inner"
+}
+catch [System.DivideByZeroException]  {
+    Write-Host $outer
 
-# Write-Host "after try/catch/finally, outer=$outer"
+}
+catch {
+    # $_ 是读写哪种你暂时可以只当读，这里主要关注 $outer/$inner
+    $catchMsg = $_.Exception.Message
+    $outer = 20
+}
+finally {
+    # finally 中既读又写
+    $outer++
+    $final = $outer
+    Write-Host "in finally, outer=$outer final=$final"
+}
+
+Write-Host "after try/catch/finally, outer=$outer"
 
 
 
@@ -164,10 +168,9 @@ foreach ($n in $numbers) {
 # switch ($swVar) {
 #     "A" { $msg = "got A" }
 #     "B" { $msg = "got B"; $swVar = "B-modified" }
-#     default { $msg = "other"; $swVar = "other-modified" }
 # }
 
-# Write-Host "swVar = $swVar msg = $msg"
+Write-Host "swVar = $swVar msg = $msg"
 
 # Write-Host "==== Var Test 10: return/exit 与变量 ===="
 # function Test-Return-Var {
