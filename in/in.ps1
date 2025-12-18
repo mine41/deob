@@ -92,56 +92,56 @@
 # Write-Host "sum = $sum"
 
 # Write-Host "==== Var Test 6: try/catch/finally 中的变量 ===="
-$outer = 0
-try {
-    $outer = 10
-    $inner = 1
-    $inner++
-    throw "error with outer=$outer inner=$inner"
-}
-catch [System.DivideByZeroException]  {
-    Write-Host $outer
+# $outer = 0
+# try {
+#     $outer = 10
+#     $inner = 1
+#     $inner++
+#     throw "error with outer=$outer inner=$inner"
+# }
+# catch [System.DivideByZeroException]  {
+#     Write-Host $outer
 
-}
-catch {
-    # $_ 是读写哪种你暂时可以只当读，这里主要关注 $outer/$inner
-    $catchMsg = $_.Exception.Message
-    $outer = 20
-}
-finally {
-    # finally 中既读又写
-    $outer++
-    $final = $outer
-    Write-Host "in finally, outer=$outer final=$final"
-}
+# }
+# catch {
+#     # $_ 是读写哪种你暂时可以只当读，这里主要关注 $outer/$inner
+#     $catchMsg = $_.Exception.Message
+#     $outer = 20
+# }
+# finally {
+#     # finally 中既读又写
+#     $outer++
+#     $final = $outer
+#     Write-Host "in finally, outer=$outer final=$final"
+# }
 
-Write-Host "after try/catch/finally, outer=$outer"
+# Write-Host "after try/catch/finally, outer=$outer"
 
 
 
 
 # Write-Host "==== Var Test 7: 嵌套函数与闭包风格 ===="
-# $globalX = 100
+$globalX = 100
 
-# function Outer-Func {
-#     param([int]$x)
+function Outer-Func {
+    param([int]$x)
 
-#     $y = $x + 1
+    $y = $x + 1
 
-#     function Inner-Func {
-#         param([int]$z)
-#         # 这里读 globalX、x、y
-#         $w = $globalX + $x + $y + $z
-#         Write-Host "Inner-Func: w=$w"
-#         return $w
-#     }
+    function Inner-Func {
+        param([int]$z)
+        # 这里读 globalX、x、y
+        $w = $globalX + $x + $y + $z
+        Write-Host "Inner-Func: w=$w"
+        return $w
+    }
 
-#     $resultInner = Inner-Func 5
-#     return $resultInner
-# }
+    $resultInner = Inner-Func 5
+    return $resultInner
+}
 
-# $outerRes = Outer-Func 3
-# Write-Host "Outer-Func result = $outerRes"
+$outerRes = Outer-Func 3
+Write-Host "Outer-Func result = $outerRes"
 
 
 
@@ -170,7 +170,7 @@ Write-Host "after try/catch/finally, outer=$outer"
 #     "B" { $msg = "got B"; $swVar = "B-modified" }
 # }
 
-Write-Host "swVar = $swVar msg = $msg"
+# Write-Host "swVar = $swVar msg = $msg"
 
 # Write-Host "==== Var Test 10: return/exit 与变量 ===="
 # function Test-Return-Var {

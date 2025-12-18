@@ -619,10 +619,10 @@ function Convert-FunctionDefinitionAst {
     }
 
     # 为函数体创建独立的入口/出口节点（不从 Script Start 连入）
-    # FuncStart 只显示函数名，参数单独作为一个节点紧跟其后
+    # FuncStart/FuncEnd 都是装饰节点，ast = null
     $funcName = $funcAst.Name
-    $funcStart = Add-Node -cfg $cfg -type "FuncStart" -text "function $funcName" -line $funcAst.Extent.StartLineNumber -ast $funcAst
-    $funcEnd   = Add-Node -cfg $cfg -type "FuncEnd"   -text "End function $funcName"        -line $funcAst.Extent.EndLineNumber   -ast $funcAst
+    $funcStart = Add-Node -cfg $cfg -type "FuncStart" -text "function $funcName" -line $funcAst.Extent.StartLineNumber -ast $null
+    $funcEnd   = Add-Node -cfg $cfg -type "FuncEnd"   -text "End function $funcName"        -line $funcAst.Extent.EndLineNumber   -ast $null
 
     # 在函数内部构建控制流：类似 ScriptBlockAst，但使用 FuncStart/FuncEnd
     # 如果存在 ParamBlock，则在 FuncStart 后面单独插入一个参数节点
@@ -1638,10 +1638,11 @@ function Convert-AstNode {
     }
     # 二点八、如果是 FunctionDefinitionAst，创建函数定义节点，并为函数体构建独立的子CFG
     elseif ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
-        # 顶层：函数定义本身作为一个顺序节点出现，便于观测
+        # 顶层：函数定义本身作为一个顺序节点出现（装饰节点，ast = null）
+        # 函数定义不执行代码，只是声明函数，所以不需要变量分析
         $funcName = $node.Name
         $defText = "function $funcName"
-        $funcDefNode = Add-Node -cfg $cfg -type "FunctionDef" -text $defText -line $node.Extent.StartLineNumber -ast $node
+        $funcDefNode = Add-Node -cfg $cfg -type "FunctionDef" -text $defText -line $node.Extent.StartLineNumber -ast $null
         if ($null -ne $prevNodeRef.Value) {
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $funcDefNode.Id
         }
@@ -1762,7 +1763,7 @@ function Export-CfgToDot {
             {$_ -in "Merge"}                                  { "point" }
             default                                           { "box" }
         }
-        $label = "Line $($node.Line)\l$($node.Type)\l$(Format-DotLabel $node.Text)"
+        $label = "Id $($node.Id)\l$($node.Type)\l$(Format-DotLabel $node.Text)"
         $nodeDefinitions += "    $($node.Id) [label=`"$label`", shape=$shape];"
     }
 
