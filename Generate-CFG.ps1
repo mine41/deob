@@ -51,7 +51,8 @@ function Add-Node {
         $type,
         $text,
         $line,
-        $ast = $null
+        $ast = $null,
+        $ownerAst = $null  # 节点所属的结构 AST（用于 try/catch 嵌套判断）
     )
     $node = [PSCustomObject]@{
         Id          = $cfg.Nodes.Count + 1
@@ -59,6 +60,7 @@ function Add-Node {
         Text        = $text
         Line        = $line
         Ast         = $ast
+        OwnerAst    = $ownerAst  # 虚拟节点所属的结构（如 switch/foreach/for 的 AST）
         VarsRead    = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
         VarsWritten = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
     }
@@ -117,6 +119,90 @@ function Get-VariableAccessKind {
         else {
             return "Read"
         }
+    }
+
+    # 1.5) 索引表达式在赋值左边：$h["k1"] = "v1" 或 $arr[0] = 1
+    # 变量是 IndexExpressionAst 的 Target，且该 IndexExpressionAst 在赋值语句左边
+    # 也需要处理嵌套情况：$nested["inner"]["key"] = "value" 或 $matrix[0][1] = 99
+    if ($parent -is [System.Management.Automation.Language.IndexExpressionAst]) {
+        $indexExpr = $parent
+        # 检查变量是否是索引表达式的 Target（即 $h 在 $h["k1"] 中）
+        if ($indexExpr.Target -eq $VarAst) {
+            # 向上查找，看这个索引表达式（或其嵌套的外层）是否在赋值语句左边
+            $currentExpr = $indexExpr
+            while ($null -ne $currentExpr) {
+                $grandParent = $currentExpr.Parent
+                if ($grandParent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    $assign = $grandParent
+                    # 检查当前表达式是否在赋值语句的左边
+                    $inLeft = $false
+                    if ($null -ne $assign.Left) {
+                        if ($assign.Left -eq $currentExpr) {
+                            $inLeft = $true
+                        }
+                        elseif ($assign.Left -is [System.Management.Automation.Language.Ast]) {
+                            $inLeft = $assign.Left.Find({ param($n) $n -eq $currentExpr }, $true)
+                        }
+                    }
+                    if ($inLeft) {
+                        # 索引赋值：修改集合元素，需要先读取集合再写入
+                        return "ReadWrite"
+                    }
+                    break
+                }
+                elseif ($grandParent -is [System.Management.Automation.Language.IndexExpressionAst]) {
+                    # 嵌套索引：$nested["inner"]["key"]，继续向上查找
+                    $currentExpr = $grandParent
+                }
+                else {
+                    break
+                }
+            }
+        }
+        # 如果变量在索引位置（如 $arr[$i]），则是读取
+        return "Read"
+    }
+
+    # 1.6) 成员表达式在赋值左边：$obj.Prop = 2
+    # 变量是 MemberExpressionAst 的 Expression（Target），且该表达式在赋值语句左边
+    if ($parent -is [System.Management.Automation.Language.MemberExpressionAst]) {
+        $memberExpr = $parent
+        # 检查变量是否是成员表达式的 Expression（即 $obj 在 $obj.Prop 中）
+        if ($memberExpr.Expression -eq $VarAst) {
+            # 向上查找，看这个成员表达式（或其嵌套的外层）是否在赋值语句左边
+            $currentExpr = $memberExpr
+            while ($null -ne $currentExpr) {
+                $grandParent = $currentExpr.Parent
+                if ($grandParent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    $assign = $grandParent
+                    # 检查当前表达式是否在赋值语句的左边
+                    $inLeft = $false
+                    if ($null -ne $assign.Left) {
+                        if ($assign.Left -eq $currentExpr) {
+                            $inLeft = $true
+                        }
+                        elseif ($assign.Left -is [System.Management.Automation.Language.Ast]) {
+                            $inLeft = $assign.Left.Find({ param($n) $n -eq $currentExpr }, $true)
+                        }
+                    }
+                    if ($inLeft) {
+                        # 属性赋值：修改对象属性，需要先读取对象再写入
+                        return "ReadWrite"
+                    }
+                    break
+                }
+                elseif ($grandParent -is [System.Management.Automation.Language.MemberExpressionAst] -or
+                        $grandParent -is [System.Management.Automation.Language.IndexExpressionAst]) {
+                    # 嵌套成员/索引：$obj.Inner.Prop 或 $obj.Items[0]，继续向上查找
+                    $currentExpr = $grandParent
+                }
+                else {
+                    break
+                }
+            }
+        }
+        # 如果变量在其他位置，则是读取
+        return "Read"
     }
 
     # 2) 一元运算 ++/-- ：读+写
@@ -426,9 +512,9 @@ function Convert-SwitchAstNode {
 
     # 5. 创建 SwitchCondition（判断是否还有元素）
     # VarsRead: $__sw_xxx_idx, $__sw_xxx（手动设置）
-    # ast = $switchAst 仅用于 try/catch 嵌套判断
+    # ast = $null，ownerAst = $switchAst 用于 try/catch 嵌套判断
     $condText = "`$$indexVar -lt `$$collectionVar.Count"
-    $conditionNode = Add-Node -cfg $cfg -type "SwitchCondition" -text $condText -line $switchAst.Extent.StartLineNumber -ast $switchAst
+    $conditionNode = Add-Node -cfg $cfg -type "SwitchCondition" -text $condText -line $switchAst.Extent.StartLineNumber -ast $null -ownerAst $switchAst
     # 清空自动分析的结果，手动设置内部变量的读取
     $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
     $conditionNode.VarsWritten = @()
@@ -441,8 +527,9 @@ function Convert-SwitchAstNode {
     # 7. 创建 SwitchBind（绑定当前元素到 $_）
     # VarsRead: $__sw_xxx, $__sw_xxx_idx
     # VarsWritten: $_
+    # ast = $null，ownerAst = $switchAst 用于 try/catch 嵌套判断
     $bindText = "`$_ = `$$collectionVar[`$$indexVar]"
-    $bindNode = Add-Node -cfg $cfg -type "SwitchBind" -text $bindText -line $switchAst.Extent.StartLineNumber -ast $null
+    $bindNode = Add-Node -cfg $cfg -type "SwitchBind" -text $bindText -line $switchAst.Extent.StartLineNumber -ast $null -ownerAst $switchAst
     $bindNode.VarsRead = @($collectionVarEntry, $indexVarEntry)
     $bindNode.VarsWritten = @($underscoreVarEntry)
     Add-Edge -cfg $cfg -from $conditionNode.Id -to $bindNode.Id -label "True"
@@ -450,8 +537,9 @@ function Convert-SwitchAstNode {
     # 8. 创建 SwitchIter（递增索引，提前创建供 continue 跳转）
     # VarsRead: $__sw_xxx_idx
     # VarsWritten: $__sw_xxx_idx
+    # ast = $null，ownerAst = $switchAst 用于 try/catch 嵌套判断
     $iterText = "`$$indexVar++"
-    $iterNode = Add-Node -cfg $cfg -type "SwitchIter" -text $iterText -line $switchAst.Extent.StartLineNumber -ast $switchAst
+    $iterNode = Add-Node -cfg $cfg -type "SwitchIter" -text $iterText -line $switchAst.Extent.StartLineNumber -ast $null -ownerAst $switchAst
     $iterNode.VarsRead = @($indexVarEntry)
     $iterNode.VarsWritten = @($indexVarEntry)
     Add-Edge -cfg $cfg -from $iterNode.Id -to $conditionNode.Id
@@ -750,10 +838,12 @@ function Convert-TryAstNode {
     for ($i = $nodeCountBefore; $i -lt $cfg.Nodes.Count; $i++) {
         $node = $cfg.Nodes[$i]
 
-        # 如果节点缺少 AST 信息，保守地认为它属于当前 try
+        # 判断节点是否在嵌套的内层 try 中
+        # 优先使用 OwnerAst（虚拟节点所属的结构），否则使用 Ast
         $isInNestedTry = $false
-        if ($null -ne $node.Ast) {
-            $ancestor = $node.Ast.Parent
+        $ancestorSource = if ($null -ne $node.OwnerAst) { $node.OwnerAst } else { $node.Ast }
+        if ($null -ne $ancestorSource) {
+            $ancestor = $ancestorSource.Parent
             while ($null -ne $ancestor) {
                 if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
                     if ($ancestor -ne $tryAst) {
@@ -891,13 +981,15 @@ function Convert-TryAstNode {
 
                 # 找到产生这个 Uncaught Exception 的节点
                 $fromNode = $cfg.Nodes | Where-Object { $_.Id -eq $edge.From }
-                if ($null -eq $fromNode -or $null -eq $fromNode.Ast) {
+                # 优先使用 OwnerAst（虚拟节点所属的结构），否则使用 Ast
+                $fromNodeAncestorSource = if ($null -ne $fromNode.OwnerAst) { $fromNode.OwnerAst } else { $fromNode.Ast }
+                if ($null -eq $fromNode -or $null -eq $fromNodeAncestorSource) {
                     continue
                 }
 
                 # 1) 如果本身就是 Catch 节点，需要区分：
-                #    - 来自“当前 try 自己的最后一个 catch”（11.5 添加的边）：保持为到 End，避免自环；
-                #    - 来自“内层 try 的 catch”：应该被当前 try 的 catch 捕获（允许重定向）。
+                #    - 来自"当前 try 自己的最后一个 catch"（11.5 添加的边）：保持为到 End，避免自环；
+                #    - 来自"内层 try 的 catch"：应该被当前 try 的 catch 捕获（允许重定向）。
                 if ($fromNode.Type -eq "Catch" -and $null -ne $fromNode.Ast) {
                     $catchAst = $fromNode.Ast
                     if ($catchAst -is [System.Management.Automation.Language.CatchClauseAst]) {
@@ -912,7 +1004,7 @@ function Convert-TryAstNode {
 
                 # 2) 判断该节点是否属于当前 try 的 AST 子树内
                 $hasThisTryAncestor = $false
-                $ancestor = $fromNode.Ast
+                $ancestor = $fromNodeAncestorSource
                 while ($null -ne $ancestor) {
                     if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
                         if ($ancestor -eq $tryAst) { $hasThisTryAncestor = $true }
@@ -924,10 +1016,10 @@ function Convert-TryAstNode {
                     continue
                 }
 
-                # 3) 如果 Uncaught Exception 源自“当前 try 自己的 catch 块内部”的 rethrow，
+                # 3) 如果 Uncaught Exception 源自"当前 try 自己的 catch 块内部"的 rethrow，
                 #    也不要重定向，让它继续冒泡到更外层的 try 或脚本 End。
                 $belongsToThisTryCatch = $false
-                $ancestor = $fromNode.Ast.Parent
+                $ancestor = $fromNodeAncestorSource.Parent
                 while ($null -ne $ancestor) {
                     if ($ancestor -is [System.Management.Automation.Language.CatchClauseAst]) {
                         $parentTry = $ancestor.Parent
@@ -968,13 +1060,15 @@ function Convert-TryAstNode {
 
                 # 找到产生这个 Uncaught Exception 的节点
                 $fromNode = $cfg.Nodes | Where-Object { $_.Id -eq $edge.From }
-                if ($null -eq $fromNode -or $null -eq $fromNode.Ast) {
+                # 优先使用 OwnerAst（虚拟节点所属的结构），否则使用 Ast
+                $fromNodeAncestorSource = if ($null -ne $fromNode.OwnerAst) { $fromNode.OwnerAst } else { $fromNode.Ast }
+                if ($null -eq $fromNode -or $null -eq $fromNodeAncestorSource) {
                     continue
                 }
 
                 # 1) 判断该节点是否属于当前 try 的 AST 子树内
                 $hasThisTryAncestor = $false
-                $ancestor = $fromNode.Ast
+                $ancestor = $fromNodeAncestorSource
                 while ($null -ne $ancestor) {
                     if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
                         if ($ancestor -eq $tryAst) { $hasThisTryAncestor = $true }
@@ -985,10 +1079,10 @@ function Convert-TryAstNode {
                     continue
                 }
 
-                # 2) 如果 Uncaught Exception 源自“本 try 自己的 finally 块内部”的 throw，
+                # 2) 如果 Uncaught Exception 源自"本 try 自己的 finally 块内部"的 throw，
                 #    不要重定向，让它继续冒泡到更外层（由外层的 try-finally 处理）。
                 $inThisFinally = $false
-                $ancestor = $fromNode.Ast.Parent
+                $ancestor = $fromNodeAncestorSource.Parent
                 while ($null -ne $ancestor) {
                     if ($ancestor -is [System.Management.Automation.Language.StatementBlockAst] -and
                         $tryAst.Finally -eq $ancestor) {
@@ -1228,9 +1322,9 @@ function Convert-LoopStatement {
         # 节点3: ForEachCondition (判断是否还有元素)
         # VarsRead: $__fe_xxx_idx, $__fe_xxx（手动设置，因为这些是生成的变量）
         # VarsWritten: (无)
-        # ast = $loopAst 仅用于 try/catch 嵌套判断，不参与变量分析
+        # ast = $null，ownerAst = $loopAst 用于 try/catch 嵌套判断
         $condText = "`$$indexVar -lt `$$collectionVar.Count"
-        $conditionNode = Add-Node -cfg $cfg -type "ForEachCondition" -text $condText -line $loopAst.Extent.StartLineNumber -ast $loopAst
+        $conditionNode = Add-Node -cfg $cfg -type "ForEachCondition" -text $condText -line $loopAst.Extent.StartLineNumber -ast $null -ownerAst $loopAst
         # 清空自动分析的结果，手动设置内部变量的读取
         $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
         $conditionNode.VarsWritten = @()
@@ -1243,8 +1337,9 @@ function Convert-LoopStatement {
         # 节点5: ForEachBind (绑定当前元素)
         # VarsRead: $__fe_xxx, $__fe_xxx_idx（手动添加）
         # VarsWritten: $item（由 AST 自动分析）+ 手动确保
+        # ast = $null，ownerAst = $loopAst 用于 try/catch 嵌套判断
         $bindText = "$itemVarText = `$$collectionVar[`$$indexVar]"
-        $bindNode = Add-Node -cfg $cfg -type "ForEachBind" -text $bindText -line $loopAst.Variable.Extent.StartLineNumber -ast $loopAst.Variable
+        $bindNode = Add-Node -cfg $cfg -type "ForEachBind" -text $bindText -line $loopAst.Variable.Extent.StartLineNumber -ast $null -ownerAst $loopAst
         # 手动设置：读取内部变量，写入迭代变量
         $bindNode.VarsRead = @($collectionVarEntry, $indexVarEntry)
         $bindNode.VarsWritten = @($itemVarEntry)
@@ -1254,9 +1349,9 @@ function Convert-LoopStatement {
         # 节点6: ForEachIter (递增索引，提前创建供 continue 跳转)
         # VarsRead: $__fe_xxx_idx（读取当前值）
         # VarsWritten: $__fe_xxx_idx（写入新值）
-        # ast = $loopAst 仅用于 try/catch 嵌套判断
+        # ast = $null，ownerAst = $loopAst 用于 try/catch 嵌套判断
         $iterText = "`$$indexVar++"
-        $iterNode = Add-Node -cfg $cfg -type "ForEachIter" -text $iterText -line $loopAst.Extent.StartLineNumber -ast $loopAst
+        $iterNode = Add-Node -cfg $cfg -type "ForEachIter" -text $iterText -line $loopAst.Extent.StartLineNumber -ast $null -ownerAst $loopAst
         # 清空自动分析的结果，手动设置
         $iterNode.VarsRead = @($indexVarEntry)
         $iterNode.VarsWritten = @($indexVarEntry)
