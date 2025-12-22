@@ -1528,11 +1528,11 @@ function Convert-AstNode {
             }
         }
 
-        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue 连接）
-        # 如果最后一个节点是 Return/Break/Continue 节点，它已经连接到 End，不需要再创建边
+        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue/Exit 连接）
+        # 如果最后一个节点是 Return/Break/Continue/Exit/Throw 节点，它已经连接到 End，不需要再创建边
         if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw") {
+            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw" -and $lastNodeType -ne "Exit") {
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
             }
         }
