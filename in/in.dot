@@ -13,15 +13,13 @@ digraph G {
     // Nodes
     1 [label="Id 1\lStart\lScript Start", shape=oval];
     2 [label="Id 2\lEnd\lScript End", shape=oval];
-    3 [label="Id 3\lAssignmentStatementAst\l$base = 10", shape=box];
-    4 [label="Id 4\lAssignmentStatementAst\l$base2 = 11", shape=box];
-    5 [label="Id 5\lAssignmentStatementAst\l$result = ($base * 2) + [Math]::Pow($base2, 2)", shape=box];
-    6 [label="Id 6\lPipelineAst\lWrite-Host \"result = $result\"", shape=box];
+    3 [label="Id 3\lPipelineElement\lGet-EventLog -LogName Application -Newest 10", shape=box];
+    4 [label="Id 4\lPipelineElement\l$_ | Format-Table", shape=box];
+    5 [label="Id 5\lPipelineElement\l$_ | Out-Host", shape=box];
 
     // Edges
     1 -> 3;
-    3 -> 4;
-    4 -> 5;
-    5 -> 6;
-    6 -> 2;
+    3 -> 4 [label="Pipeline"];
+    4 -> 5 [label="Pipeline"];
+    5 -> 2;
 }

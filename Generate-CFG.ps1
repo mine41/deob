@@ -85,6 +85,30 @@ function Add-Edge {
     $cfg.Edges += $edge
 }
 
+# 辅助函数：向节点添加变量（自动去重）
+function Add-VarToNode {
+    param(
+        [pscustomobject]$node,
+        [pscustomobject]$varEntry,
+        [ValidateSet("Read", "Write", "Both")]
+        [string]$accessType
+    )
+
+    if ($accessType -in "Read", "Both") {
+        $exists = $node.VarsRead | Where-Object { $_.Name -eq $varEntry.Name -and $_.Scope -eq $varEntry.Scope }
+        if (-not $exists) {
+            $node.VarsRead = @($node.VarsRead) + @($varEntry)
+        }
+    }
+
+    if ($accessType -in "Write", "Both") {
+        $exists = $node.VarsWritten | Where-Object { $_.Name -eq $varEntry.Name -and $_.Scope -eq $varEntry.Scope }
+        if (-not $exists) {
+            $node.VarsWritten = @($node.VarsWritten) + @($varEntry)
+        }
+    }
+}
+
 function Get-VariableAccessKind {
     param(
         [System.Management.Automation.Language.VariableExpressionAst]$VarAst
@@ -93,6 +117,28 @@ function Get-VariableAccessKind {
     if ($null -eq $VarAst) { return $null }
 
     $parent = $VarAst.Parent
+
+    # 0) 数组字面量在赋值左边：$a, $b, $c = ...
+    # 变量的直接父节点是 ArrayLiteralAst，需要向上查找 AssignmentStatementAst
+    if ($parent -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        $arrayLiteral = $parent
+        $grandParent = $arrayLiteral.Parent
+        if ($grandParent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+            $assign = $grandParent
+            # 检查 ArrayLiteralAst 是否在赋值语句的左边
+            if ($assign.Left -eq $arrayLiteral -or
+                ($null -ne $assign.Left -and $assign.Left.Find({ param($n) $n -eq $arrayLiteral }, $true))) {
+                # 复合赋值（+=、-= 等）视为读+写
+                if ($assign.Operator -ne [System.Management.Automation.Language.TokenKind]::Equals) {
+                    return "ReadWrite"
+                }
+                else {
+                    return "Write"
+                }
+            }
+        }
+        # 如果不在赋值左边，继续后续判断
+    }
 
     # 1) 赋值语句：左边写 / 读写，右边读
     if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
@@ -302,6 +348,115 @@ function Populate-NodeVariableUsage {
     )
 }
 
+# 辅助函数：查找 AST 中所有嵌套的多元素 Pipeline
+function Get-AllNestedPipelines {
+    param(
+        [Parameter(Mandatory = $true)]
+        $ast
+    )
+
+    if ($null -eq $ast) { return @() }
+
+    # 在 AST 子树中查找所有多元素 PipelineAst
+    $pipelines = $ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.PipelineAst] -and
+        $n.PipelineElements.Count -gt 1
+    }, $true)
+
+    return @($pipelines)
+}
+
+# 辅助函数：展开表达式中的嵌套 Pipeline
+# 返回值：@{ ModifiedText = "修改后的文本"; PipeVars = @("变量名列表") }
+# 如果没有嵌套 Pipeline，返回 $null
+function Expand-NestedPipelines {
+    param(
+        [Parameter(Mandatory = $true)]
+        $cfg,
+        [Parameter(Mandatory = $true)]
+        $ast,
+        [Parameter(Mandatory = $true)]
+        [ref]$prevNodeRef
+    )
+
+    $nestedPipelines = Get-AllNestedPipelines -ast $ast
+    if ($nestedPipelines.Count -eq 0) {
+        return $null
+    }
+
+    # 按位置倒序排列（从后往前处理，避免文本替换时位置偏移）
+    $sortedPipelines = $nestedPipelines | Sort-Object { $_.Extent.StartOffset } -Descending
+
+    # 记录所有 Pipeline 的变量名和替换信息
+    $replacements = @()
+    $pipeVarEntries = @()
+
+    foreach ($pipeline in $sortedPipelines) {
+        $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+        $pipeVar = "__pipe_$guid"
+        $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVar; Scope = [VarScope]::Unspecified }
+
+        $elements = $pipeline.PipelineElements
+        $lastIndex = $elements.Count - 1
+
+        # 拆分 Pipeline 的前 N-1 个元素为独立节点
+        for ($i = 0; $i -lt $elements.Count - 1; $i++) {
+            $element = $elements[$i]
+
+            # 构建节点文本
+            if ($i -eq 0) {
+                $nodeText = $element.Extent.Text
+            } else {
+                $nodeText = "`$$pipeVar | " + $element.Extent.Text
+            }
+
+            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+
+            # 变量流处理
+            if ($i -eq 0) {
+                # 首元素：写入 $pipeVar
+                Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
+            } else {
+                # 中间元素：读取 + 写入 $pipeVar
+                Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Both"
+            }
+
+            # 连接边
+            if ($null -ne $prevNodeRef.Value) {
+                if ($i -gt 0) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+                } else {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+                }
+            }
+            $prevNodeRef.Value = $pipeNode
+        }
+
+        # 记录替换信息：将整个 Pipeline 替换为 "$pipeVar | 最后一个元素"
+        $lastElement = $elements[$lastIndex]
+        $originalText = $pipeline.Extent.Text
+        $replacementText = "`$$pipeVar | " + $lastElement.Extent.Text
+
+        $replacements += @{
+            Original = $originalText
+            Replacement = $replacementText
+        }
+        $pipeVarEntries += $pipeVarEntry
+    }
+
+    # 修改原始文本
+    $modifiedText = $ast.Extent.Text
+    foreach ($r in $replacements) {
+        $modifiedText = $modifiedText.Replace($r.Original, $r.Replacement)
+    }
+
+    return @{
+        ModifiedText = $modifiedText
+        PipeVarEntries = $pipeVarEntries
+    }
+}
+
 #处理IfstatementAst
 function Convert-IfAstNode {
     param(
@@ -330,16 +485,33 @@ function Convert-IfAstNode {
     $previousCondNode = $null
 
     foreach ($clause in $ifAst.Clauses) {
-        # 3.1 添加条件子节点
-        $condNode = Add-Node -cfg $cfg -type "Condition" -text $clause.Item1.Extent.Text -line $clause.Item1.Extent.StartLineNumber -ast $clause.Item1
+        # 3.1 检查条件中是否有嵌套 Pipeline，如果有则先展开
+        $conditionAst = $clause.Item1
+        $expansion = Expand-NestedPipelines -cfg $cfg -ast $conditionAst -prevNodeRef $prevNodeRef
 
-        if ($null -eq $previousCondNode) {
-            # 第一个条件从 ifNode 进入
-            Add-Edge -cfg $cfg -from $ifNode.Id -to $condNode.Id -label "Condition"
-        }
-        else {
-            # 后续条件从上一个条件的 false 分支进入
-            Add-Edge -cfg $cfg -from $previousCondNode.Id -to $condNode.Id -label "False"
+        if ($null -ne $expansion) {
+            # 有嵌套 Pipeline，使用修改后的文本创建条件节点
+            $condNode = Add-Node -cfg $cfg -type "Condition" -text $expansion.ModifiedText -line $conditionAst.Extent.StartLineNumber -ast $conditionAst
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $expansion.PipeVarEntries) {
+                Add-VarToNode -node $condNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到条件节点
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $condNode.Id -label "Pipeline"
+            }
+        } else {
+            # 没有嵌套 Pipeline，正常创建条件节点
+            $condNode = Add-Node -cfg $cfg -type "Condition" -text $conditionAst.Extent.Text -line $conditionAst.Extent.StartLineNumber -ast $conditionAst
+
+            if ($null -eq $previousCondNode) {
+                # 第一个条件从 ifNode 进入
+                Add-Edge -cfg $cfg -from $ifNode.Id -to $condNode.Id -label "Condition"
+            }
+            else {
+                # 后续条件从上一个条件的 false 分支进入
+                Add-Edge -cfg $cfg -from $previousCondNode.Id -to $condNode.Id -label "False"
+            }
         }
 
         # 当前条件为真时，进入当前分支体
@@ -347,8 +519,19 @@ function Convert-IfAstNode {
 
         # 3.2 处理分支代码块（Clause[i].Item2）
         $branchHasTerminator = $false
+        $isFirstStatement = $true
         foreach ($statement in $clause.Item2.Statements) {
             $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+
+            # 第一个语句处理完后，给从条件节点出发的边加上 "True" 标签
+            if ($isFirstStatement) {
+                $isFirstStatement = $false
+                $edgeFromCond = $cfg.Edges | Where-Object { $_.From -eq $condNode.Id -and $null -eq $_.Label }
+                if ($edgeFromCond) {
+                    $edgeFromCond.Label = "True"
+                }
+            }
+
             # 如果遇到 return/break/continue/exit/throw 之类的终止语句，停止处理后续语句
             if ($hasTerminator) {
                 $branchHasTerminator = $true
@@ -500,15 +683,38 @@ function Convert-SwitchAstNode {
     # 3. 创建 SwitchStart（装饰节点，ast = null）
     $switchStart = Add-Node -cfg $cfg -type "SwitchStart" -text "switch$flagsText ($switchConditionText)" -line $switchAst.Extent.StartLineNumber -ast $null
     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $switchStart.Id
+    $prevNodeRef.Value = $switchStart
+
+    # 3.5 检查条件中是否有嵌套 Pipeline，如果有则先展开
+    $conditionExpansion = $null
+    if ($null -ne $switchAst.Condition) {
+        $conditionExpansion = Expand-NestedPipelines -cfg $cfg -ast $switchAst.Condition -prevNodeRef $prevNodeRef
+    }
 
     # 4. 创建 SwitchInit（初始化集合和索引）
     # VarsRead: 集合表达式中的变量（由 AST 自动分析）
     # VarsWritten: $__sw_xxx, $__sw_xxx_idx（手动添加）
-    $initText = "`$$collectionVar = $switchConditionText; `$$indexVar = 0"
-    $initNode = Add-Node -cfg $cfg -type "SwitchInit" -text $initText -line $switchAst.Condition.Extent.StartLineNumber -ast $switchAst.Condition
+    if ($null -ne $conditionExpansion) {
+        # 有嵌套 Pipeline，使用修改后的文本
+        $initText = "`$$collectionVar = " + $conditionExpansion.ModifiedText + "; `$$indexVar = 0"
+        $initNode = Add-Node -cfg $cfg -type "SwitchInit" -text $initText -line $switchAst.Condition.Extent.StartLineNumber -ast $switchAst.Condition
+        # 添加 pipeVar 到 VarsRead
+        foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
+            Add-VarToNode -node $initNode -varEntry $pipeVarEntry -accessType "Read"
+        }
+        # 连接最后一个 Pipeline 节点到 SwitchInit
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $initNode.Id -label "Pipeline"
+        }
+    } else {
+        # 没有嵌套 Pipeline，正常创建
+        $initText = "`$$collectionVar = $switchConditionText; `$$indexVar = 0"
+        $initNode = Add-Node -cfg $cfg -type "SwitchInit" -text $initText -line $switchAst.Condition.Extent.StartLineNumber -ast $switchAst.Condition
+        Add-Edge -cfg $cfg -from $switchStart.Id -to $initNode.Id
+    }
     # 手动追加内部变量的写入
-    $initNode.VarsWritten = @($initNode.VarsWritten) + @($collectionVarEntry, $indexVarEntry)
-    Add-Edge -cfg $cfg -from $switchStart.Id -to $initNode.Id
+    Add-VarToNode -node $initNode -varEntry $collectionVarEntry -accessType "Write"
+    Add-VarToNode -node $initNode -varEntry $indexVarEntry -accessType "Write"
 
     # 5. 创建 SwitchCondition（判断是否还有元素）
     # VarsRead: $__sw_xxx_idx, $__sw_xxx（手动设置）
@@ -572,7 +778,7 @@ function Convert-SwitchAstNode {
         $caseLineNumber = if ($null -ne $clause.Item1) { $clause.Item1.Extent.StartLineNumber } else { $switchAst.Extent.StartLineNumber }
         $caseCondNode = Add-Node -cfg $cfg -type "CaseCondition" -text "Case $caseLabelText" -line $caseLineNumber -ast $clause.Item1
         # 手动追加 $_ 的读取（CaseCondition 会隐式读取 $_）
-        $caseCondNode.VarsRead = @($caseCondNode.VarsRead) + @($underscoreVarEntry)
+        Add-VarToNode -node $caseCondNode -varEntry $underscoreVarEntry -accessType "Read"
 
         # 10.2 连接到 CaseCondition
         if ($null -eq $previousCondNode) {
@@ -717,13 +923,33 @@ function Convert-FunctionDefinitionAst {
     $prevNode = $funcStart
     if ($null -ne $funcAst.Body -and $null -ne $funcAst.Body.ParamBlock) {
         $paramBlock = $funcAst.Body.ParamBlock
+
+        # 检查 ParamBlock 中是否有嵌套 Pipeline（参数默认值中可能有 pipeline）
+        $prevNodeRefForPipeline = [ref]$prevNode
+        $paramExpansion = Expand-NestedPipelines -cfg $cfg -ast $paramBlock -prevNodeRef $prevNodeRefForPipeline
+        $prevNode = $prevNodeRefForPipeline.Value
+
         # 将 ParamBlock 文本压缩为单行，避免换行和多余空格导致显示难看
-        $rawParamText    = $paramBlock.Extent.Text
+        $rawParamText = $paramBlock.Extent.Text
+        if ($null -ne $paramExpansion) {
+            # 有嵌套 Pipeline，使用修改后的文本
+            $rawParamText = $paramExpansion.ModifiedText
+        }
         $singleLineParam = ($rawParamText -split "`r?`n") -join ' '
         $singleLineParam = ($singleLineParam -replace '\s+', ' ').Trim()
 
         $paramNode = Add-Node -cfg $cfg -type "FuncParams" -text $singleLineParam -line $paramBlock.Extent.StartLineNumber -ast $paramBlock
-        Add-Edge -cfg $cfg -from $funcStart.Id -to $paramNode.Id
+
+        if ($null -ne $paramExpansion) {
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $paramExpansion.PipeVarEntries) {
+                Add-VarToNode -node $paramNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到 FuncParams
+            Add-Edge -cfg $cfg -from $prevNode.Id -to $paramNode.Id -label "Pipeline"
+        } else {
+            Add-Edge -cfg $cfg -from $funcStart.Id -to $paramNode.Id
+        }
         $prevNode = $paramNode
     }
 
@@ -1309,14 +1535,33 @@ function Convert-LoopStatement {
 
         # 节点1: LoopStart (装饰节点，已在上面创建，ast = null)
 
+        # 检查集合表达式中是否有嵌套 Pipeline，如果有则先展开
+        $prevNodeRefForPipeline = [ref]$currentNode
+        $conditionExpansion = Expand-NestedPipelines -cfg $cfg -ast $loopAst.Condition -prevNodeRef $prevNodeRefForPipeline
+        $currentNode = $prevNodeRefForPipeline.Value
+
         # 节点2: ForEachInit (初始化集合和索引)
         # VarsRead: 集合表达式中的变量（由 AST 自动分析）
         # VarsWritten: $__fe_xxx, $__fe_xxx_idx（手动添加）
-        $initText = "`$$collectionVar = $collectionExpr; `$$indexVar = 0"
-        $initNode = Add-Node -cfg $cfg -type "ForEachInit" -text $initText -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
+        if ($null -ne $conditionExpansion) {
+            # 有嵌套 Pipeline，使用修改后的文本
+            $initText = "`$$collectionVar = " + $conditionExpansion.ModifiedText + "; `$$indexVar = 0"
+            $initNode = Add-Node -cfg $cfg -type "ForEachInit" -text $initText -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
+                Add-VarToNode -node $initNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到 ForEachInit
+            Add-Edge -cfg $cfg -from $currentNode.Id -to $initNode.Id -label "Pipeline"
+        } else {
+            # 没有嵌套 Pipeline，正常创建
+            $initText = "`$$collectionVar = $collectionExpr; `$$indexVar = 0"
+            $initNode = Add-Node -cfg $cfg -type "ForEachInit" -text $initText -line $loopAst.Condition.Extent.StartLineNumber -ast $loopAst.Condition
+            Add-Edge -cfg $cfg -from $currentNode.Id -to $initNode.Id
+        }
         # 手动追加内部变量的写入
-        $initNode.VarsWritten = @($initNode.VarsWritten) + @($collectionVarEntry, $indexVarEntry)
-        Add-Edge -cfg $cfg -from $currentNode.Id -to $initNode.Id
+        Add-VarToNode -node $initNode -varEntry $collectionVarEntry -accessType "Write"
+        Add-VarToNode -node $initNode -varEntry $indexVarEntry -accessType "Write"
         $currentNode = $initNode
 
         # 节点3: ForEachCondition (判断是否还有元素)
@@ -1381,18 +1626,51 @@ function Convert-LoopStatement {
     # 3. 处理 do-while/do-until 的首次执行（先执行后判断）
     $isDoLoop = $loopType -in "do-while", "do-until"
     if ($isDoLoop) {
-        # 3.1 创建专门的条件节点（放在循环体之后）
-        $conditionAst = $loopAst.Condition
-        $conditionLine = if ($null -ne $loopAst.Condition) { $loopAst.Condition.Extent.StartLineNumber } else { $loopAst.Extent.StartLineNumber }
-        $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
-
-        # 3.1.5 创建循环结束节点（提前创建，供 break 使用）
+        # 3.1 创建循环结束节点（提前创建，供 break 使用）
         $loopEnd = Add-Node -cfg $cfg -type "LoopEnd" -text (Get-LoopEndText $loopAst) -line $loopAst.Extent.EndLineNumber -ast $null
 
-        # 3.1.6 创建循环上下文（do-while/do-until 的 continue 应该跳转到条件检查）
+        # 3.1.2 检查条件中是否有嵌套 Pipeline
+        $conditionAst = $loopAst.Condition
+        $conditionLine = if ($null -ne $loopAst.Condition) { $loopAst.Condition.Extent.StartLineNumber } else { $loopAst.Extent.StartLineNumber }
+
+        # 先创建一个临时节点来收集 pipeline 展开的节点（循环体结束后再连接）
+        $conditionExpansion = $null
+        $pipelineFirstNode = $null
+        if ($null -ne $loopAst.Condition) {
+            # 用一个临时的 ref 来展开 pipeline
+            $tempPrevNode = $null
+            $tempPrevNodeRef = [ref]$tempPrevNode
+            $conditionExpansion = Expand-NestedPipelines -cfg $cfg -ast $loopAst.Condition -prevNodeRef $tempPrevNodeRef
+
+            if ($null -ne $conditionExpansion) {
+                # 有嵌套 Pipeline，找到第一个 pipeline 节点
+                # pipeline 节点是刚刚添加的，从当前节点数往前找
+                $pipelineFirstNode = $cfg.Nodes | Where-Object { $_.Type -eq "PipelineElement" } | Select-Object -Last ($conditionExpansion.PipeVarEntries.Count + 1) | Select-Object -First 1
+            }
+        }
+
+        # 3.1.3 创建条件节点
+        if ($null -ne $conditionExpansion) {
+            # 有嵌套 Pipeline，使用修改后的文本创建条件节点
+            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text $conditionExpansion.ModifiedText -line $conditionLine -ast $conditionAst
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
+                Add-VarToNode -node $conditionNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到条件节点
+            $lastPipeNode = $cfg.Nodes | Where-Object { $_.Type -eq "PipelineElement" } | Select-Object -Last 1
+            Add-Edge -cfg $cfg -from $lastPipeNode.Id -to $conditionNode.Id -label "Pipeline"
+        } else {
+            # 没有嵌套 Pipeline，正常创建条件节点
+            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
+        }
+
+        # 3.1.6 创建循环上下文
+        # do-while/do-until 的 continue 应该跳转到条件检查（或 pipeline 的第一个节点）
+        $conditionEntryNode = if ($null -ne $pipelineFirstNode) { $pipelineFirstNode } else { $conditionNode }
         $loopContext = [PSCustomObject]@{
             LoopEnd = $loopEnd
-            LoopContinue = $conditionNode
+            LoopContinue = $conditionEntryNode
         }
 
         # 3.2 先处理循环体
@@ -1403,11 +1681,11 @@ function Convert-LoopStatement {
             }
         }
 
-        # 3.3 连接循环体到条件节点
+        # 3.3 连接循环体到条件（或 pipeline 的第一个节点）
         if ($null -ne $currentNode) {
             $lastNodeType = $currentNode.Type
             if ($lastNodeType -ne "Break" -and $lastNodeType -ne "Continue") {
-                Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+                Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionEntryNode.Id
             }
         }
 
@@ -1422,12 +1700,46 @@ function Convert-LoopStatement {
     }
 
     # 4. 添加条件节点
-    #    对 foreach，Condition 节点负责“Has next item?” 判断以及隐含的迭代变量绑定，
+    #    对 foreach，Condition 节点负责"Has next item?" 判断以及隐含的迭代变量绑定，
     #    因此将整个 ForEachStatementAst 作为 Ast，便于变量读写分析。
     $conditionAst = if ($isForEach) { $loopAst } else { $loopAst.Condition }
     $conditionLine = if ($null -ne $loopAst.Condition) { $loopAst.Condition.Extent.StartLineNumber } else { $loopAst.Extent.StartLineNumber }
-    $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
-    Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+
+    # 4.1 检查条件中是否有嵌套 Pipeline（for/while 循环）
+    # $conditionEntryNode 记录条件求值的入口节点（可能是 pipeline 的第一个节点或条件节点本身）
+    $conditionEntryNode = $null
+    if ($null -ne $loopAst.Condition -and -not $isForEach) {
+        $nodeBeforePipeline = $currentNode  # 记录 pipeline 展开前的节点
+        $prevNodeRefForPipeline = [ref]$currentNode
+        $conditionExpansion = Expand-NestedPipelines -cfg $cfg -ast $loopAst.Condition -prevNodeRef $prevNodeRefForPipeline
+        $currentNode = $prevNodeRefForPipeline.Value
+
+        if ($null -ne $conditionExpansion) {
+            # 有嵌套 Pipeline，使用修改后的文本创建条件节点
+            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text $conditionExpansion.ModifiedText -line $conditionLine -ast $conditionAst
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
+                Add-VarToNode -node $conditionNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到条件节点
+            Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id -label "Pipeline"
+            # 找到 pipeline 展开后的第一个节点作为条件入口
+            $pipelineEdge = $cfg.Edges | Where-Object { $_.From -eq $nodeBeforePipeline.Id } | Select-Object -Last 1
+            if ($pipelineEdge) {
+                $conditionEntryNode = $cfg.Nodes | Where-Object { $_.Id -eq $pipelineEdge.To }
+            }
+        } else {
+            # 没有嵌套 Pipeline，正常创建条件节点
+            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
+            Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+            $conditionEntryNode = $conditionNode
+        }
+    } else {
+        # foreach 或无条件的情况
+        $conditionNode = Add-Node -cfg $cfg -type "Condition" -text (Get-ConditionLabel $loopAst) -line $conditionLine -ast $conditionAst
+        Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+        $conditionEntryNode = $conditionNode
+    }
     $currentNode = $conditionNode
 
     # 4.5 创建循环结束节点（提前创建，供 break 使用）
@@ -1465,15 +1777,15 @@ function Convert-LoopStatement {
                 # for 循环：body -> Iterator -> Condition
                 Add-Edge -cfg $cfg -from $currentNode.Id -to $iteratorNode.Id
             } else {
-                # 其他循环：body -> Condition
-                Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id -label "Next"
+                # 其他循环：body -> Condition（或条件入口节点）
+                Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionEntryNode.Id -label "Next"
             }
         }
     }
 
-    # 5.6 for 循环：Iterator -> Condition
+    # 5.6 for 循环：Iterator -> 条件入口节点（可能是 pipeline 的第一个节点）
     if ($null -ne $iteratorNode) {
-        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $conditionNode.Id
+        Add-Edge -cfg $cfg -from $iteratorNode.Id -to $conditionEntryNode.Id
     }
 
     # 6. 连接条件节点到循环结束节点
@@ -1540,13 +1852,34 @@ function Convert-AstNode {
     }
     # 二、如果是ReturnStatementAst，创建 Return 节点
     elseif ($node -is [System.Management.Automation.Language.ReturnStatementAst]) {
-        $returnNode = Add-Node -cfg $cfg -type "Return" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
-        # 连接到上一个节点
-        if ($null -ne $prevNodeRef.Value) {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id
+        # 检查 return 语句中是否有嵌套 Pipeline（如 return Get-Service | Where-Object { ... }）
+        $returnExpansion = $null
+        if ($null -ne $node.Pipeline) {
+            $returnExpansion = Expand-NestedPipelines -cfg $cfg -ast $node.Pipeline -prevNodeRef $prevNodeRef
         }
 
-        # Return 一般终止当前脚本块/函数，但如果它位于“带 finally 的 try”中，
+        if ($null -ne $returnExpansion) {
+            # 有嵌套 Pipeline，使用修改后的文本创建 Return 节点
+            $modifiedReturnText = "return " + $returnExpansion.ModifiedText
+            $returnNode = Add-Node -cfg $cfg -type "Return" -text $modifiedReturnText -line $node.Extent.StartLineNumber -ast $node
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $returnExpansion.PipeVarEntries) {
+                Add-VarToNode -node $returnNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到 Return 节点
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id -label "Pipeline"
+            }
+        } else {
+            # 没有嵌套 Pipeline，正常创建 Return 节点
+            $returnNode = Add-Node -cfg $cfg -type "Return" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
+            # 连接到上一个节点
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id
+            }
+        }
+
+        # Return 一般终止当前脚本块/函数，但如果它位于"带 finally 的 try"中，
         # 必须先执行 finally，再在 finally 之后返回。这里检测是否在这样的 try 中，
         # 如果是，则暂时不连到 End，由 Convert-TryAstNode 负责通过 finally 终止。
         $inTryWithFinally = $false
@@ -1771,9 +2104,233 @@ function Convert-AstNode {
         $allBranchesReturn = Convert-TryAstNode -cfg $cfg -tryAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
         return $allBranchesReturn
     }
-    # 五、其余节点
+    # 四点六、如果是 AssignmentStatementAst 且右侧是多元素 PipelineAst，拆分处理
+    elseif ($node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Right -is [System.Management.Automation.Language.PipelineAst] -and
+            $node.Right.PipelineElements.Count -gt 1) {
+
+        $leftText = $node.Left.Extent.Text  # 如 "$result"
+        $operator = $node.Operator          # 如 "Equals"
+        $operatorText = switch ($operator) {
+            "Equals"           { "=" }
+            "PlusEquals"       { "+=" }
+            "MinusEquals"      { "-=" }
+            "MultiplyEquals"   { "*=" }
+            "DivideEquals"     { "/=" }
+            "RemainderEquals"  { "%=" }
+            default            { "=" }
+        }
+
+        $elements = $node.Right.PipelineElements
+        $lastIndex = $elements.Count - 1
+        $underscoreEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
+
+        for ($i = 0; $i -lt $elements.Count; $i++) {
+            $element = $elements[$i]
+
+            # 构建节点文本
+            if ($i -eq 0) {
+                # 首元素：原样
+                $nodeText = $element.Extent.Text
+            } elseif ($i -eq $lastIndex) {
+                # 末元素：加上赋值和管道前缀
+                $nodeText = "$leftText $operatorText `$_ | " + $element.Extent.Text
+            } else {
+                # 中间元素：只加管道前缀
+                $nodeText = "`$_ | " + $element.Extent.Text
+            }
+
+            # 末元素使用整个赋值语句的 AST（用于变量分析），其他用元素自己的 AST
+            $nodeAst = if ($i -eq $lastIndex) { $node } else { $element }
+            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $nodeAst
+
+            # 变量流处理
+            if ($i -eq 0) {
+                # 首元素：写入 $_
+                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Write"
+            } elseif ($i -eq $lastIndex) {
+                # 末元素：读取 $_（赋值目标变量由 AST 自动分析）
+                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Read"
+            } else {
+                # 中间元素：读取 + 写入 $_
+                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Both"
+            }
+
+            # 连接边
+            if ($null -ne $prevNodeRef.Value) {
+                if ($i -gt 0) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+                } else {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+                }
+            }
+            $prevNodeRef.Value = $pipeNode
+        }
+        return $false
+    }
+    # 五、如果是 PipelineAst，拆分为多个节点
+    elseif ($node -is [System.Management.Automation.Language.PipelineAst]) {
+        $elements = $node.PipelineElements
+        $lastIndex = $elements.Count - 1
+        $underscoreEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
+
+        for ($i = 0; $i -lt $elements.Count; $i++) {
+            $element = $elements[$i]
+
+            # 检查当前元素内部是否有嵌套的多元素 Pipeline（如子表达式中的 pipeline）
+            $elementExpansion = Expand-NestedPipelines -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
+
+            if ($null -ne $elementExpansion) {
+                # 有嵌套 Pipeline，使用修改后的文本
+                $baseText = $elementExpansion.ModifiedText
+                $nodeText = if ($i -gt 0) { "`$_ | " + $baseText } else { $baseText }
+                $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+
+                # 添加嵌套 Pipeline 的变量到 VarsRead
+                foreach ($pipeVarEntry in $elementExpansion.PipeVarEntries) {
+                    Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Read"
+                }
+
+                # 连接最后一个嵌套 Pipeline 节点到当前节点
+                if ($null -ne $prevNodeRef.Value) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+                }
+            } else {
+                # 没有嵌套 Pipeline，正常处理
+                $nodeText = if ($i -gt 0) { "`$_ | " + $element.Extent.Text } else { $element.Extent.Text }
+                $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+
+                # 连接边
+                if ($null -ne $prevNodeRef.Value) {
+                    if ($i -gt 0) {
+                        # Pipeline 元素之间用 "Pipeline" 标签
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+                    } else {
+                        # 首元素与前一个节点的普通连接
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+                    }
+                }
+            }
+
+            # 变量流处理：
+            # - 首元素：只写入 $_ (产生管道输出)
+            # - 中间元素：读取 + 写入 $_ (接收输入并产生输出)
+            # - 末元素：只读取 $_ (接收输入，不再传递)
+            if ($i -eq 0) {
+                # 首元素：写入 $_
+                if ($elements.Count -gt 1) {
+                    Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Write"
+                }
+            } elseif ($i -eq $lastIndex) {
+                # 末元素：只读取 $_
+                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Read"
+            } else {
+                # 中间元素：读取 + 写入 $_
+                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Both"
+            }
+
+            $prevNodeRef.Value = $pipeNode
+        }
+        return $false
+    }
+    # 六、其余节点（包含嵌套 Pipeline 的通用处理）
     else {
-        #顺序连接当前节点和前一个节点
+        # 检测节点内是否有嵌套的多元素 Pipeline
+        $nestedPipelines = Get-AllNestedPipelines -ast $node
+
+        if ($nestedPipelines.Count -gt 0) {
+            # 按位置倒序排列（从后往前处理，避免文本替换时位置偏移）
+            $sortedPipelines = $nestedPipelines | Sort-Object { $_.Extent.StartOffset } -Descending
+
+            # 记录所有 Pipeline 的变量名和替换信息
+            $replacements = @()
+            $allPipelineNodes = @()
+
+            foreach ($pipeline in $sortedPipelines) {
+                $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+                $pipeVar = "__pipe_$guid"
+                $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVar; Scope = [VarScope]::Unspecified }
+
+                $elements = $pipeline.PipelineElements
+                $lastIndex = $elements.Count - 1
+
+                # 拆分 Pipeline 的前 N-1 个元素为独立节点
+                for ($i = 0; $i -lt $elements.Count - 1; $i++) {
+                    $element = $elements[$i]
+
+                    # 构建节点文本
+                    if ($i -eq 0) {
+                        $nodeText = $element.Extent.Text
+                    } else {
+                        $nodeText = "`$$pipeVar | " + $element.Extent.Text
+                    }
+
+                    $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+
+                    # 变量流处理
+                    if ($i -eq 0) {
+                        # 首元素：写入 $pipeVar
+                        Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
+                    } else {
+                        # 中间元素：读取 + 写入 $pipeVar
+                        Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Both"
+                    }
+
+                    $allPipelineNodes += @{
+                        Node = $pipeNode
+                        PipeVar = $pipeVar
+                        Index = $i
+                    }
+                }
+
+                # 记录替换信息：将整个 Pipeline 替换为 "$pipeVar | 最后一个元素"
+                $lastElement = $elements[$lastIndex]
+                $originalText = $pipeline.Extent.Text
+                $replacementText = "`$$pipeVar | " + $lastElement.Extent.Text
+
+                $replacements += @{
+                    Original = $originalText
+                    Replacement = $replacementText
+                    PipeVar = $pipeVar
+                    PipeVarEntry = $pipeVarEntry
+                }
+            }
+
+            # 连接所有 Pipeline 元素节点
+            foreach ($pipeInfo in $allPipelineNodes) {
+                if ($null -ne $prevNodeRef.Value) {
+                    if ($pipeInfo.Index -gt 0) {
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeInfo.Node.Id -label "Pipeline"
+                    } else {
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeInfo.Node.Id
+                    }
+                }
+                $prevNodeRef.Value = $pipeInfo.Node
+            }
+
+            # 修改原始节点的文本
+            $modifiedText = $node.Extent.Text
+            foreach ($r in $replacements) {
+                $modifiedText = $modifiedText.Replace($r.Original, $r.Replacement)
+            }
+
+            # 创建最终节点
+            $finalNode = Add-Node -cfg $cfg -type $node.GetType().Name -text $modifiedText -line $node.Extent.StartLineNumber -ast $node
+
+            # 为最终节点添加所有 pipeVar 到 VarsRead
+            foreach ($r in $replacements) {
+                Add-VarToNode -node $finalNode -varEntry $r.PipeVarEntry -accessType "Read"
+            }
+
+            # 连接最后一个 Pipeline 节点到最终节点
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $finalNode.Id -label "Pipeline"
+            }
+            $prevNodeRef.Value = $finalNode
+            return $false
+        }
+
+        # 没有嵌套 Pipeline，直接创建节点
         $currentNode = Add-Node -cfg $cfg -type $node.GetType().Name -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
         # 连接到上一个节点
         if ($null -ne $prevNodeRef.Value) {
