@@ -13,13 +13,36 @@ digraph G {
     // Nodes
     1 [label="Id 1\lStart\lScript Start", shape=oval];
     2 [label="Id 2\lEnd\lScript End", shape=oval];
-    3 [label="Id 3\lPipelineElement\lGet-EventLog -LogName Application -Newest 10", shape=box];
-    4 [label="Id 4\lPipelineElement\l$_ | Format-Table", shape=box];
-    5 [label="Id 5\lPipelineElement\l$_ | Out-Host", shape=box];
+    3 [label="Id 3\lMainStart\lMain Script", shape=box];
+    4 [label="Id 4\lMainEnd\lEnd Main Script", shape=box];
+    5 [label="Id 5\lPipelineElement\lGet-Process", shape=box];
+    6 [label="Id 6\lBlockStart\lScriptBlock _block_c7489ef7", shape=box];
+    7 [label="Id 7\lBlockEnd\lEnd ScriptBlock _block_c7489ef7", shape=box];
+    8 [label="Id 8\lPipelineElement\l$_.CPU -gt 100", shape=box];
+    9 [label="Id 9\lPipelineElement\l$_pipe_2b62b7c2 | Where-Object $_block_c7489ef7", shape=box];
+    10 [label="Id 10\lPipelineElement\l$_pipe_2b62b7c2 | Select-Object Name, CPU", shape=box];
+    11 [label="Id 11\lPipelineElement\l$_pipe_2b62b7c2 | Sort-Object CPU -Descending", shape=box];
+    12 [label="Id 12\lPipelineElement\l$_pipe_2b62b7c2 | Format-Table -AutoSize", shape=box];
+    13 [label="Id 13\lPipelineElement\lGet-Process", shape=box];
+    14 [label="Id 14\lPipelineElement\l$_pipe_aa758f57 | Where-Object { $_.CPU -gt 100 }", shape=box];
+    15 [label="Id 15\lPipelineElement\l$_pipe_aa758f57 | Select-Object Name, CPU", shape=box];
+    16 [label="Id 16\lPipelineElement\l$_pipe_aa758f57 | Sort-Object CPU -Descending", shape=box];
+    17 [label="Id 17\lPipelineElement\l$a = $_pipe_aa758f57 | Format-Table -AutoSize", shape=box];
 
     // Edges
     1 -> 3;
-    3 -> 4 [label="Pipeline"];
-    4 -> 5 [label="Pipeline"];
-    5 -> 2;
+    3 -> 5;
+    6 -> 8;
+    8 -> 7;
+    5 -> 9 [label="Pipeline"];
+    9 -> 10 [label="Pipeline"];
+    10 -> 11 [label="Pipeline"];
+    11 -> 12 [label="Pipeline"];
+    12 -> 13;
+    13 -> 14 [label="Pipeline"];
+    14 -> 15 [label="Pipeline"];
+    15 -> 16 [label="Pipeline"];
+    16 -> 17 [label="Pipeline"];
+    17 -> 4;
+    4 -> 2;
 }

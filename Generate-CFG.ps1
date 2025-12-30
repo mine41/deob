@@ -296,10 +296,28 @@ function Populate-NodeVariableUsage {
     $reads  = @()
     $writes = @()
 
+    # 查找变量时，需要排除 ScriptBlockExpressionAst 内部的变量
+    # 因为 ScriptBlock 只是定义，内部变量在定义时不会被读写
     $varAsts = $node.Ast.FindAll({
             param($n)
+            # 跳过 ScriptBlockExpressionAst 及其子节点
+            if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                return $false
+            }
             $n -is [System.Management.Automation.Language.VariableExpressionAst]
         }, $true)
+
+    # 过滤掉位于 ScriptBlockExpressionAst 内部的变量
+    $varAsts = @($varAsts | Where-Object {
+        $ancestor = $_.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                return $false
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return $true
+    })
 
     foreach ($v in $varAsts) {
         $kind = Get-VariableAccessKind -VarAst $v
@@ -348,6 +366,35 @@ function Populate-NodeVariableUsage {
     )
 }
 
+# 辅助函数：查找 AST 中所有用户定义的函数调用
+# 只返回调用了 DefinedFunctions 中函数的 CommandAst
+# function Get-AllFunctionCalls {
+#     param(
+#         [Parameter(Mandatory = $true)]
+#         $ast,
+#         [Parameter(Mandatory = $true)]
+#         [hashtable]$cfg
+#     )
+
+#     if ($null -eq $ast) { return @() }
+
+#     $definedFuncs = $cfg.DefinedFunctions
+
+#     $calls = $ast.FindAll({
+#         param($n)
+#         if (-not ($n -is [System.Management.Automation.Language.CommandAst])) { return $false }
+
+#         # 获取命令名称
+#         $cmdName = $n.GetCommandName()
+#         if ([string]::IsNullOrWhiteSpace($cmdName)) { return $false }
+
+#         # 只返回已定义的用户函数
+#         return $definedFuncs.Contains($cmdName)
+#     }, $true)
+
+#     return @($calls)
+# }
+
 # 辅助函数：查找 AST 中所有嵌套的多元素 Pipeline
 function Get-AllNestedPipelines {
     param(
@@ -365,6 +412,445 @@ function Get-AllNestedPipelines {
     }, $true)
 
     return @($pipelines)
+}
+
+# 辅助函数：查找 AST 中所有嵌套的 ScriptBlockExpressionAst
+function Get-AllNestedScriptBlocks {
+    param(
+        [Parameter(Mandatory = $true)]
+        $ast
+    )
+
+    if ($null -eq $ast) { return @() }
+
+    $scriptBlocks = $ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]
+    }, $true)
+
+    return @($scriptBlocks)
+}
+
+# 辅助函数：判断 ScriptBlock 是立即执行还是延迟执行
+# 返回值："Deferred" | "Immediate" | "InvokeOnly" | "CmdletInvoke" | "PipelineValue"
+# InvokeOnly 表示 & { } 或 . { } 这种情况，只需要展开内部语句，不需要后续节点
+# CmdletInvoke 表示作为 cmdlet 参数传入并被调用（如 Invoke-Command -ScriptBlock { }）
+# PipelineValue 表示 ScriptBlock 作为 Pipeline 元素的值传递（如 { Get-Date } | ForEach-Object { & $_ }）
+function Get-ScriptBlockExecutionType {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.ScriptBlockExpressionAst]$scriptBlockExprAst
+    )
+
+    $parent = $scriptBlockExprAst.Parent
+
+    # 赋值语句右侧 → 延迟执行
+    if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return "Deferred"
+    }
+
+    # CommandExpressionAst 中的 ScriptBlock（如 { Get-Date } | ... 中的 { Get-Date }）
+    # 这种情况下 ScriptBlock 作为值传递到 Pipeline，应该保持原样
+    if ($parent -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        # 检查是否在 Pipeline 中
+        $grandParent = $parent.Parent
+        if ($grandParent -is [System.Management.Automation.Language.PipelineAst]) {
+            # 作为 Pipeline 元素传递值，保持原样
+            return "PipelineValue"
+        }
+        # 独立的 CommandExpressionAst（如单独一行 { Get-Date }）
+        return "Deferred"
+    }
+
+    # CommandAst 中作为参数
+    if ($parent -is [System.Management.Automation.Language.CommandAst]) {
+        # 检查 InvocationOperator：& 或 . 表示立即执行
+        $invocationOp = $parent.InvocationOperator
+        if ($invocationOp -eq [System.Management.Automation.Language.TokenKind]::Ampersand -or
+            $invocationOp -eq [System.Management.Automation.Language.TokenKind]::Dot) {
+            # 检查 ScriptBlock 是否是唯一的参数（即 & { } 或 . { } 形式）
+            # 这种情况下只需要展开内部语句，不需要后续节点
+            if ($parent.CommandElements.Count -eq 1 -and $parent.CommandElements[0] -eq $scriptBlockExprAst) {
+                return "InvokeOnly"
+            }
+            return "Immediate"
+        }
+
+        $cmdName = $parent.GetCommandName()
+        # 管道 cmdlet → 立即执行（内联展开）
+        if ($cmdName -in @('Where-Object', 'ForEach-Object', 'Where', 'ForEach', '?', '%',
+                           'Sort-Object', 'Group-Object', 'Select-Object', 'Measure-Object')) {
+            return "Immediate"
+        }
+        # 调用类 cmdlet → CmdletInvoke（生成 BlockDef + 调用节点）
+        if ($cmdName -in @('Invoke-Command', 'Start-Job', 'Register-ObjectEvent',
+                           'Register-EngineEvent', 'New-Event')) {
+            return "CmdletInvoke"
+        }
+    }
+
+    # 方法调用 .Where() .ForEach() → 立即执行
+    if ($parent -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        $memberName = $parent.Member.Value
+        if ($memberName -in @('Where', 'ForEach')) {
+            return "Immediate"
+        }
+    }
+
+    # CommandParameterAst 的值（如 -ScriptBlock { }）
+    if ($parent -is [System.Management.Automation.Language.CommandParameterAst]) {
+        # 获取参数所属的 CommandAst
+        $cmdAst = $parent.Parent
+        if ($cmdAst -is [System.Management.Automation.Language.CommandAst]) {
+            $cmdName = $cmdAst.GetCommandName()
+            # 调用类 cmdlet 的参数 → CmdletInvoke
+            if ($cmdName -in @('Invoke-Command', 'Start-Job', 'Register-ObjectEvent',
+                               'Register-EngineEvent', 'New-Event')) {
+                return "CmdletInvoke"
+            }
+        }
+        # 检查参数名
+        $paramName = $parent.ParameterName
+        if ($paramName -in @('FilterScript', 'Process', 'Begin', 'End')) {
+            return "Immediate"
+        }
+        # -Action, -ScriptBlock 等通常是延迟执行
+        return "Deferred"
+    }
+
+    # 默认延迟执行
+    return "Deferred"
+}
+
+# 通用函数：处理 ScriptBlock 的内部结构（ParamBlock + EndBlock）
+# 此函数统一处理脚本顶层、函数体、延迟执行 ScriptBlock、立即执行 ScriptBlock 的内部结构
+# 调用者负责创建入口/出口节点，此函数只处理内部内容
+function Convert-ScriptBlockBody {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ScriptBlockAst]$scriptBlockAst,
+        [ref]$prevNodeRef,
+        [ref]$endNodeRef,
+        [string]$paramNodeType = "BlockParams",  # ScriptParams | FuncParams | BlockParams
+        $loopContext = $null,
+        $switchContext = $null
+    )
+
+    if ($null -eq $scriptBlockAst) {
+        return $false
+    }
+
+    $hasTerminator = $false
+
+    # 1. 处理 ParamBlock（如果存在）
+    if ($null -ne $scriptBlockAst.ParamBlock) {
+        $paramBlock = $scriptBlockAst.ParamBlock
+
+        # 检查 ParamBlock 中是否有嵌套 Pipeline（参数默认值中可能有 pipeline）
+        $paramExpansion = Expand-NestedPipelines -cfg $cfg -ast $paramBlock -prevNodeRef $prevNodeRef
+
+        # 将 ParamBlock 文本压缩为单行
+        $rawParamText = $paramBlock.Extent.Text
+        if ($null -ne $paramExpansion) {
+            # 有嵌套 Pipeline，使用修改后的文本
+            $rawParamText = $paramExpansion.ModifiedText
+        }
+        $singleLineParam = ($rawParamText -split "`r?`n") -join ' '
+        $singleLineParam = ($singleLineParam -replace '\s+', ' ').Trim()
+
+        $paramNode = Add-Node -cfg $cfg -type $paramNodeType -text $singleLineParam -line $paramBlock.Extent.StartLineNumber -ast $paramBlock
+
+        if ($null -ne $paramExpansion) {
+            # 添加 pipeVar 到 VarsRead
+            foreach ($pipeVarEntry in $paramExpansion.PipeVarEntries) {
+                Add-VarToNode -node $paramNode -varEntry $pipeVarEntry -accessType "Read"
+            }
+            # 连接最后一个 Pipeline 节点到参数节点
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $paramNode.Id -label "Pipeline"
+        } else {
+            # 无 Pipeline，直接连接
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $paramNode.Id
+            }
+        }
+        $prevNodeRef.Value = $paramNode
+    }
+
+    # 2. 处理 EndBlock（主体代码）
+    if ($null -ne $scriptBlockAst.EndBlock) {
+        foreach ($statement in $scriptBlockAst.EndBlock.Statements) {
+            $stmtHasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+            if ($stmtHasTerminator) {
+                $hasTerminator = $true
+                break
+            }
+        }
+    }
+
+    return $hasTerminator
+}
+
+# 辅助函数：为 ScriptBlock 创建独立子图（用于延迟执行和立即执行的 ScriptBlock）
+# 返回值：@{ BlockName = "块名称"; BlockStart = 节点; BlockEnd = 节点 }
+function Convert-ScriptBlockDefinition {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ScriptBlockExpressionAst]$scriptBlockExprAst,
+        [string]$blockName = $null  # 可选名称，如果不提供则自动生成
+    )
+
+    if ($null -eq $scriptBlockExprAst) {
+        return $null
+    }
+
+    $scriptBlock = $scriptBlockExprAst.ScriptBlock
+
+    # 如果没有提供名称，生成一个唯一名称
+    if (-not $blockName) {
+        $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+        $blockName = "__block_$guid"
+    }
+
+    # 创建 BlockStart 节点（包含块名称）
+    $blockStart = Add-Node -cfg $cfg -type "BlockStart" -text "ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.StartLineNumber -ast $null
+    $blockEnd = Add-Node -cfg $cfg -type "BlockEnd" -text "End ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.EndLineNumber -ast $null
+
+    $prevNode = $blockStart
+    $prev = [ref]$prevNode
+    $endRef = [ref]$blockEnd
+
+    # 使用通用函数处理 ScriptBlock 内部结构
+    $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $scriptBlock -prevNodeRef $prev -endNodeRef $endRef -paramNodeType "BlockParams"
+
+    # 连接最后一个节点到 BlockEnd
+    if ($null -ne $prev.Value -and $prev.Value.Id -ne $blockEnd.Id) {
+        $lastType = $prev.Value.Type
+        if ($lastType -notin @("Return", "Exit", "Throw", "Break", "Continue", "End")) {
+            Add-Edge -cfg $cfg -from $prev.Value.Id -to $blockEnd.Id
+        }
+    }
+
+    return @{
+        BlockName = $blockName
+        BlockStart = $blockStart
+        BlockEnd = $blockEnd
+    }
+}
+
+# 辅助函数：展开表达式中的嵌套 ScriptBlock（立即执行类型）
+# 返回值：@{ ModifiedText = "修改后的文本"; ScriptBlockVarEntries = @(...); InvokeOnlyExpanded = $true/$false }
+# 如果没有需要展开的 ScriptBlock，返回 $null
+# 所有 ScriptBlock 都会生成独立子图，包括立即执行的
+# 【已修改】去掉 BlockDef 节点，改为直接生成调用节点或用变量引用替代
+function Expand-NestedScriptBlocks {
+    param(
+        [Parameter(Mandatory = $true)]
+        $cfg,
+        [Parameter(Mandatory = $true)]
+        $ast,
+        [Parameter(Mandatory = $true)]
+        [ref]$prevNodeRef,
+        $endNodeRef = $null,
+        $loopContext = $null,
+        $switchContext = $null
+    )
+
+    $nestedScriptBlocks = Get-AllNestedScriptBlocks -ast $ast
+    if ($nestedScriptBlocks.Count -eq 0) {
+        return $null
+    }
+
+    # 分类：InvokeOnly vs Immediate vs CmdletInvoke vs Deferred vs PipelineValue
+    $invokeOnlyBlocks = @()
+    $immediateBlocks = @()
+    $cmdletInvokeBlocks = @()
+    $deferredBlocks = @()
+    # PipelineValue 类型的 ScriptBlock 不需要特殊处理，保持原样
+
+    foreach ($sb in $nestedScriptBlocks) {
+        $execType = Get-ScriptBlockExecutionType -scriptBlockExprAst $sb
+        switch ($execType) {
+            "InvokeOnly" { $invokeOnlyBlocks += $sb }
+            "Immediate" { $immediateBlocks += $sb }
+            "CmdletInvoke" { $cmdletInvokeBlocks += $sb }
+            "PipelineValue" { <# 保持原样，不做处理 #> }
+            default { $deferredBlocks += $sb }
+        }
+    }
+
+    # 处理延迟执行的 ScriptBlock：创建独立子图，使用赋值目标变量名
+    # 记录是否有独立的 ScriptBlock（没有赋值目标）
+    $hasStandaloneDeferred = $false
+    foreach ($sb in $deferredBlocks) {
+        # 尝试从父 AST 获取变量名
+        $varName = $null
+        $parent = $sb.Parent
+        if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+            # $sb = { ... } 形式
+            $left = $parent.Left
+            if ($left -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                $varName = $left.VariablePath.UserPath
+            }
+        }
+
+        # 如果没有赋值目标（独立的 ScriptBlock 字面量作为值），生成唯一块名称
+        if ($null -eq $varName) {
+            $hasStandaloneDeferred = $true
+            # 生成唯一块名称（作为变量）
+            $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+            $varName = "_block_$guid"
+            $blockVarEntry = [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+
+            # 【修改】不再创建 BlockDef 节点，只创建独立子图
+            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+
+            # 【修改】创建 PipelineElement 节点，用变量引用替代原始 ScriptBlock 字面量
+            # 这表示将 ScriptBlock 字面量当作一个值使用
+            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text "`$$varName" -line $sb.Extent.StartLineNumber -ast $sb
+            Add-VarToNode -node $pipeNode -varEntry $blockVarEntry -accessType "Read"
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+            }
+            $prevNodeRef.Value = $pipeNode
+        } else {
+            # 有赋值目标，只创建子图（赋值语句本身会作为节点）
+            # 使用 $varName 作为 block 变量名
+            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+        }
+    }
+
+    # 如果有独立的 ScriptBlock（没有赋值目标），已经完全处理，返回标志跳过后续节点创建
+    if ($hasStandaloneDeferred) {
+        return @{
+            ModifiedText = $null
+            ScriptBlockVarEntries = @()
+            InvokeOnlyExpanded = $true
+        }
+    }
+
+    # 处理 CmdletInvoke 类型（Invoke-Command -ScriptBlock { }）：直接创建调用节点（无 BlockDef）
+    if ($cmdletInvokeBlocks.Count -gt 0) {
+        foreach ($sb in $cmdletInvokeBlocks) {
+            # 生成唯一块名称（作为变量）
+            $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+            $blockName = "_block_$guid"
+            $blockVarEntry = [PSCustomObject]@{ Name = $blockName; Scope = [VarScope]::Unspecified }
+
+            # 【修改】不再创建 BlockDef 节点，只创建独立子图
+            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $blockName
+
+            # 获取完整的 cmdlet 调用文本，将 ScriptBlock 替换为变量引用
+            $parent = $sb.Parent
+            $cmdAst = $null
+            if ($parent -is [System.Management.Automation.Language.CommandAst]) {
+                $cmdAst = $parent
+            } elseif ($parent -is [System.Management.Automation.Language.CommandParameterAst]) {
+                $cmdAst = $parent.Parent
+            }
+
+            if ($null -ne $cmdAst) {
+                # 替换 ScriptBlock 为变量引用
+                $cmdText = $cmdAst.Extent.Text
+                $sbText = $sb.Extent.Text
+                $modifiedCmdText = $cmdText.Replace($sbText, "`$$blockName")
+
+                # 【修改】直接创建 PipelineElement 节点（调用节点），无 BlockDef
+                $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $modifiedCmdText -line $cmdAst.Extent.StartLineNumber -ast $cmdAst
+                Add-VarToNode -node $pipeNode -varEntry $blockVarEntry -accessType "Read"
+                if ($null -ne $prevNodeRef.Value) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+                }
+
+                $prevNodeRef.Value = $pipeNode
+            }
+        }
+
+        # CmdletInvoke 类型处理完成后，整个语句已经被处理
+        return @{
+            ModifiedText = $null
+            ScriptBlockVarEntries = @()
+            InvokeOnlyExpanded = $true
+        }
+    }
+
+    # 处理 InvokeOnly 类型（& { } 或 . { }）：直接创建调用节点（无 BlockDef）
+    if ($invokeOnlyBlocks.Count -gt 0) {
+        foreach ($sb in $invokeOnlyBlocks) {
+            # 生成唯一块名称（作为变量）
+            $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+            $blockName = "_block_$guid"
+            $blockVarEntry = [PSCustomObject]@{ Name = $blockName; Scope = [VarScope]::Unspecified }
+
+            # 【修改】不再创建 BlockDef 节点，只创建独立子图
+            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $blockName
+
+            # 获取调用操作符（& 或 .）
+            $parent = $sb.Parent
+            $invokeOp = if ($parent -is [System.Management.Automation.Language.CommandAst]) {
+                if ($parent.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot) { "." } else { "&" }
+            } else { "&" }
+
+            # 【修改】直接创建 PipelineElement 节点（调用节点），无 BlockDef
+            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text "$invokeOp `$$blockName" -line $sb.Extent.StartLineNumber -ast $parent
+            Add-VarToNode -node $pipeNode -varEntry $blockVarEntry -accessType "Read"
+            if ($null -ne $prevNodeRef.Value) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+            }
+
+            $prevNodeRef.Value = $pipeNode
+        }
+
+        # InvokeOnly 类型不需要后续节点（整个语句就是 & { }）
+        return @{
+            ModifiedText = $null
+            ScriptBlockVarEntries = @()
+            InvokeOnlyExpanded = $true
+        }
+    }
+
+    # 如果没有 Immediate 类型的 ScriptBlock，返回 null
+    if ($immediateBlocks.Count -eq 0) {
+        return $null
+    }
+
+    # 按位置倒序排列（从后往前处理，避免文本替换时位置偏移）
+    $sortedBlocks = $immediateBlocks | Sort-Object { $_.Extent.StartOffset } -Descending
+
+    # 记录替换信息
+    $replacements = @()
+    $scriptBlockVarEntries = @()
+
+    foreach ($sb in $sortedBlocks) {
+        # 生成唯一块名称
+        $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+        $blockName = "_block_$guid"
+        $sbVarEntry = [PSCustomObject]@{ Name = $blockName; Scope = [VarScope]::Unspecified }
+
+        # 【修改】不再创建 BlockDef 节点，只创建独立子图
+        $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $blockName
+
+        # 记录替换信息
+        $originalText = $sb.Extent.Text
+        $replacementText = "`$$blockName"
+
+        $replacements += @{
+            Original = $originalText
+            Replacement = $replacementText
+        }
+        $scriptBlockVarEntries += $sbVarEntry
+    }
+
+    # 修改原始文本
+    $modifiedText = $ast.Extent.Text
+    foreach ($r in $replacements) {
+        $modifiedText = $modifiedText.Replace($r.Original, $r.Replacement)
+    }
+
+    return @{
+        ModifiedText = $modifiedText
+        ScriptBlockVarEntries = $scriptBlockVarEntries
+        InvokeOnlyExpanded = $false
+    }
 }
 
 # 辅助函数：展开表达式中的嵌套 Pipeline
@@ -394,7 +880,7 @@ function Expand-NestedPipelines {
 
     foreach ($pipeline in $sortedPipelines) {
         $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
-        $pipeVar = "__pipe_$guid"
+        $pipeVar = "_pipe_$guid"
         $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVar; Scope = [VarScope]::Unspecified }
 
         $elements = $pipeline.PipelineElements
@@ -403,15 +889,29 @@ function Expand-NestedPipelines {
         # 拆分 Pipeline 的前 N-1 个元素为独立节点
         for ($i = 0; $i -lt $elements.Count - 1; $i++) {
             $element = $elements[$i]
+            $elementText = $element.Extent.Text
+            $elementVarEntries = @()
+
+            # 检查此元素内是否有 ScriptBlock 需要展开
+            $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
+            if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
+                $elementText = $sbExpansion.ModifiedText
+                $elementVarEntries += $sbExpansion.ScriptBlockVarEntries
+            }
 
             # 构建节点文本
             if ($i -eq 0) {
-                $nodeText = $element.Extent.Text
+                $nodeText = $elementText
             } else {
-                $nodeText = "`$$pipeVar | " + $element.Extent.Text
+                $nodeText = "`$$pipeVar | " + $elementText
             }
 
             $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+
+            # 添加 ScriptBlock 变量到 VarsRead
+            foreach ($varEntry in $elementVarEntries) {
+                Add-VarToNode -node $pipeNode -varEntry $varEntry -accessType "Read"
+            }
 
             # 变量流处理
             if ($i -eq 0) {
@@ -433,14 +933,25 @@ function Expand-NestedPipelines {
             $prevNodeRef.Value = $pipeNode
         }
 
-        # 记录替换信息：将整个 Pipeline 替换为 "$pipeVar | 最后一个元素"
+        # 处理最后一个元素中的 ScriptBlock
         $lastElement = $elements[$lastIndex]
+        $lastElementText = $lastElement.Extent.Text
+        $lastElementVarEntries = @()
+
+        $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $lastElement -prevNodeRef $prevNodeRef
+        if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
+            $lastElementText = $sbExpansion.ModifiedText
+            $lastElementVarEntries += $sbExpansion.ScriptBlockVarEntries
+        }
+
+        # 记录替换信息：将整个 Pipeline 替换为 "$pipeVar | 最后一个元素"
         $originalText = $pipeline.Extent.Text
-        $replacementText = "`$$pipeVar | " + $lastElement.Extent.Text
+        $replacementText = "`$$pipeVar | " + $lastElementText
 
         $replacements += @{
             Original = $originalText
             Replacement = $replacementText
+            LastElementVarEntries = $lastElementVarEntries
         }
         $pipeVarEntries += $pipeVarEntry
     }
@@ -451,9 +962,16 @@ function Expand-NestedPipelines {
         $modifiedText = $modifiedText.Replace($r.Original, $r.Replacement)
     }
 
+    # 收集所有 ScriptBlock 变量
+    $allScriptBlockVarEntries = @()
+    foreach ($r in $replacements) {
+        $allScriptBlockVarEntries += $r.LastElementVarEntries
+    }
+
     return @{
         ModifiedText = $modifiedText
         PipeVarEntries = $pipeVarEntries
+        ScriptBlockVarEntries = $allScriptBlockVarEntries
     }
 }
 
@@ -918,58 +1436,19 @@ function Convert-FunctionDefinitionAst {
     $funcStart = Add-Node -cfg $cfg -type "FuncStart" -text "function $funcName" -line $funcAst.Extent.StartLineNumber -ast $null
     $funcEnd   = Add-Node -cfg $cfg -type "FuncEnd"   -text "End function $funcName"        -line $funcAst.Extent.EndLineNumber   -ast $null
 
-    # 在函数内部构建控制流：类似 ScriptBlockAst，但使用 FuncStart/FuncEnd
-    # 如果存在 ParamBlock，则在 FuncStart 后面单独插入一个参数节点
     $prevNode = $funcStart
-    if ($null -ne $funcAst.Body -and $null -ne $funcAst.Body.ParamBlock) {
-        $paramBlock = $funcAst.Body.ParamBlock
-
-        # 检查 ParamBlock 中是否有嵌套 Pipeline（参数默认值中可能有 pipeline）
-        $prevNodeRefForPipeline = [ref]$prevNode
-        $paramExpansion = Expand-NestedPipelines -cfg $cfg -ast $paramBlock -prevNodeRef $prevNodeRefForPipeline
-        $prevNode = $prevNodeRefForPipeline.Value
-
-        # 将 ParamBlock 文本压缩为单行，避免换行和多余空格导致显示难看
-        $rawParamText = $paramBlock.Extent.Text
-        if ($null -ne $paramExpansion) {
-            # 有嵌套 Pipeline，使用修改后的文本
-            $rawParamText = $paramExpansion.ModifiedText
-        }
-        $singleLineParam = ($rawParamText -split "`r?`n") -join ' '
-        $singleLineParam = ($singleLineParam -replace '\s+', ' ').Trim()
-
-        $paramNode = Add-Node -cfg $cfg -type "FuncParams" -text $singleLineParam -line $paramBlock.Extent.StartLineNumber -ast $paramBlock
-
-        if ($null -ne $paramExpansion) {
-            # 添加 pipeVar 到 VarsRead
-            foreach ($pipeVarEntry in $paramExpansion.PipeVarEntries) {
-                Add-VarToNode -node $paramNode -varEntry $pipeVarEntry -accessType "Read"
-            }
-            # 连接最后一个 Pipeline 节点到 FuncParams
-            Add-Edge -cfg $cfg -from $prevNode.Id -to $paramNode.Id -label "Pipeline"
-        } else {
-            Add-Edge -cfg $cfg -from $funcStart.Id -to $paramNode.Id
-        }
-        $prevNode = $paramNode
-    }
-
     $prev = [ref]$prevNode
     $endRef = [ref]$funcEnd
 
-    if ($null -ne $funcAst.Body -and $null -ne $funcAst.Body.EndBlock) {
-        # 目前只考虑函数体中的 EndBlock（最常见的普通函数写法）
-        foreach ($statement in $funcAst.Body.EndBlock.Statements) {
-            $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prev -endNodeRef $endRef -loopContext $null -switchContext $null
-            if ($hasTerminator) {
-                break
-            }
-        }
+    # 使用通用函数处理函数体的 ScriptBlock
+    if ($null -ne $funcAst.Body) {
+        $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $funcAst.Body -prevNodeRef $prev -endNodeRef $endRef -paramNodeType "FuncParams"
     }
 
     # 如果最后一个节点不是 FuncEnd，并且不是显式终止语句，则连接到 FuncEnd（隐式 return）
     # 注意：当函数体中出现 exit 且被 try/finally 包裹时，finally 的出口有可能已经被特殊处理为
     #       直接连到全局 Script End（Type="End"）。这种情况下不能再从 Script End 连一条边到
-    #       FuncEnd，否则就会出现“FuncEnd 接在 Script End 后面”的错误。
+    #       FuncEnd，否则就会出现"FuncEnd 接在 Script End 后面"的错误。
     if ($null -ne $prev.Value -and $prev.Value.Id -ne $funcEnd.Id) {
         $lastType = $prev.Value.Type
         if ($lastType -notin @("Return", "Exit", "Throw", "Break", "Continue", "End")) {
@@ -1793,6 +2272,451 @@ function Convert-LoopStatement {
     $prevNodeRef.Value = $loopEnd
 }
 
+# 处理 AssignmentStatementAst 节点
+function Convert-AssignmentAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.AssignmentStatementAst]$assignAst,
+        [ref]$prevNodeRef
+    )
+
+    # 检查是否是多元素 Pipeline
+    if ($assignAst.Right -is [System.Management.Automation.Language.PipelineAst] -and
+        $assignAst.Right.PipelineElements.Count -gt 1) {
+        $leftText = $assignAst.Left.Extent.Text
+        $operatorText = switch ($assignAst.Operator) {
+            "Equals"           { "=" }
+            "PlusEquals"       { "+=" }
+            "MinusEquals"      { "-=" }
+            "MultiplyEquals"   { "*=" }
+            "DivideEquals"     { "/=" }
+            "RemainderEquals"  { "%=" }
+            default            { "=" }
+        }
+
+        $elements = $assignAst.Right.PipelineElements
+        $lastIndex = $elements.Count - 1
+
+        # 【修改】使用唯一的 Pipeline 中间变量，避免 $_ 在同一 runspace 中冲突
+        $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+        $pipeVarName = "_pipe_$guid"
+        $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVarName; Scope = [VarScope]::Unspecified }
+
+        for ($i = 0; $i -lt $elements.Count; $i++) {
+            $element = $elements[$i]
+
+            if ($i -eq 0) {
+                $nodeText = $element.Extent.Text
+            } elseif ($i -eq $lastIndex) {
+                $nodeText = "$leftText $operatorText `$$pipeVarName | " + $element.Extent.Text
+            } else {
+                $nodeText = "`$$pipeVarName | " + $element.Extent.Text
+            }
+
+            $nodeAst = if ($i -eq $lastIndex) { $assignAst } else { $element }
+            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $nodeAst
+
+            if ($i -eq 0) {
+                Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
+            } elseif ($i -eq $lastIndex) {
+                Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Read"
+            } else {
+                Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Both"
+            }
+
+            if ($null -ne $prevNodeRef.Value) {
+                if ($i -gt 0) {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+                } else {
+                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+                }
+            }
+            $prevNodeRef.Value = $pipeNode
+        }
+        return
+    }
+
+    # 检查右侧是否包含 ScriptBlock，如果有则创建独立子图
+    $nestedScriptBlocks = Get-AllNestedScriptBlocks -ast $assignAst.Right
+    foreach ($sb in $nestedScriptBlocks) {
+        $execType = Get-ScriptBlockExecutionType -scriptBlockExprAst $sb
+        if ($execType -eq "Deferred") {
+            # 从赋值左侧获取变量名
+            $varName = $null
+            $left = $assignAst.Left
+            if ($left -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                $varName = $left.VariablePath.UserPath
+            }
+            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+        }
+    }
+
+    # 普通赋值语句
+    $currentNode = Add-Node -cfg $cfg -type $assignAst.GetType().Name -text $assignAst.Extent.Text -line $assignAst.Extent.StartLineNumber -ast $assignAst
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $currentNode.Id
+    }
+    $prevNodeRef.Value = $currentNode
+}
+
+# 处理 PipelineAst 节点
+function Convert-PipelineAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.PipelineAst]$pipelineAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null,
+        $loopContext = $null,
+        $switchContext = $null
+    )
+
+    $elements = $pipelineAst.PipelineElements
+    $lastIndex = $elements.Count - 1
+
+    # 【修改】使用唯一的 Pipeline 中间变量，避免 $_ 在同一 runspace 中冲突
+    $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+    $pipeVarName = "_pipe_$guid"
+    $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVarName; Scope = [VarScope]::Unspecified }
+
+    for ($i = 0; $i -lt $elements.Count; $i++) {
+        $element = $elements[$i]
+        $baseText = $element.Extent.Text
+        $hasExpansion = $false
+        $allVarEntries = @()
+        $skipNodeCreation = $false
+
+        # 1. 检查当前元素内部是否有嵌套的多元素 Pipeline（如子表达式中的 pipeline）
+        $pipelineExpansion = Expand-NestedPipelines -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
+        if ($null -ne $pipelineExpansion) {
+            $baseText = $pipelineExpansion.ModifiedText
+            $allVarEntries += $pipelineExpansion.PipeVarEntries
+            $hasExpansion = $true
+        }
+
+        # 2. 检查当前元素内部是否有嵌套的 ScriptBlock
+        $scriptBlockExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $element -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+        if ($null -ne $scriptBlockExpansion) {
+            if ($scriptBlockExpansion.InvokeOnlyExpanded) {
+                # InvokeOnly 类型（如 & { } 或 . { }）已经完全展开，不需要创建后续节点
+                $skipNodeCreation = $true
+            } else {
+                $baseText = $scriptBlockExpansion.ModifiedText
+                $allVarEntries += $scriptBlockExpansion.ScriptBlockVarEntries
+                $hasExpansion = $true
+            }
+        }
+
+        # 如果是 InvokeOnly 类型，跳过节点创建
+        if ($skipNodeCreation) {
+            continue
+        }
+
+        # 构建节点文本：使用唯一的 $_pipe_xxxx 变量
+        $nodeText = if ($i -gt 0) { "`$$pipeVarName | " + $baseText } else { $baseText }
+        $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+
+        # 添加展开的变量到 VarsRead
+        foreach ($varEntry in $allVarEntries) {
+            Add-VarToNode -node $pipeNode -varEntry $varEntry -accessType "Read"
+        }
+
+        # 连接边
+        if ($null -ne $prevNodeRef.Value) {
+            if ($hasExpansion) {
+                # 有展开，使用 Pipeline 标签
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+            } elseif ($i -gt 0) {
+                # Pipeline 元素之间用 "Pipeline" 标签
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
+            } else {
+                # 首元素与前一个节点的普通连接
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+            }
+        }
+
+        # 变量流处理：
+        # - 首元素：只写入 $_pipe_xxxx (产生管道输出)
+        # - 中间元素：读取 + 写入 $_pipe_xxxx (接收输入并产生输出)
+        # - 末元素：只读取 $_pipe_xxxx (接收输入，不再传递)
+        if ($i -eq 0) {
+            # 首元素：写入 $_pipe_xxxx
+            if ($elements.Count -gt 1) {
+                Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
+            }
+        } elseif ($i -eq $lastIndex) {
+            # 末元素：只读取 $_pipe_xxxx
+            Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Read"
+        } else {
+            # 中间元素：读取 + 写入 $_pipe_xxxx
+            Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Both"
+        }
+
+        $prevNodeRef.Value = $pipeNode
+    }
+}
+
+# 处理 ReturnStatementAst 节点
+# 返回 $true 表示后续语句不可达
+function Convert-ReturnAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ReturnStatementAst]$returnAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null
+    )
+
+    # 检查 return 语句中是否有嵌套 Pipeline
+    $returnExpansion = $null
+    if ($null -ne $returnAst.Pipeline) {
+        $returnExpansion = Expand-NestedPipelines -cfg $cfg -ast $returnAst.Pipeline -prevNodeRef $prevNodeRef
+    }
+
+    if ($null -ne $returnExpansion) {
+        # 有嵌套 Pipeline，使用修改后的文本创建 Return 节点
+        $modifiedReturnText = "return " + $returnExpansion.ModifiedText
+        $returnNode = Add-Node -cfg $cfg -type "Return" -text $modifiedReturnText -line $returnAst.Extent.StartLineNumber -ast $returnAst
+        foreach ($pipeVarEntry in $returnExpansion.PipeVarEntries) {
+            Add-VarToNode -node $returnNode -varEntry $pipeVarEntry -accessType "Read"
+        }
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id -label "Pipeline"
+        }
+    } else {
+        # 没有嵌套 Pipeline，正常创建 Return 节点
+        $returnNode = Add-Node -cfg $cfg -type "Return" -text $returnAst.Extent.Text -line $returnAst.Extent.StartLineNumber -ast $returnAst
+        if ($null -ne $prevNodeRef.Value) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id
+        }
+    }
+
+    # 检测是否在带 finally 的 try 中
+    $inTryWithFinally = $false
+    $ancestor = $returnAst.Parent
+    while ($null -ne $ancestor) {
+        if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+            if ($null -ne $ancestor.Finally) {
+                $inTryWithFinally = $true
+            }
+            break
+        }
+        $ancestor = $ancestor.Parent
+    }
+
+    if (-not $inTryWithFinally -and $null -ne $endNodeRef) {
+        $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+        if ($null -ne $endNode) {
+            Add-Edge -cfg $cfg -from $returnNode.Id -to $endNode.Id -label "Return"
+        }
+    }
+
+    $prevNodeRef.Value = $returnNode
+    return $true
+}
+
+# 处理 ExitStatementAst 节点
+# 返回 $true 表示后续语句不可达
+function Convert-ExitAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ExitStatementAst]$exitAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null
+    )
+
+    $exitNode = Add-Node -cfg $cfg -type "Exit" -text $exitAst.Extent.Text -line $exitAst.Extent.StartLineNumber -ast $exitAst
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $exitNode.Id
+    }
+
+    # 检测是否在带 finally 的 try 中
+    $inTryWithFinally = $false
+    $ancestor = $exitAst.Parent
+    while ($null -ne $ancestor) {
+        if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+            if ($null -ne $ancestor.Finally) {
+                $inTryWithFinally = $true
+            }
+            break
+        }
+        $ancestor = $ancestor.Parent
+    }
+
+    if (-not $inTryWithFinally) {
+        if ($script:__CFG_ScriptEndNode) {
+            Add-Edge -cfg $cfg -from $exitNode.Id -to $script:__CFG_ScriptEndNode.Id -label "Exit"
+        }
+        elseif ($null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $exitNode.Id -to $endNode.Id -label "Exit"
+            }
+        }
+    }
+
+    $prevNodeRef.Value = $exitNode
+    return $true
+}
+
+# 处理 BreakStatementAst 节点
+# 返回 $true 表示后续语句不可达
+function Convert-BreakAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.BreakStatementAst]$breakAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null,
+        $loopContext = $null,
+        $switchContext = $null
+    )
+
+    $breakNode = Add-Node -cfg $cfg -type "Break" -text $breakAst.Extent.Text -line $breakAst.Extent.StartLineNumber -ast $breakAst
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $breakNode.Id
+    }
+
+    # 优先检查 switchContext
+    if ($null -ne $switchContext -and $null -ne $switchContext.SwitchMerge) {
+        Add-Edge -cfg $cfg -from $breakNode.Id -to $switchContext.SwitchMerge.Id -label "Break"
+    }
+    # 其次检查 loopContext
+    elseif ($null -ne $loopContext -and $null -ne $loopContext.LoopEnd) {
+        Add-Edge -cfg $cfg -from $breakNode.Id -to $loopContext.LoopEnd.Id -label "Break"
+    }
+    # 不在 switch 或循环中，连接到 End 节点
+    else {
+        if ($null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $breakNode.Id -to $endNode.Id -label "Break"
+            }
+        }
+    }
+
+    $prevNodeRef.Value = $breakNode
+    return $true
+}
+
+# 处理 ContinueStatementAst 节点
+# 返回 $true 表示后续语句不可达
+function Convert-ContinueAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ContinueStatementAst]$continueAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null,
+        $loopContext = $null,
+        $switchContext = $null
+    )
+
+    $continueNode = Add-Node -cfg $cfg -type "Continue" -text $continueAst.Extent.Text -line $continueAst.Extent.StartLineNumber -ast $continueAst
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $continueNode.Id
+    }
+
+    # 优先检查 switchContext
+    if ($null -ne $switchContext -and $null -ne $switchContext.SwitchNode) {
+        Add-Edge -cfg $cfg -from $continueNode.Id -to $switchContext.SwitchNode.Id -label "Continue"
+    }
+    # 其次检查 loopContext
+    elseif ($null -ne $loopContext -and $null -ne $loopContext.LoopContinue) {
+        Add-Edge -cfg $cfg -from $continueNode.Id -to $loopContext.LoopContinue.Id -label "Continue"
+    }
+    # 不在 switch 或循环中，连接到 End 节点
+    else {
+        if ($null -ne $endNodeRef) {
+            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+            if ($null -ne $endNode) {
+                Add-Edge -cfg $cfg -from $continueNode.Id -to $endNode.Id -label "Continue"
+            }
+        }
+    }
+
+    $prevNodeRef.Value = $continueNode
+    return $true
+}
+
+# 处理 ThrowStatementAst 节点
+# 返回 $true 表示后续语句不可达
+function Convert-ThrowAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ThrowStatementAst]$throwAst,
+        [ref]$prevNodeRef,
+        $endNodeRef = $null
+    )
+
+    $throwNode = Add-Node -cfg $cfg -type "Throw" -text $throwAst.Extent.Text -line $throwAst.Extent.StartLineNumber -ast $throwAst
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $throwNode.Id
+    }
+
+    # 判断是否位于 catch / finally 块内部
+    $inCatch = $false
+    $inFinally = $false
+    $hasTryAncestor = $false
+    $ancestor = $throwAst.Parent
+    while ($null -ne $ancestor) {
+        if ($ancestor -is [System.Management.Automation.Language.CatchClauseAst]) {
+            $inCatch = $true
+        }
+        elseif ($ancestor -is [System.Management.Automation.Language.StatementBlockAst]) {
+            $parentTry = $ancestor.Parent
+            if ($parentTry -is [System.Management.Automation.Language.TryStatementAst] -and
+                $parentTry.Finally -eq $ancestor) {
+                $inFinally = $true
+            }
+        }
+        elseif ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
+            $hasTryAncestor = $true
+        }
+        $ancestor = $ancestor.Parent
+    }
+
+    # catch/finally 中的 throw：连到 End
+    if (($inCatch -or $inFinally) -and $null -ne $endNodeRef) {
+        $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+        if ($null -ne $endNode) {
+            Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
+        }
+    }
+    # 不在 try 中的 throw：连到 End
+    elseif (-not $hasTryAncestor -and $null -ne $endNodeRef) {
+        $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
+        if ($null -ne $endNode) {
+            Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
+        }
+    }
+
+    $prevNodeRef.Value = $throwNode
+    return $true
+}
+
+# 处理 FunctionDefinitionAst 节点（顶层定义）
+# 返回 $false 表示后续语句可达
+function Convert-FunctionDefAstNode {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.FunctionDefinitionAst]$funcDefAst,
+        [ref]$prevNodeRef
+    )
+
+    $funcName = $funcDefAst.Name
+    $defText = "function $funcName"
+    $funcDefNode = Add-Node -cfg $cfg -type "FunctionDef" -text $defText -line $funcDefAst.Extent.StartLineNumber -ast $null
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $funcDefNode.Id
+    }
+    $prevNodeRef.Value = $funcDefNode
+
+    # 将函数名加入已定义函数集合
+    $null = $cfg.DefinedFunctions.Add($funcName)
+
+    # 为函数体生成独立的 FuncStart/FuncEnd 子图
+    Convert-FunctionDefinitionAst -cfg $cfg -funcAst $funcDefAst
+
+    return $false
+}
+
 function Convert-AstNode {
     param(
         $cfg,
@@ -1805,282 +2729,64 @@ function Convert-AstNode {
 
     # 一、如果是根节点（ScriptBlockAst），处理其直接子节点
     if ($node -is [System.Management.Automation.Language.ScriptBlockAst]) {
-        # 添加 "Start" 节点
+        # 添加全局 "Start" 节点
         $startNode = Add-Node -cfg $cfg -type "Start" -text "Script Start" -line 0
-        $prevNodeRef.Value = $startNode
 
-        # 先创建 End 节点（但不立即连接），供 Return 语句使用
+        # 添加全局 "End" 节点（供 exit 语句跳转使用）
         $endNode = Add-Node -cfg $cfg -type "End" -text "Script End" -line $node.Extent.EndLineNumber
-        $endNodeRef = [ref]$endNode
         # 记录全局 Script End 节点，供 Exit 在任意作用域直接终止脚本使用
         $script:__CFG_ScriptEndNode = $endNode
 
-        # 1. 按顺序处理各个块
-        $blocks = @(
-            @{ Name = "Param"; Block = $node.ParamBlock }
-            @{ Name = "DynamicParam"; Block = $node.DynamicParamBlock }
-            @{ Name = "Begin"; Block = $node.BeginBlock }
-            @{ Name = "Process"; Block = $node.ProcessBlock }
-            @{ Name = "End"; Block = $node.EndBlock }
-        )
+        # 创建主脚本子图入口/出口节点
+        $mainStart = Add-Node -cfg $cfg -type "MainStart" -text "Main Script" -line $node.Extent.StartLineNumber -ast $null
+        $mainEnd = Add-Node -cfg $cfg -type "MainEnd" -text "End Main Script" -line $node.Extent.EndLineNumber -ast $null
 
-        foreach ($block in $blocks) {
-            #2. 只处理begin和end两种blockAst，续写
-            if ($block.Name -in "Begin", "End") {
-                if ($null -ne $block.Block) {
-                # 3. 处理块内的每个语句
-                    foreach ($statement in $block.Block.Statements) {
-                        $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $null -switchContext $null
-                        # 如果遇到 return，停止处理后续语句
-                        if ($hasReturn) {
-                            break
-                        }
-                    }
-                }
-            }
-        }
+        # Start → MainStart
+        Add-Edge -cfg $cfg -from $startNode.Id -to $mainStart.Id
 
-        # 4. 连接最后一个节点到 End 节点（如果还没有被 Return/Break/Continue/Exit 连接）
-        # 如果最后一个节点是 Return/Break/Continue/Exit/Throw 节点，它已经连接到 End，不需要再创建边
-        if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $endNode.Id) {
+        # 设置 prevNodeRef 和 endNodeRef
+        $prevNodeRef.Value = $mainStart
+        $mainEndRef = [ref]$mainEnd
+
+        # 使用通用函数处理脚本的 ScriptBlock
+        $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $node -prevNodeRef $prevNodeRef -endNodeRef $mainEndRef -paramNodeType "ScriptParams"
+
+        # 连接最后一个节点到 MainEnd 节点（如果还没有被终止语句连接）
+        if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $mainEnd.Id) {
             $lastNodeType = $prevNodeRef.Value.Type
-            if ($lastNodeType -ne "Return" -and $lastNodeType -ne "Break" -and $lastNodeType -ne "Continue" -and $lastNodeType -ne "Throw" -and $lastNodeType -ne "Exit") {
-                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $endNode.Id
+            if ($lastNodeType -notin @("Return", "Break", "Continue", "Throw", "Exit")) {
+                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $mainEnd.Id
             }
         }
+
+        # MainEnd → End（正常结束）
+        Add-Edge -cfg $cfg -from $mainEnd.Id -to $endNode.Id
+
         $prevNodeRef.Value = $endNode
     }
-    # 二、如果是ReturnStatementAst，创建 Return 节点
+    # 二、如果是 ReturnStatementAst
     elseif ($node -is [System.Management.Automation.Language.ReturnStatementAst]) {
-        # 检查 return 语句中是否有嵌套 Pipeline（如 return Get-Service | Where-Object { ... }）
-        $returnExpansion = $null
-        if ($null -ne $node.Pipeline) {
-            $returnExpansion = Expand-NestedPipelines -cfg $cfg -ast $node.Pipeline -prevNodeRef $prevNodeRef
-        }
-
-        if ($null -ne $returnExpansion) {
-            # 有嵌套 Pipeline，使用修改后的文本创建 Return 节点
-            $modifiedReturnText = "return " + $returnExpansion.ModifiedText
-            $returnNode = Add-Node -cfg $cfg -type "Return" -text $modifiedReturnText -line $node.Extent.StartLineNumber -ast $node
-            # 添加 pipeVar 到 VarsRead
-            foreach ($pipeVarEntry in $returnExpansion.PipeVarEntries) {
-                Add-VarToNode -node $returnNode -varEntry $pipeVarEntry -accessType "Read"
-            }
-            # 连接最后一个 Pipeline 节点到 Return 节点
-            if ($null -ne $prevNodeRef.Value) {
-                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id -label "Pipeline"
-            }
-        } else {
-            # 没有嵌套 Pipeline，正常创建 Return 节点
-            $returnNode = Add-Node -cfg $cfg -type "Return" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
-            # 连接到上一个节点
-            if ($null -ne $prevNodeRef.Value) {
-                Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $returnNode.Id
-            }
-        }
-
-        # Return 一般终止当前脚本块/函数，但如果它位于"带 finally 的 try"中，
-        # 必须先执行 finally，再在 finally 之后返回。这里检测是否在这样的 try 中，
-        # 如果是，则暂时不连到 End，由 Convert-TryAstNode 负责通过 finally 终止。
-        $inTryWithFinally = $false
-        $ancestor = $node.Parent
-        while ($null -ne $ancestor) {
-            if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
-                if ($null -ne $ancestor.Finally) {
-                    $inTryWithFinally = $true
-                }
-                break
-            }
-            $ancestor = $ancestor.Parent
-        }
-
-        if (-not $inTryWithFinally -and $null -ne $endNodeRef) {
-            # 不在任何带 finally 的 try 中：直接连接到 End / FuncEnd
-            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-            if ($null -ne $endNode) {
-                Add-Edge -cfg $cfg -from $returnNode.Id -to $endNode.Id -label "Return"
-            }
-        }
-
-        $prevNodeRef.Value = $returnNode
-        return $true  # 返回 true 表示遇到了 return
+        return Convert-ReturnAstNode -cfg $cfg -returnAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
     }
-    # 二点二、如果是 ExitStatementAst，创建 Exit 节点（终止脚本）
+    # 二点二、如果是 ExitStatementAst
     elseif ($node -is [System.Management.Automation.Language.ExitStatementAst]) {
-        $exitNode = Add-Node -cfg $cfg -type "Exit" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
-        # 连接到上一个节点
-        if ($null -ne $prevNodeRef.Value) {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $exitNode.Id
-        }
-        # Exit 始终终止整个脚本，但如果它位于某个带 finally 的 try 中，
-        # 则必须先执行 finally，再在 finally 之后连到 Script End。
-        # 这里检测是否处于“带 finally 的 try”内部，如果是，就不在这里直接连 Script End，
-        # 由 Convert-TryAstNode 的 9.5 + 12 步负责通过 finally 终止脚本。
-        $inTryWithFinally = $false
-        $ancestor = $node.Parent
-        while ($null -ne $ancestor) {
-            if ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
-                if ($null -ne $ancestor.Finally) {
-                    $inTryWithFinally = $true
-                }
-                break
-            }
-            $ancestor = $ancestor.Parent
-        }
-
-        if (-not $inTryWithFinally) {
-            # 不在任何带 finally 的 try 中：直接连接到全局 Script End（如果存在）
-            if ($script:__CFG_ScriptEndNode) {
-                Add-Edge -cfg $cfg -from $exitNode.Id -to $script:__CFG_ScriptEndNode.Id -label "Exit"
-            }
-            elseif ($null -ne $endNodeRef) {
-                # 兜底：如果没记录到全局 End，就退回到当前作用域的 endNodeRef
-                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-                if ($null -ne $endNode) {
-                    Add-Edge -cfg $cfg -from $exitNode.Id -to $endNode.Id -label "Exit"
-                }
-            }
-        }
-        $prevNodeRef.Value = $exitNode
-        return $true  # 返回 true 表示遇到了 exit，后续语句不可达
+        return Convert-ExitAstNode -cfg $cfg -exitAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
     }
-    # 二点五、如果是BreakStatementAst，创建 Break 节点并连接到 switch/循环结束节点或 End
+    # 二点五、如果是 BreakStatementAst
     elseif ($node -is [System.Management.Automation.Language.BreakStatementAst]) {
-        $breakNode = Add-Node -cfg $cfg -type "Break" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
-        # 连接到上一个节点
-        if ($null -ne $prevNodeRef.Value) {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $breakNode.Id
-        }
-        # 优先检查 switchContext，如果存在则连接到 switch 的 merge 节点
-        if ($null -ne $switchContext -and $null -ne $switchContext.SwitchMerge) {
-            Add-Edge -cfg $cfg -from $breakNode.Id -to $switchContext.SwitchMerge.Id -label "Break"
-            $prevNodeRef.Value = $breakNode
-            return $true  # 在 switch 中，break 会停止处理后续语句（因为已经跳出 switch，后续语句不可达）
-        }
-        # 如果提供了 loopContext，连接到循环结束节点
-        elseif ($null -ne $loopContext -and $null -ne $loopContext.LoopEnd) {
-            Add-Edge -cfg $cfg -from $breakNode.Id -to $loopContext.LoopEnd.Id -label "Break"
-            $prevNodeRef.Value = $breakNode
-            return $true  # 在循环中，break 会停止处理后续语句（因为已经跳出循环，后续语句不可达）
-        }
-        else {
-            # 如果不在 switch 或循环中，连接到 End 节点（类似 return）
-            if ($null -ne $endNodeRef) {
-                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-                if ($null -ne $endNode) {
-                    Add-Edge -cfg $cfg -from $breakNode.Id -to $endNode.Id -label "Break"
-                }
-            }
-            $prevNodeRef.Value = $breakNode
-            return $true  # 不在 switch 或循环中时，break 起到 return 的效果，停止处理后续语句
-        }
+        return Convert-BreakAstNode -cfg $cfg -breakAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
     }
-    # 二点六、如果是ContinueStatementAst，创建 Continue 节点并连接到 switch/循环继续节点或 End
+    # 二点六、如果是 ContinueStatementAst
     elseif ($node -is [System.Management.Automation.Language.ContinueStatementAst]) {
-        $continueNode = Add-Node -cfg $cfg -type "Continue" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
-        # 连接到上一个节点
-        if ($null -ne $prevNodeRef.Value) {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $continueNode.Id
-        }
-        # 优先检查 switchContext，如果存在则连接到 switch 条件节点（跳出当前 case，继续判断下一个 case）
-        if ($null -ne $switchContext -and $null -ne $switchContext.SwitchNode) {
-            Add-Edge -cfg $cfg -from $continueNode.Id -to $switchContext.SwitchNode.Id -label "Continue"
-            $prevNodeRef.Value = $continueNode
-            return $true  # 在 switch 中，continue 会停止处理后续语句（因为已经跳出当前 case，继续判断下一个 case）
-        }
-        # 如果提供了 loopContext，连接到循环继续节点
-        elseif ($null -ne $loopContext -and $null -ne $loopContext.LoopContinue) {
-            Add-Edge -cfg $cfg -from $continueNode.Id -to $loopContext.LoopContinue.Id -label "Continue"
-            $prevNodeRef.Value = $continueNode
-            return $true  # 在循环中，continue 会停止处理后续语句（因为已经跳到下一次循环，后续语句不可达）
-        }
-        else {
-            # 如果不在 switch 或循环中，连接到 End 节点（类似 return）
-            if ($null -ne $endNodeRef) {
-                $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-                if ($null -ne $endNode) {
-                    Add-Edge -cfg $cfg -from $continueNode.Id -to $endNode.Id -label "Continue"
-                }
-            }
-            $prevNodeRef.Value = $continueNode
-            return $true  # 不在 switch 或循环中时，continue 起到 return 的效果，停止处理后续语句
-        }
+        return Convert-ContinueAstNode -cfg $cfg -continueAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
     }
-    # 二点七、如果是ThrowStatementAst，创建 Throw 节点并处理异常
+    # 二点七、如果是 ThrowStatementAst
     elseif ($node -is [System.Management.Automation.Language.ThrowStatementAst]) {
-        $throwNode = Add-Node -cfg $cfg -type "Throw" -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
-        # 连接到上一个节点
-        if ($null -ne $prevNodeRef.Value) {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $throwNode.Id
-        }
-
-        # 判断是否位于 catch / finally 块内部（兼容不支持 FinallyClauseAst 的旧版 PowerShell）
-        $inCatch = $false
-        $inFinally = $false
-        $hasTryAncestor = $false
-        $ancestor = $node.Parent
-        while ($null -ne $ancestor) {
-            if ($ancestor -is [System.Management.Automation.Language.CatchClauseAst]) {
-                # 任意层级的 catch（内层或外层）都视为 inCatch
-                $inCatch = $true
-            }
-            elseif ($ancestor -is [System.Management.Automation.Language.StatementBlockAst]) {
-                # 判断这个 StatementBlockAst 是否是某个 TryStatementAst 的 Finally
-                $parentTry = $ancestor.Parent
-                if ($parentTry -is [System.Management.Automation.Language.TryStatementAst] -and
-                    $parentTry.Finally -eq $ancestor) {
-                    $inFinally = $true
-                }
-            }
-            elseif ($ancestor -is [System.Management.Automation.Language.TryStatementAst]) {
-                # 标记该 throw 出现在某个 try 块内部（由 Convert-TryAstNode 负责异常路由）
-                $hasTryAncestor = $true
-            }
-            $ancestor = $ancestor.Parent
-        }
-
-        # 如果 throw 出现在 catch / finally 中，则表示“本层 try 不再处理该异常”：
-        # - 对于 catch 中的 throw：这是“重新抛出”（rethrow）；当前 try 的 catch 已经执行过，新的异常只会交给外层 try。
-        # - 对于 finally 中的 throw：finally 总是在 try/catch 之后执行，此时当前 try 的 catch 也不会再参与处理。
-        # 统一建模为一条 Uncaught Exception 到 End，由外层 try（如果存在）在 Convert-TryAstNode 的 11.8 步中
-        # 把这条边重定向到自身的 catch / finally；如果不存在外层 try，则表示脚本/函数在 finally 中抛出未捕获异常后终止。
-        if (($inCatch -or $inFinally) -and $null -ne $endNodeRef) {
-            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-            if ($null -ne $endNode) {
-                Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
-            }
-        }
-        # 否则，如果该 throw 不在任何 try 内部，也不在 catch/finally 中，
-        # 则视为“当前脚本/函数作用域内的未捕获异常”：直接连到 End/FuncEnd。
-        # （位于 try 块内部的 throw，其异常路径由 Convert-TryAstNode 的 Exception 边统一处理，
-        #  这里不再额外添加 Uncaught Exception -> End，避免产生重复/错误的路径。）
-        elseif (-not $hasTryAncestor -and $null -ne $endNodeRef) {
-            $endNode = if ($endNodeRef -is [ref]) { $endNodeRef.Value } else { $endNodeRef }
-            if ($null -ne $endNode) {
-                Add-Edge -cfg $cfg -from $throwNode.Id -to $endNode.Id -label "Uncaught Exception"
-            }
-        }
-
-        $prevNodeRef.Value = $throwNode
-        return $true  # 返回 true 表示遇到了 throw，后续语句不可达
+        return Convert-ThrowAstNode -cfg $cfg -throwAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef
     }
-    # 二点八、如果是 FunctionDefinitionAst，创建函数定义节点，并为函数体构建独立的子CFG
+    # 二点八、如果是 FunctionDefinitionAst
     elseif ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
-        # 顶层：函数定义本身作为一个顺序节点出现（装饰节点，ast = null）
-        # 函数定义不执行代码，只是声明函数，所以不需要变量分析
-        $funcName = $node.Name
-        $defText = "function $funcName"
-        $funcDefNode = Add-Node -cfg $cfg -type "FunctionDef" -text $defText -line $node.Extent.StartLineNumber -ast $null
-        if ($null -ne $prevNodeRef.Value) {
-            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $funcDefNode.Id
-        }
-        $prevNodeRef.Value = $funcDefNode
-
-        # 为函数体生成独立的 FuncStart/FuncEnd 子图（不影响当前顺序流）
-        Convert-FunctionDefinitionAst -cfg $cfg -funcAst $node
-
-        # 定义函数不会终止脚本后续语句
-        return $false
+        return Convert-FunctionDefAstNode -cfg $cfg -funcDefAst $node -prevNodeRef $prevNodeRef
     }
     # 三、如果是IfStatementAst，创建分支
     elseif ($node -is [System.Management.Automation.Language.IfStatementAst]) {
@@ -2104,136 +2810,17 @@ function Convert-AstNode {
         $allBranchesReturn = Convert-TryAstNode -cfg $cfg -tryAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
         return $allBranchesReturn
     }
-    # 四点六、如果是 AssignmentStatementAst 且右侧是多元素 PipelineAst，拆分处理
-    elseif ($node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
-            $node.Right -is [System.Management.Automation.Language.PipelineAst] -and
-            $node.Right.PipelineElements.Count -gt 1) {
-
-        $leftText = $node.Left.Extent.Text  # 如 "$result"
-        $operator = $node.Operator          # 如 "Equals"
-        $operatorText = switch ($operator) {
-            "Equals"           { "=" }
-            "PlusEquals"       { "+=" }
-            "MinusEquals"      { "-=" }
-            "MultiplyEquals"   { "*=" }
-            "DivideEquals"     { "/=" }
-            "RemainderEquals"  { "%=" }
-            default            { "=" }
-        }
-
-        $elements = $node.Right.PipelineElements
-        $lastIndex = $elements.Count - 1
-        $underscoreEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
-
-        for ($i = 0; $i -lt $elements.Count; $i++) {
-            $element = $elements[$i]
-
-            # 构建节点文本
-            if ($i -eq 0) {
-                # 首元素：原样
-                $nodeText = $element.Extent.Text
-            } elseif ($i -eq $lastIndex) {
-                # 末元素：加上赋值和管道前缀
-                $nodeText = "$leftText $operatorText `$_ | " + $element.Extent.Text
-            } else {
-                # 中间元素：只加管道前缀
-                $nodeText = "`$_ | " + $element.Extent.Text
-            }
-
-            # 末元素使用整个赋值语句的 AST（用于变量分析），其他用元素自己的 AST
-            $nodeAst = if ($i -eq $lastIndex) { $node } else { $element }
-            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $nodeAst
-
-            # 变量流处理
-            if ($i -eq 0) {
-                # 首元素：写入 $_
-                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Write"
-            } elseif ($i -eq $lastIndex) {
-                # 末元素：读取 $_（赋值目标变量由 AST 自动分析）
-                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Read"
-            } else {
-                # 中间元素：读取 + 写入 $_
-                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Both"
-            }
-
-            # 连接边
-            if ($null -ne $prevNodeRef.Value) {
-                if ($i -gt 0) {
-                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
-                } else {
-                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
-                }
-            }
-            $prevNodeRef.Value = $pipeNode
-        }
+    # 四点六、如果是 AssignmentStatementAst
+    elseif ($node -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        Convert-AssignmentAstNode -cfg $cfg -assignAst $node -prevNodeRef $prevNodeRef
         return $false
     }
-    # 五、如果是 PipelineAst，拆分为多个节点
+    # 五、如果是 PipelineAst
     elseif ($node -is [System.Management.Automation.Language.PipelineAst]) {
-        $elements = $node.PipelineElements
-        $lastIndex = $elements.Count - 1
-        $underscoreEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
-
-        for ($i = 0; $i -lt $elements.Count; $i++) {
-            $element = $elements[$i]
-
-            # 检查当前元素内部是否有嵌套的多元素 Pipeline（如子表达式中的 pipeline）
-            $elementExpansion = Expand-NestedPipelines -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
-
-            if ($null -ne $elementExpansion) {
-                # 有嵌套 Pipeline，使用修改后的文本
-                $baseText = $elementExpansion.ModifiedText
-                $nodeText = if ($i -gt 0) { "`$_ | " + $baseText } else { $baseText }
-                $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
-
-                # 添加嵌套 Pipeline 的变量到 VarsRead
-                foreach ($pipeVarEntry in $elementExpansion.PipeVarEntries) {
-                    Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Read"
-                }
-
-                # 连接最后一个嵌套 Pipeline 节点到当前节点
-                if ($null -ne $prevNodeRef.Value) {
-                    Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
-                }
-            } else {
-                # 没有嵌套 Pipeline，正常处理
-                $nodeText = if ($i -gt 0) { "`$_ | " + $element.Extent.Text } else { $element.Extent.Text }
-                $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
-
-                # 连接边
-                if ($null -ne $prevNodeRef.Value) {
-                    if ($i -gt 0) {
-                        # Pipeline 元素之间用 "Pipeline" 标签
-                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
-                    } else {
-                        # 首元素与前一个节点的普通连接
-                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
-                    }
-                }
-            }
-
-            # 变量流处理：
-            # - 首元素：只写入 $_ (产生管道输出)
-            # - 中间元素：读取 + 写入 $_ (接收输入并产生输出)
-            # - 末元素：只读取 $_ (接收输入，不再传递)
-            if ($i -eq 0) {
-                # 首元素：写入 $_
-                if ($elements.Count -gt 1) {
-                    Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Write"
-                }
-            } elseif ($i -eq $lastIndex) {
-                # 末元素：只读取 $_
-                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Read"
-            } else {
-                # 中间元素：读取 + 写入 $_
-                Add-VarToNode -node $pipeNode -varEntry $underscoreEntry -accessType "Both"
-            }
-
-            $prevNodeRef.Value = $pipeNode
-        }
+        Convert-PipelineAstNode -cfg $cfg -pipelineAst $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
         return $false
     }
-    # 六、其余节点（包含嵌套 Pipeline 的通用处理）
+    # 六、其余节点（包含嵌套 Pipeline、ScriptBlock 的通用处理）
     else {
         # 检测节点内是否有嵌套的多元素 Pipeline
         $nestedPipelines = Get-AllNestedPipelines -ast $node
@@ -2248,7 +2835,7 @@ function Convert-AstNode {
 
             foreach ($pipeline in $sortedPipelines) {
                 $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
-                $pipeVar = "__pipe_$guid"
+                $pipeVar = "_pipe_$guid"
                 $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVar; Scope = [VarScope]::Unspecified }
 
                 $elements = $pipeline.PipelineElements
@@ -2330,7 +2917,101 @@ function Convert-AstNode {
             return $false
         }
 
-        # 没有嵌套 Pipeline，直接创建节点
+        # 检测节点内是否有嵌套的 ScriptBlock
+        $nestedScriptBlocks = Get-AllNestedScriptBlocks -ast $node
+        if ($nestedScriptBlocks.Count -gt 0) {
+            # 分类处理
+            $deferredBlocks = @()
+            $immediateBlocks = @()
+            $invokeOnlyBlocks = @()
+            # PipelineValue 类型的 ScriptBlock 不需要特殊处理，保持原样
+
+            foreach ($sb in $nestedScriptBlocks) {
+                $execType = Get-ScriptBlockExecutionType -scriptBlockExprAst $sb
+                switch ($execType) {
+                    "Deferred" { $deferredBlocks += $sb }
+                    "InvokeOnly" { $invokeOnlyBlocks += $sb }
+                    "PipelineValue" { <# 保持原样，不做处理 #> }
+                    default { $immediateBlocks += $sb }
+                }
+            }
+
+            # 处理延迟执行的 ScriptBlock：创建独立子图，使用赋值目标变量名
+            # 【已修改】去掉 BlockDef 节点
+            $hasStandaloneDeferred = $false
+            foreach ($sb in $deferredBlocks) {
+                # 尝试从父 AST 获取变量名
+                $varName = $null
+                $parent = $sb.Parent
+                if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    $left = $parent.Left
+                    if ($left -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                        $varName = $left.VariablePath.UserPath
+                    }
+                }
+
+                # 如果没有赋值目标（独立的 ScriptBlock 字面量作为值），生成唯一块名称
+                if ($null -eq $varName) {
+                    $hasStandaloneDeferred = $true
+                    # 生成唯一块名称（作为变量）
+                    $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+                    $varName = "_block_$guid"
+                    $blockVarEntry = [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+
+                    # 【修改】不再创建 BlockDef 节点，只创建独立子图
+                    Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+
+                    # 【修改】创建 PipelineElement 节点，用 $_block_name 变量引用替代原始 ScriptBlock
+                    $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text "`$$varName" -line $sb.Extent.StartLineNumber -ast $sb
+                    Add-VarToNode -node $pipeNode -varEntry $blockVarEntry -accessType "Read"
+                    if ($null -ne $prevNodeRef.Value) {
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
+                    }
+                    $prevNodeRef.Value = $pipeNode
+                } else {
+                    # 有赋值目标，只创建子图（赋值语句本身会作为节点）
+                    # 使用 $varName 作为 block 变量名
+                    Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+                }
+            }
+
+            # 如果有独立的 ScriptBlock，已经完全处理，跳过后续节点创建
+            if ($hasStandaloneDeferred) {
+                return $false
+            }
+
+            # 处理 InvokeOnly 类型（如 & { } 或 . { }）：只展开内部语句
+            if ($invokeOnlyBlocks.Count -gt 0) {
+                $scriptBlockExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+                if ($null -ne $scriptBlockExpansion -and $scriptBlockExpansion.InvokeOnlyExpanded) {
+                    # InvokeOnly 已经完全展开，不需要创建后续节点
+                    return $false
+                }
+            }
+
+            # 处理 Immediate 类型的 ScriptBlock：内联展开
+            if ($immediateBlocks.Count -gt 0) {
+                $scriptBlockExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $node -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+                if ($null -ne $scriptBlockExpansion -and -not $scriptBlockExpansion.InvokeOnlyExpanded) {
+                    # 创建最终节点
+                    $finalNode = Add-Node -cfg $cfg -type $node.GetType().Name -text $scriptBlockExpansion.ModifiedText -line $node.Extent.StartLineNumber -ast $node
+
+                    # 为最终节点添加所有 ScriptBlock 变量到 VarsRead
+                    foreach ($varEntry in $scriptBlockExpansion.ScriptBlockVarEntries) {
+                        Add-VarToNode -node $finalNode -varEntry $varEntry -accessType "Read"
+                    }
+
+                    # 连接最后一个展开节点到最终节点
+                    if ($null -ne $prevNodeRef.Value) {
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $finalNode.Id -label "ScriptBlock"
+                    }
+                    $prevNodeRef.Value = $finalNode
+                    return $false
+                }
+            }
+        }
+
+        # 没有嵌套 Pipeline 或 ScriptBlock，直接创建节点
         $currentNode = Add-Node -cfg $cfg -type $node.GetType().Name -text $node.Extent.Text -line $node.Extent.StartLineNumber -ast $node
         # 连接到上一个节点
         if ($null -ne $prevNodeRef.Value) {
@@ -2366,6 +3047,7 @@ function Get-ScriptControlFlow {
     $mycfg = @{
         Nodes = @()
         Edges = @()
+        DefinedFunctions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)  # 已定义的函数名集合
     }
 
     # 处理AST节点
