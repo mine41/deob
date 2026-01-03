@@ -97,3 +97,87 @@
 # }
 
 # Reflection-Execution
+
+# #1 单一 pipeline + scriptblock
+# 1..3 | ForEach-Object { $_ }
+
+# #2 scriptblock 中顺序语句
+# 1..2 | ForEach-Object {
+#     $x = $_
+#     $x
+# }
+
+# #3 scriptblock 中 if
+# 1..3 | ForEach-Object {
+#     if ($_ -gt 1) { $_ }
+# }
+
+# #4 if / else 分支
+# 1..2 | ForEach-Object {
+#     if ($_ -eq 1) { 10 } else { 20 }
+# }
+
+# #5 scriptblock 内再次使用 pipeline
+# 1..2 | ForEach-Object {
+#     $_ | Write-Output
+# }
+
+# #6 内层 pipeline + 条件
+# 1..3 | ForEach-Object {
+#     $_ | Where-Object { $_ -gt 1 }
+# }
+
+# #7 scriptblock 作为值返回
+# $a = { 1 }
+# $a | ForEach-Object { & $_ }
+
+# #8 scriptblock 中立即执行 scriptblock
+# 1..2 | ForEach-Object {
+#     & { $_ }
+# }
+
+# #9 条件包裹 pipeline
+# if ($true) {
+#     1..2 | ForEach-Object { $_ }
+# }
+
+# #10 pipeline 中条件执行
+# 1..3 | ForEach-Object {
+#     if ($_ -eq 2) { return }
+#     $_
+# }
+
+# #11 scriptblock 中定义 scriptblock 并执行
+# 1..2 | ForEach-Object {
+#     $b = { $_ }
+#     & $b
+# }
+
+# #12 多层 scriptblock 嵌套
+# 1..2 | ForEach-Object {
+#     & { & { $_ } }
+# }
+
+# #13 scriptblock 中 continue
+# 1..3 | ForEach-Object {
+#     if ($_ -eq 2) { continue }
+#     $_
+# }
+
+# #14 scriptblock 中 break
+# 1..3 | ForEach-Object {
+#     if ($_ -eq 2) { break }
+#     $_
+# }
+
+# #15 pipeline + 嵌套 if + scriptblock
+# 1..3 | ForEach-Object {
+#     if ($_ -gt 1) {
+#         & { $_ }
+#     }
+# }
+
+# #16 pipeline → scriptblock → pipeline
+# 1..2 | ForEach-Object {
+#     & { $_ | Write-Output }
+# }
