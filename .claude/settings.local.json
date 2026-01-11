@@ -43,7 +43,9 @@
       "Bash(pwsh -NoProfile -Command \". ./Generate-CFG.ps1; $cfg = Get-ScriptControlFlow -ScriptPath ''in/in.ps1''; $cfg.Nodes | Select-Object Id, Type, Text | Format-Table -AutoSize -Wrap\")",
       "Bash(pwsh -NoProfile -File - <<'EOF'\n. ./Generate-CFG.ps1\n$cfg = Get-ScriptControlFlow -ScriptPath 'in/in.ps1'\n$cfg.Nodes | Select-Object Id, Type, Text | Format-Table -AutoSize -Wrap\nEOF)",
       "Bash(pwsh -NoProfile -File - <<'EOF'\n$code = '\"当前时间: $\\({ Get-Date } | ForEach-Object { & $_ }\\)\"'\n$ast = [System.Management.Automation.Language.Parser]::ParseInput\\($code, [ref]$null, [ref]$null\\)\n$ast.EndBlock.Statements[0].PipelineElements[0].GetType\\(\\).Name\n$ast.EndBlock.Statements[0].PipelineElements[0].Expression.GetType\\(\\).Name\nEOF)",
-      "Bash(pwsh -NoProfile -File -:*)"
+      "Bash(pwsh -NoProfile -File -:*)",
+      "Bash(pwsh -NoProfile -File test-dynamic-invoke.ps1)",
+      "Bash(pwsh -NoProfile -File test-cfg-output.ps1)"
     ]
   }
 }

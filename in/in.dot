@@ -15,25 +15,13 @@ digraph G {
     2 [label="Id 2\lEnd\lScript End", shape=oval];
     3 [label="Id 3\lMainStart\lMain Script", shape=box];
     4 [label="Id 4\lMainEnd\lEnd Main Script", shape=box];
-    5 [label="Id 5\lPipelineElement\l1..2", shape=box];
-    6 [label="Id 6\lBlockStart\lScriptBlock _block_e1c643b8", shape=box];
-    7 [label="Id 7\lBlockEnd\lEnd ScriptBlock _block_e1c643b8", shape=box];
-    8 [label="Id 8\lBlockStart\lScriptBlock _block_f7c50457", shape=box];
-    9 [label="Id 9\lBlockEnd\lEnd ScriptBlock _block_f7c50457", shape=box];
-    10 [label="Id 10\lPipelineElement\l$_", shape=box];
-    11 [label="Id 11\lPipelineElement\l$_pipe_3e539c49 | Write-Output", shape=box];
-    12 [label="Id 12\lPipelineElement\l& $_block_f7c50457", shape=box];
-    13 [label="Id 13\lPipelineElement\l$_pipe_9cfa9298 | ForEach-Object $_block_e1c643b8", shape=box];
+    5 [label="Id 5\lAssignmentStatementAst\l$t = 'Write-Host \"Hello\"'", shape=box];
+    6 [label="Id 6\lPipelineElement\liex $t\l[DYN: IEX]", shape=box, style=filled, fillcolor="#ffcccc", color="#cc0000", penwidth=2];
 
     // Edges
     1 -> 3;
     3 -> 5;
-    8 -> 10;
-    10 -> 11 [label="Pipeline"];
-    11 -> 9;
-    6 -> 12;
-    12 -> 7;
-    5 -> 13 [label="Pipeline"];
-    13 -> 4;
+    5 -> 6;
+    6 -> 4;
     4 -> 2;
 }

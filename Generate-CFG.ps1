@@ -44,6 +44,114 @@ public enum VarScope
 }
 "@
 
+# 辅助函数：检测动态执行结构（iex / [ScriptBlock]::Create / NewScriptBlock）
+# 返回值：$null 或 @{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
+function Get-DynamicInvokeInfo {
+    param(
+        [Parameter(Mandatory = $true)]
+        $ast
+    )
+
+    if ($null -eq $ast) { return $null }
+
+    # 收集所有匹配的动态执行结构
+    $results = @()
+
+    # 1. 检测 Invoke-Expression / iex
+    # 查找所有 CommandAst
+    $commandAsts = @($ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.CommandAst]
+    }, $true))
+
+    foreach ($cmdAst in $commandAsts) {
+        $cmdName = $cmdAst.GetCommandName()
+        if ($cmdName -in @('Invoke-Expression', 'iex')) {
+            # 获取第一个参数（排除命令名本身）
+            $argAst = $null
+            if ($cmdAst.CommandElements.Count -gt 1) {
+                $argAst = $cmdAst.CommandElements[1]
+            }
+            $results += @{
+                Type   = "IEX"
+                ArgAst = $argAst
+            }
+        }
+    }
+
+    # 2. 检测 [ScriptBlock]::Create() / [System.Management.Automation.ScriptBlock]::Create()
+    # 查找所有 InvokeMemberExpressionAst（静态方法调用）
+    $invokeMemberAsts = @($ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]
+    }, $true))
+
+    foreach ($invokeAst in $invokeMemberAsts) {
+        # 检查是否是静态调用（Static = $true）
+        if (-not $invokeAst.Static) { continue }
+
+        # 检查方法名是否是 Create
+        $memberName = $invokeAst.Member
+        if ($memberName -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $memberName = $memberName.Value
+        }
+        if ($memberName -ne 'Create') { continue }
+
+        # 检查类型是否是 ScriptBlock
+        $typeExpr = $invokeAst.Expression
+        if ($typeExpr -is [System.Management.Automation.Language.TypeExpressionAst]) {
+            $typeName = $typeExpr.TypeName.FullName
+            if ($typeName -in @('ScriptBlock', 'System.Management.Automation.ScriptBlock')) {
+                # 获取第一个参数
+                $argAst = $null
+                if ($invokeAst.Arguments.Count -gt 0) {
+                    $argAst = $invokeAst.Arguments[0]
+                }
+                $results += @{
+                    Type   = "ScriptBlockCreate"
+                    ArgAst = $argAst
+                }
+            }
+        }
+    }
+
+    # 3. 检测 $ExecutionContext.InvokeCommand.NewScriptBlock()
+    # 查找所有实例方法调用
+    foreach ($invokeAst in $invokeMemberAsts) {
+        # 跳过静态调用
+        if ($invokeAst.Static) { continue }
+
+        # 检查方法名是否是 NewScriptBlock
+        $memberName = $invokeAst.Member
+        if ($memberName -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $memberName = $memberName.Value
+        }
+        if ($memberName -ne 'NewScriptBlock') { continue }
+
+        # 获取第一个参数
+        $argAst = $null
+        if ($invokeAst.Arguments.Count -gt 0) {
+            $argAst = $invokeAst.Arguments[0]
+        }
+        $results += @{
+            Type   = "NewScriptBlock"
+            ArgAst = $argAst
+        }
+    }
+
+    # 返回结果
+    if ($results.Count -eq 0) {
+        return $null
+    }
+    elseif ($results.Count -eq 1) {
+        return $results[0]
+    }
+    else {
+        # 多个动态执行结构，返回数组
+        return $results
+    }
+}
+
 # 辅助函数：添加节点
 function Add-Node {
     param(
@@ -55,19 +163,22 @@ function Add-Node {
         $ownerAst = $null  # 节点所属的结构 AST（用于 try/catch 嵌套判断）
     )
     $node = [PSCustomObject]@{
-        Id          = $cfg.Nodes.Count + 1
-        Type        = $type
-        Text        = $text
-        Line        = $line
-        Ast         = $ast
-        OwnerAst    = $ownerAst  # 虚拟节点所属的结构（如 switch/foreach/for 的 AST）
-        VarsRead    = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
-        VarsWritten = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
+        Id            = $cfg.Nodes.Count + 1
+        Type          = $type
+        Text          = $text
+        Line          = $line
+        Ast           = $ast
+        OwnerAst      = $ownerAst  # 虚拟节点所属的结构（如 switch/foreach/for 的 AST）
+        VarsRead      = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
+        VarsWritten   = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
+        DynamicInvoke = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
     }
 
     # 如果提供了 AST，分析该节点中的变量读写情况
     if ($null -ne $ast) {
         Populate-NodeVariableUsage -node $node
+        # 检测动态执行结构
+        $node.DynamicInvoke = Get-DynamicInvokeInfo -ast $ast
     }
 
     $cfg.Nodes += $node
@@ -746,15 +857,54 @@ function Expand-NestedScriptBlocks {
     }
 
     # 处理延迟执行的 ScriptBlock：创建独立子图，使用赋值目标变量名
-    # 记录是否有独立的 ScriptBlock（没有赋值目标）
-    $hasStandaloneDeferred = $false
+    # 记录替换信息，用于后续统一替换文本
+    $deferredReplacements = @()
+    $deferredVarEntries = @()
     foreach ($sb in $deferredBlocks) {
         # 检查是否已处理过
         if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
+            # 已处理过，检查是否是直接赋值的情况
+            # 直接赋值（$var = { ... }）不需要替换文本
+            $varName = $cfg.ProcessedScriptBlocks[$sb]
+            $parent = $sb.Parent
+
+            # 检查是否是直接赋值：父节点是 CommandExpressionAst，
+            # 且其 Expression 就是这个 ScriptBlock
+            $isDirectAssignment = $false
+            if ($parent -is [System.Management.Automation.Language.CommandExpressionAst] -and
+                $parent.Expression -eq $sb) {
+                $grandParent = $parent.Parent
+                # 检查祖父是否是赋值语句的右侧 Pipeline
+                if ($grandParent -is [System.Management.Automation.Language.PipelineAst] -and
+                    $grandParent.PipelineElements.Count -eq 1) {
+                    $greatGrandParent = $grandParent.Parent
+                    if ($greatGrandParent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                        $isDirectAssignment = $true
+                    }
+                }
+                # 也可能赋值右侧直接是 CommandExpressionAst
+                if ($grandParent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    $isDirectAssignment = $true
+                }
+            }
+
+            if ($isDirectAssignment) {
+                # 直接赋值，不需要替换
+                continue
+            }
+
+            # 非直接赋值，记录替换信息
+            $blockVarEntry = [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+            $deferredReplacements += @{
+                Original = $sb.Extent.Text
+                Replacement = "`$$varName"
+                VarEntry = $blockVarEntry
+            }
+            $deferredVarEntries += $blockVarEntry
             continue
         }
 
-        # 尝试从父 AST 获取变量名
+        # 尝试从父 AST 获取变量名（仅用于直接赋值的情况）
         $varName = $null
         $parent = $sb.Parent
         if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
@@ -767,41 +917,79 @@ function Expand-NestedScriptBlocks {
 
         # 如果没有赋值目标（独立的 ScriptBlock 字面量作为值），生成唯一块名称
         if ($null -eq $varName) {
-            $hasStandaloneDeferred = $true
             # 生成唯一块名称（作为变量）
             $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
             $varName = "_block_$guid"
-            $blockVarEntry = [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+        }
 
-            # 标记为已处理，记录变量名
-            $cfg.ProcessedScriptBlocks[$sb] = $varName
+        $blockVarEntry = [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
 
-            # 【修改】不再创建 BlockDef 节点，只创建独立子图
-            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+        # 标记为已处理，记录变量名
+        $cfg.ProcessedScriptBlocks[$sb] = $varName
 
-            # 【修改】创建 PipelineElement 节点，用变量引用替代原始 ScriptBlock 字面量
-            # 这表示将 ScriptBlock 字面量当作一个值使用
-            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text "`$$varName" -line $sb.Extent.StartLineNumber -ast $sb
-            Add-VarToNode -node $pipeNode -varEntry $blockVarEntry -accessType "Read"
+        # 创建独立子图
+        $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
+
+        # 记录替换信息（只替换 ScriptBlock 本身，保留外围表达式如 .Invoke()）
+        $deferredReplacements += @{
+            Original = $sb.Extent.Text
+            Replacement = "`$$varName"
+            VarEntry = $blockVarEntry
+        }
+        $deferredVarEntries += $blockVarEntry
+    }
+
+    # 如果有 Deferred 类型的 ScriptBlock 需要替换
+    if ($deferredReplacements.Count -gt 0) {
+        # 检查是否整个 AST 就是一个独立的 ScriptBlock 字面量（如单独一行 { ... }）
+        # 只有这种情况才直接创建节点
+        $isStandaloneDeferred = $false
+        if ($deferredBlocks.Count -eq 1) {
+            $sb = $deferredBlocks[0]
+            $parent = $sb.Parent
+            # 检查父节点是否是 CommandExpressionAst，且祖父是 PipelineAst
+            if ($parent -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                # 检查 CommandExpressionAst 的 Expression 是否就是这个 ScriptBlock
+                if ($parent.Expression -eq $sb) {
+                    $grandParent = $parent.Parent
+                    # 检查是否是独立的 Pipeline（只有一个元素且就是这个 CommandExpression）
+                    if ($grandParent -is [System.Management.Automation.Language.PipelineAst] -and
+                        $grandParent.PipelineElements.Count -eq 1 -and
+                        $grandParent.PipelineElements[0] -eq $parent -and
+                        $grandParent -eq $ast) {
+                        $isStandaloneDeferred = $true
+                    }
+                }
+            }
+        }
+
+        if ($isStandaloneDeferred) {
+            # 独立的 ScriptBlock 字面量，直接创建节点
+            $r = $deferredReplacements[0]
+            $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $r.Replacement -line $ast.Extent.StartLineNumber -ast $ast
+            Add-VarToNode -node $pipeNode -varEntry $r.VarEntry -accessType "Read"
             if ($null -ne $prevNodeRef.Value) {
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
             }
             $prevNodeRef.Value = $pipeNode
-        } else {
-            # 有赋值目标，只创建子图（赋值语句本身会作为节点）
-            # 标记为已处理，记录变量名
-            $cfg.ProcessedScriptBlocks[$sb] = $varName
-            # 使用 $varName 作为 block 变量名
-            $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
-        }
-    }
 
-    # 如果有独立的 ScriptBlock（没有赋值目标），已经完全处理，返回标志跳过后续节点创建
-    if ($hasStandaloneDeferred) {
+            return @{
+                ModifiedText = $null
+                ScriptBlockVarEntries = @()
+                InvokeOnlyExpanded = $true
+            }
+        }
+
+        # 否则，返回修改后的文本（保留 .Invoke() 等外围表达式）
+        $modifiedText = $ast.Extent.Text
+        foreach ($r in $deferredReplacements) {
+            $modifiedText = $modifiedText.Replace($r.Original, $r.Replacement)
+        }
+
         return @{
-            ModifiedText = $null
-            ScriptBlockVarEntries = @()
-            InvokeOnlyExpanded = $true
+            ModifiedText = $modifiedText
+            ScriptBlockVarEntries = $deferredVarEntries
+            InvokeOnlyExpanded = $false
         }
     }
 
@@ -2733,6 +2921,7 @@ function Convert-PipelineAstNode {
         $element = $elements[$i]
         $baseText = $element.Extent.Text
         $hasExpansion = $false
+        $hasPipelineExpansion = $false  # 是否有 Pipeline 展开（区分 ScriptBlock 展开）
         $allVarEntries = @()
         $skipNodeCreation = $false
 
@@ -2747,6 +2936,7 @@ function Convert-PipelineAstNode {
                 $allVarEntries += $pipelineExpansion.ScriptBlockVarEntries
             }
             $hasExpansion = $true
+            $hasPipelineExpansion = $true  # 区分 Pipeline 展开
         }
 
         # 2. 检查当前元素内部是否有嵌套的 ScriptBlock（仅处理不在嵌套 Pipeline 内的 ScriptBlock）
@@ -2762,6 +2952,7 @@ function Convert-PipelineAstNode {
                     $baseText = $scriptBlockExpansion.ModifiedText
                     $allVarEntries += $scriptBlockExpansion.ScriptBlockVarEntries
                     $hasExpansion = $true
+                    # 注意：ScriptBlock 展开不设置 hasPipelineExpansion
                 }
             }
         } else {
@@ -2793,14 +2984,14 @@ function Convert-PipelineAstNode {
 
         # 连接边
         if ($null -ne $prevNodeRef.Value) {
-            if ($hasExpansion) {
-                # 有展开，使用 Pipeline 标签
+            if ($hasPipelineExpansion) {
+                # 有 Pipeline 展开（嵌套 Pipeline），使用 Pipeline 标签
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
             } elseif ($i -gt 0) {
                 # Pipeline 元素之间用 "Pipeline" 标签
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
             } else {
-                # 首元素与前一个节点的普通连接
+                # 首元素与前一个节点的普通连接（包括 ScriptBlock 展开的情况）
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
             }
         }
@@ -3583,7 +3774,21 @@ function Export-CfgToDot {
             default                                           { "box" }
         }
         $label = "Id $($node.Id)\l$($node.Type)\l$(Format-DotLabel $node.Text)"
-        $nodeDefinitions += "    $($node.Id) [label=`"$label`", shape=$shape];"
+
+        # DynamicInvoke 不为空的节点使用特殊样式（红色边框 + 浅红填充）
+        $style = ""
+        if ($null -ne $node.DynamicInvoke) {
+            # 获取动态执行类型标签
+            $dynType = if ($node.DynamicInvoke -is [array]) {
+                ($node.DynamicInvoke | ForEach-Object { $_.Type }) -join ", "
+            } else {
+                $node.DynamicInvoke.Type
+            }
+            $label += "\l[DYN: $dynType]"
+            $style = ", style=filled, fillcolor=`"#ffcccc`", color=`"#cc0000`", penwidth=2"
+        }
+
+        $nodeDefinitions += "    $($node.Id) [label=`"$label`", shape=$shape$style];"
     }
 
     # 2. 生成边定义（同样使用foreach语句）

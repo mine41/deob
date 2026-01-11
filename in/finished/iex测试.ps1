@@ -2,8 +2,8 @@
 # Invoke-Expression 'Write-Host "Hello"'
 # iex 'Write-Host "Hello"'
 # IEX 'Write-Host "Hello"'
-$t = 'Write-Host "Hello"'
-iex $t
+# $t = 'Write-Host "Hello"'
+# iex $t
 
 # 二、[ScriptBlock]::Create
 # $b = "Write-Host 'Hello'"
