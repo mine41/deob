@@ -434,16 +434,20 @@ function Populate-NodeVariableUsage {
         $kind = Get-VariableAccessKind -VarAst $v
         if (-not $kind) { continue }
 
-        # VariablePath.UserPath 去掉了 $ 和作用域前缀
-        $name = $v.VariablePath.UserPath
-        if ([string]::IsNullOrWhiteSpace($name)) { continue }
-
         # 根据 VariablePath 上的标志推断作用域提示（使用统一的 VarScope 枚举）
         $scope = [VarScope]::Unspecified
         if     ($v.VariablePath.IsGlobal)  { $scope = [VarScope]::Global }
         elseif ($v.VariablePath.IsScript)  { $scope = [VarScope]::Script }
         elseif ($v.VariablePath.IsLocal)   { $scope = [VarScope]::Local }
         elseif ($v.VariablePath.IsPrivate) { $scope = [VarScope]::Private }
+
+        # 获取纯变量名（去掉作用域前缀）
+        # UserPath 包含前缀（如 "global:x"），需要去掉
+        $name = $v.VariablePath.UserPath
+        if ($scope -ne [VarScope]::Unspecified -and $name -match ':') {
+            $name = $name -replace '^[^:]+:', ''
+        }
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
 
         $entry = [PSCustomObject]@{
             Name  = $name
