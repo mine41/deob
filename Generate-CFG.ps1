@@ -173,6 +173,7 @@ function Add-Node {
         VarsWritten   = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
         DynamicInvoke = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
         Invokes       = @{ Functions = @(); ScriptBlocks = @() }  # 调用的函数和脚本块
+        Resolvables   = @()  # 可还原表达式列表
     }
 
     # 如果提供了 AST，分析该节点中的变量读写情况
@@ -182,6 +183,8 @@ function Add-Node {
         $node.DynamicInvoke = Get-DynamicInvokeInfo -ast $ast
         # 分析函数调用和脚本块引用
         Populate-NodeInvokes -node $node -cfg $cfg
+        # 分析可还原表达式
+        Populate-NodeResolvables -node $node
     }
 
     $cfg.Nodes += $node
@@ -547,6 +550,73 @@ function Populate-NodeInvokes {
         $_.Name -match '^_block_[a-f0-9]{8}$'
     } | ForEach-Object { $_.Name })
     $node.Invokes.ScriptBlocks = @($blockVars | Select-Object -Unique)
+}
+
+# 辅助函数：分析节点中的可还原表达式
+function Populate-NodeResolvables {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$node
+    )
+
+    $node.Resolvables = @()
+    if ($null -eq $node.Ast) { return }
+
+    # 目标类型集合
+    $targetTypes = @(
+        [System.Management.Automation.Language.BinaryExpressionAst],
+        [System.Management.Automation.Language.UnaryExpressionAst],
+        [System.Management.Automation.Language.InvokeMemberExpressionAst]
+    )
+
+    # 查找所有目标表达式（排除 ScriptBlock 内部）
+    $allExprs = @($node.Ast.FindAll({
+        param($n)
+        if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { return $false }
+        ($n -is [System.Management.Automation.Language.BinaryExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.UnaryExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst])
+    }, $true))
+
+    # 过滤掉嵌套在 ScriptBlockExpressionAst 内部的
+    $allExprs = @($allExprs | Where-Object {
+        $ancestor = $_.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                return $false
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return $true
+    })
+
+    # 只保留最外层：排除祖先中也有目标表达式的
+    $outerExprs = @($allExprs | Where-Object {
+        $expr = $_
+        $ancestor = $expr.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { break }
+            foreach ($t in $targetTypes) {
+                if ($ancestor -is $t) { return $false }
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return $true
+    })
+
+    # 构建结果
+    foreach ($expr in $outerExprs) {
+        $type = switch ($true) {
+            ($expr -is [System.Management.Automation.Language.BinaryExpressionAst])       { "Binary" }
+            ($expr -is [System.Management.Automation.Language.UnaryExpressionAst])        { "Unary" }
+            ($expr -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) { "MemberInvoke" }
+        }
+        $node.Resolvables += @{
+            Type = $type
+            Ast  = $expr
+            Text = $expr.Extent.Text
+        }
+    }
 }
 
 # 辅助函数：查找 AST 中所有用户定义的函数调用
@@ -3889,6 +3959,16 @@ function Export-CfgToDot {
             # 如果没有其他样式，使用绿色样式
             if ($style -eq "") {
                 $style = ", style=filled, fillcolor=`"#ccffcc`", color=`"#009900`", penwidth=2"
+            }
+        }
+
+        # 可还原表达式标记（黄色样式）
+        if ($node.Resolvables.Count -gt 0) {
+            $label += "\l[RESOLVABLE: $($node.Resolvables.Count)]"
+
+            # 如果没有其他样式，使用黄色样式
+            if ($style -eq "") {
+                $style = ", style=filled, fillcolor=`"#fff3cc`", color=`"#cc9900`", penwidth=2"
             }
         }
 
