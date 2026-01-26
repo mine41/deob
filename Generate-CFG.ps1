@@ -172,6 +172,7 @@ function Add-Node {
         VarsRead      = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
         VarsWritten   = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
         DynamicInvoke = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
+        Invokes       = @{ Functions = @(); ScriptBlocks = @() }  # 调用的函数和脚本块
     }
 
     # 如果提供了 AST，分析该节点中的变量读写情况
@@ -179,6 +180,8 @@ function Add-Node {
         Populate-NodeVariableUsage -node $node
         # 检测动态执行结构
         $node.DynamicInvoke = Get-DynamicInvokeInfo -ast $ast
+        # 分析函数调用和脚本块引用
+        Populate-NodeInvokes -node $node -cfg $cfg
     }
 
     $cfg.Nodes += $node
@@ -216,6 +219,14 @@ function Add-VarToNode {
         $exists = $node.VarsWritten | Where-Object { $_.Name -eq $varEntry.Name -and $_.Scope -eq $varEntry.Scope }
         if (-not $exists) {
             $node.VarsWritten = @($node.VarsWritten) + @($varEntry)
+        }
+    }
+
+    # 如果是 _block_ 变量，同步更新 Invokes.ScriptBlocks
+    if ($varEntry.Name -match '^_block_[a-f0-9]{8}$') {
+        $existsInInvokes = $node.Invokes.ScriptBlocks -contains $varEntry.Name
+        if (-not $existsInInvokes) {
+            $node.Invokes.ScriptBlocks = @($node.Invokes.ScriptBlocks) + @($varEntry.Name)
         }
     }
 }
@@ -479,6 +490,63 @@ function Populate-NodeVariableUsage {
             Group-Object Name, Scope |
             ForEach-Object { $_.Group[0] }
     )
+}
+
+# 辅助函数：分析节点中的函数调用和脚本块引用
+function Populate-NodeInvokes {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$node,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$cfg
+    )
+
+    $node.Invokes = @{
+        Functions    = @()
+        ScriptBlocks = @()
+    }
+
+    if ($null -eq $node.Ast) { return }
+
+    # 1. 检测函数调用（查找 CommandAst）
+    $commandAsts = @($node.Ast.FindAll({
+        param($n)
+        # 跳过 ScriptBlockExpressionAst 内部
+        if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+            return $false
+        }
+        $n -is [System.Management.Automation.Language.CommandAst]
+    }, $true))
+
+    # 过滤掉嵌套在 ScriptBlockExpressionAst 内部的
+    $commandAsts = @($commandAsts | Where-Object {
+        $ancestor = $_.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                return $false
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return $true
+    })
+
+    $funcCalls = @()
+    foreach ($cmdAst in $commandAsts) {
+        $cmdName = $cmdAst.GetCommandName()
+        if (-not [string]::IsNullOrWhiteSpace($cmdName)) {
+            if ($cfg.DefinedFunctions.Contains($cmdName)) {
+                $funcCalls += $cmdName
+            }
+        }
+    }
+    $node.Invokes.Functions = @($funcCalls | Select-Object -Unique)
+
+    # 2. 检测脚本块引用（从 VarsRead 和 VarsWritten 中筛选 _block_ 变量）
+    $allVars = @($node.VarsRead) + @($node.VarsWritten)
+    $blockVars = @($allVars | Where-Object {
+        $_.Name -match '^_block_[a-f0-9]{8}$'
+    } | ForEach-Object { $_.Name })
+    $node.Invokes.ScriptBlocks = @($blockVars | Select-Object -Unique)
 }
 
 # 辅助函数：查找 AST 中所有用户定义的函数调用
@@ -3790,6 +3858,38 @@ function Export-CfgToDot {
             }
             $label += "\l[DYN: $dynType]"
             $style = ", style=filled, fillcolor=`"#ffcccc`", color=`"#cc0000`", penwidth=2"
+        }
+
+        # Invokes 不为空的节点显示调用信息（蓝色边框 + 浅蓝填充）
+        $hasInvokes = ($node.Invokes.Functions.Count -gt 0) -or ($node.Invokes.ScriptBlocks.Count -gt 0)
+        if ($hasInvokes) {
+            $invokeLabels = @()
+            if ($node.Invokes.Functions.Count -gt 0) {
+                $funcList = $node.Invokes.Functions -join ", "
+                $invokeLabels += "Func: $funcList"
+            }
+            if ($node.Invokes.ScriptBlocks.Count -gt 0) {
+                $blockList = $node.Invokes.ScriptBlocks -join ", "
+                $invokeLabels += "Block: $blockList"
+            }
+            $label += "\l[CALLS: $($invokeLabels -join '; ')]"
+
+            # 如果没有 DynamicInvoke 样式，使用蓝色样式
+            if ($style -eq "") {
+                $style = ", style=filled, fillcolor=`"#cce5ff`", color=`"#0066cc`", penwidth=2"
+            }
+        }
+
+        # 检测节点是否将结果保存到 _pipe_ 变量（pipeline 非末尾节点）
+        $pipeVarsWritten = @($node.VarsWritten | Where-Object { $_.Name -match '^_pipe_[a-f0-9]{8}$' })
+        if ($pipeVarsWritten.Count -gt 0) {
+            $pipeVarList = ($pipeVarsWritten | ForEach-Object { "`$$($_.Name)" }) -join ", "
+            $label += "\l[PIPE OUT: $pipeVarList]"
+
+            # 如果没有其他样式，使用绿色样式
+            if ($style -eq "") {
+                $style = ", style=filled, fillcolor=`"#ccffcc`", color=`"#009900`", penwidth=2"
+            }
         }
 
         $nodeDefinitions += "    $($node.Id) [label=`"$label`", shape=$shape$style];"
