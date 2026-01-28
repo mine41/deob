@@ -1,39 +1,6 @@
-# # 可还原表达式测试用例
-
-# # 1. BinaryExpressionAst - 字符串连接（常见混淆手法）
-# $cmd = "Get" + "-" + "Process"
-
-# # 2. BinaryExpressionAst - 算术运算
-# $port = 80 + 443
-# $result = 10 * 5 - 3
-
-# # 3. BinaryExpressionAst - 嵌套运算（只记录最外层）
-# $nested = (1 + 2) * (3 + 4)
-
-# # 4. BinaryExpressionAst - 逻辑运算
-# $check = $true -and $false
-# $valid = (1 -eq 1) -or (2 -gt 3)
-
-# # 5. UnaryExpressionAst - 取反
-# $flag = -not $false
-
-# # 6. UnaryExpressionAst - 自增/自减
-# $i = 0
-# $i++
-# ++$i
-
-# # 7. InvokeMemberExpressionAst - .NET 静态方法调用（常见混淆）
-$decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("SGVsbG8="))
-
-# # 8. InvokeMemberExpressionAst - 字符串方法
-# $upper = "hello".ToUpper()
-# $replaced = "abc".Replace("a", "x")
-
-# # 9. 混合场景：二元运算 + 方法调用
-# $combined = ("hel" + "lo").ToUpper()
-
-# # 10. 格式化字符串混淆
-# $fmt = "{0}{1}" -f "Get", "-Date"
-
-# # 11. 字符拼接混淆
-# $chars = [char]71 + [char]101 + [char]116
+function FunctionName {
+    (1+2)
+    return (1+2)
+}
+$a = FunctionName
+write-host $a

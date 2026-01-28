@@ -174,6 +174,7 @@ function Add-Node {
         DynamicInvoke = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
         Invokes       = @{ Functions = @(); ScriptBlocks = @() }  # 调用的函数和脚本块
         Resolvables   = @()  # 可还原表达式列表
+        AliasesUsed   = @()  # 使用的别名列表 @{ Name; Target; Ast }
     }
 
     # 如果提供了 AST，分析该节点中的变量读写情况
@@ -185,6 +186,22 @@ function Add-Node {
         Populate-NodeInvokes -node $node -cfg $cfg
         # 分析可还原表达式
         Populate-NodeResolvables -node $node
+
+        # 提取别名定义（Set-Alias/New-Alias）
+        $commandAsts = @($ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.CommandAst]
+        }, $true))
+        foreach ($cmdAst in $commandAsts) {
+            $aliasDef = Get-AliasDefinitionFromCommand -cmdAst $cmdAst
+            if ($null -ne $aliasDef) {
+                $cfg.DefinedAliases[$aliasDef.Name] = $aliasDef.Value
+            }
+        }
+
+        # 分析别名使用（需要在提取别名定义之后，但当前节点的别名定义在后续节点才生效）
+        # 注意：当前节点定义的别名，当前节点不会使用，所以顺序是对的
+        Populate-NodeAliasUsage -node $node -cfg $cfg
     }
 
     $cfg.Nodes += $node
@@ -563,19 +580,39 @@ function Populate-NodeResolvables {
     if ($null -eq $node.Ast) { return }
 
     # 目标类型集合
+    # 高优先级：Binary, Unary, MemberInvoke, Convert, ExpandableString, Index
+    # 中优先级：SubExpression, Member, Paren
     $targetTypes = @(
+        # 原有类型
         [System.Management.Automation.Language.BinaryExpressionAst],
         [System.Management.Automation.Language.UnaryExpressionAst],
-        [System.Management.Automation.Language.InvokeMemberExpressionAst]
+        [System.Management.Automation.Language.InvokeMemberExpressionAst],
+        # 高优先级新增
+        [System.Management.Automation.Language.ConvertExpressionAst],
+        [System.Management.Automation.Language.ExpandableStringExpressionAst],
+        [System.Management.Automation.Language.IndexExpressionAst],
+        # 中优先级新增
+        [System.Management.Automation.Language.SubExpressionAst],
+        [System.Management.Automation.Language.MemberExpressionAst],
+        [System.Management.Automation.Language.ParenExpressionAst]
     )
 
     # 查找所有目标表达式（排除 ScriptBlock 内部）
     $allExprs = @($node.Ast.FindAll({
         param($n)
         if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { return $false }
+        # 原有类型
         ($n -is [System.Management.Automation.Language.BinaryExpressionAst]) -or
         ($n -is [System.Management.Automation.Language.UnaryExpressionAst]) -or
-        ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst])
+        ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) -or
+        # 高优先级新增
+        ($n -is [System.Management.Automation.Language.ConvertExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.IndexExpressionAst]) -or
+        # 中优先级新增
+        ($n -is [System.Management.Automation.Language.SubExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.MemberExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.ParenExpressionAst])
     }, $true))
 
     # 过滤掉嵌套在 ScriptBlockExpressionAst 内部的
@@ -607,14 +644,139 @@ function Populate-NodeResolvables {
     # 构建结果
     foreach ($expr in $outerExprs) {
         $type = switch ($true) {
-            ($expr -is [System.Management.Automation.Language.BinaryExpressionAst])       { "Binary" }
-            ($expr -is [System.Management.Automation.Language.UnaryExpressionAst])        { "Unary" }
-            ($expr -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) { "MemberInvoke" }
+            # 原有类型
+            ($expr -is [System.Management.Automation.Language.BinaryExpressionAst])           { "Binary" }
+            ($expr -is [System.Management.Automation.Language.UnaryExpressionAst])            { "Unary" }
+            ($expr -is [System.Management.Automation.Language.InvokeMemberExpressionAst])     { "MemberInvoke" }
+            # 高优先级新增
+            ($expr -is [System.Management.Automation.Language.ConvertExpressionAst])          { "Convert" }
+            ($expr -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) { "ExpandableString" }
+            ($expr -is [System.Management.Automation.Language.IndexExpressionAst])            { "Index" }
+            # 中优先级新增
+            ($expr -is [System.Management.Automation.Language.SubExpressionAst])              { "SubExpression" }
+            ($expr -is [System.Management.Automation.Language.MemberExpressionAst])           { "Member" }
+            ($expr -is [System.Management.Automation.Language.ParenExpressionAst])            { "Paren" }
+            default { "Unknown" }
         }
         $node.Resolvables += @{
             Type = $type
             Ast  = $expr
             Text = $expr.Extent.Text
+        }
+    }
+}
+
+# 辅助函数：从 Set-Alias/New-Alias 命令提取别名定义
+# 返回值：@{ Name = "别名"; Value = "目标命令" } 或 $null
+function Get-AliasDefinitionFromCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$cmdAst
+    )
+
+    $cmdName = $cmdAst.GetCommandName()
+    if ($cmdName -notin @('Set-Alias', 'New-Alias', 'sal', 'nal')) {
+        return $null
+    }
+
+    $aliasName = $null
+    $aliasValue = $null
+
+    # 解析参数
+    $elements = $cmdAst.CommandElements
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+
+        # 检查是否是参数名
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramName = $elem.ParameterName.ToLower()
+            # -Name 或 -n
+            if ($paramName -in @('name', 'n')) {
+                # 下一个元素是值
+                if ($i + 1 -lt $elements.Count) {
+                    $nextElem = $elements[$i + 1]
+                    if ($nextElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                        $aliasName = $nextElem.Value
+                    } elseif ($nextElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+                        $aliasName = $nextElem.Value
+                    }
+                    $i++
+                }
+            }
+            # -Value 或 -val 或 -v
+            elseif ($paramName -in @('value', 'val', 'v')) {
+                if ($i + 1 -lt $elements.Count) {
+                    $nextElem = $elements[$i + 1]
+                    if ($nextElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                        $aliasValue = $nextElem.Value
+                    } elseif ($nextElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+                        $aliasValue = $nextElem.Value
+                    }
+                    $i++
+                }
+            }
+        }
+        # 位置参数（sal output Invoke-Expression）
+        elseif ($elem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            if ($null -eq $aliasName) {
+                $aliasName = $elem.Value
+            } elseif ($null -eq $aliasValue) {
+                $aliasValue = $elem.Value
+            }
+        }
+    }
+
+    if ($null -ne $aliasName -and $null -ne $aliasValue) {
+        return @{
+            Name  = $aliasName
+            Value = $aliasValue
+        }
+    }
+    return $null
+}
+
+# 辅助函数：检测节点中的别名使用
+function Populate-NodeAliasUsage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$node,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$cfg
+    )
+
+    $node.AliasesUsed = @()
+    if ($null -eq $node.Ast) { return }
+
+    # 查找所有 CommandAst（排除 ScriptBlock 内部）
+    $commandAsts = @($node.Ast.FindAll({
+        param($n)
+        if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { return $false }
+        $n -is [System.Management.Automation.Language.CommandAst]
+    }, $true))
+
+    # 过滤掉嵌套在 ScriptBlockExpressionAst 内部的
+    $commandAsts = @($commandAsts | Where-Object {
+        $ancestor = $_.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                return $false
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return $true
+    })
+
+    foreach ($cmdAst in $commandAsts) {
+        $cmdName = $cmdAst.GetCommandName()
+        if (-not [string]::IsNullOrWhiteSpace($cmdName)) {
+            # 检查是否是已定义的别名
+            if ($cfg.DefinedAliases.ContainsKey($cmdName)) {
+                $node.AliasesUsed += @{
+                    Name   = $cmdName
+                    Target = $cfg.DefinedAliases[$cmdName]
+                    Ast    = $cmdAst
+                }
+            }
         }
     }
 }
@@ -3866,6 +4028,7 @@ function Get-ScriptControlFlow {
         Edges = @()
         DefinedFunctions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)  # 已定义的函数名集合
         ProcessedScriptBlocks = @{}  # 已处理的 ScriptBlock AST -> 变量名 的映射，防止重复处理并支持查找
+        DefinedAliases = @{}  # 已定义的别名映射 @{ "别名" = "目标命令" }
     }
 
     # 处理AST节点
@@ -3969,6 +4132,17 @@ function Export-CfgToDot {
             # 如果没有其他样式，使用黄色样式
             if ($style -eq "") {
                 $style = ", style=filled, fillcolor=`"#fff3cc`", color=`"#cc9900`", penwidth=2"
+            }
+        }
+
+        # 别名使用标记（紫色样式）
+        if ($node.AliasesUsed.Count -gt 0) {
+            $aliasList = ($node.AliasesUsed | ForEach-Object { "$($_.Name)->$($_.Target)" }) -join ", "
+            $label += "\l[ALIAS: $aliasList]"
+
+            # 如果没有其他样式，使用紫色样式
+            if ($style -eq "") {
+                $style = ", style=filled, fillcolor=`"#e6ccff`", color=`"#9933ff`", penwidth=2"
             }
         }
 

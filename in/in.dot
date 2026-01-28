@@ -15,11 +15,22 @@ digraph G {
     2 [label="Id 2\lEnd\lScript End", shape=oval];
     3 [label="Id 3\lMainStart\lMain Script", shape=box];
     4 [label="Id 4\lMainEnd\lEnd Main Script", shape=box];
-    5 [label="Id 5\lAssignmentStatementAst\l$decoded = [System.Text.Encoding]::UTF8.GetStri...\l[RESOLVABLE: 1]", shape=box, style=filled, fillcolor="#fff3cc", color="#cc9900", penwidth=2];
+    5 [label="Id 5\lFunctionDef\lfunction FunctionName", shape=box];
+    6 [label="Id 6\lFuncStart\lfunction FunctionName", shape=oval];
+    7 [label="Id 7\lFuncEnd\lEnd function FunctionName", shape=oval];
+    8 [label="Id 8\lPipelineElement\l(1+2)\l[RESOLVABLE: 1]", shape=box, style=filled, fillcolor="#fff3cc", color="#cc9900", penwidth=2];
+    9 [label="Id 9\lReturn\lreturn (1+2)\l[RESOLVABLE: 1]", shape=box, style=filled, fillcolor="#fff3cc", color="#cc9900", penwidth=2];
+    10 [label="Id 10\lAssignmentStatementAst\l$a = FunctionName\l[CALLS: Func: FunctionName]", shape=box, style=filled, fillcolor="#cce5ff", color="#0066cc", penwidth=2];
+    11 [label="Id 11\lPipelineElement\lwrite-host $a", shape=box];
 
     // Edges
     1 -> 3;
     3 -> 5;
-    5 -> 4;
+    6 -> 8;
+    8 -> 9;
+    9 -> 7 [label="Return"];
+    5 -> 10;
+    10 -> 11;
+    11 -> 4;
     4 -> 2;
 }
