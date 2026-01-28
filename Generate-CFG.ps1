@@ -581,7 +581,7 @@ function Populate-NodeResolvables {
 
     # 目标类型集合
     # 高优先级：Binary, Unary, MemberInvoke, Convert, ExpandableString, Index
-    # 中优先级：SubExpression, Member, Paren
+    # 中优先级：SubExpression, Member, Paren, Command
     $targetTypes = @(
         # 原有类型
         [System.Management.Automation.Language.BinaryExpressionAst],
@@ -594,7 +594,8 @@ function Populate-NodeResolvables {
         # 中优先级新增
         [System.Management.Automation.Language.SubExpressionAst],
         [System.Management.Automation.Language.MemberExpressionAst],
-        [System.Management.Automation.Language.ParenExpressionAst]
+        [System.Management.Automation.Language.ParenExpressionAst],
+        [System.Management.Automation.Language.CommandAst]
     )
 
     # 查找所有目标表达式（排除 ScriptBlock 内部）
@@ -612,7 +613,8 @@ function Populate-NodeResolvables {
         # 中优先级新增
         ($n -is [System.Management.Automation.Language.SubExpressionAst]) -or
         ($n -is [System.Management.Automation.Language.MemberExpressionAst]) -or
-        ($n -is [System.Management.Automation.Language.ParenExpressionAst])
+        ($n -is [System.Management.Automation.Language.ParenExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.CommandAst])
     }, $true))
 
     # 过滤掉嵌套在 ScriptBlockExpressionAst 内部的
@@ -627,22 +629,13 @@ function Populate-NodeResolvables {
         return $true
     })
 
-    # 只保留最外层：排除祖先中也有目标表达式的
-    $outerExprs = @($allExprs | Where-Object {
-        $expr = $_
-        $ancestor = $expr.Parent
-        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
-            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { break }
-            foreach ($t in $targetTypes) {
-                if ($ancestor -is $t) { return $false }
-            }
-            $ancestor = $ancestor.Parent
-        }
-        return $true
-    })
+    # 注意：不再过滤"只保留最外层"，记录所有层级的可还原表达式
+    # 后续由 GUI 或替换阶段决定还原粒度
 
-    # 构建结果
-    foreach ($expr in $outerExprs) {
+    # 构建结果（按 StartOffset 排序，外层在前）
+    $sortedExprs = $allExprs | Sort-Object { $_.Extent.StartOffset }
+
+    foreach ($expr in $sortedExprs) {
         $type = switch ($true) {
             # 原有类型
             ($expr -is [System.Management.Automation.Language.BinaryExpressionAst])           { "Binary" }
@@ -656,12 +649,28 @@ function Populate-NodeResolvables {
             ($expr -is [System.Management.Automation.Language.SubExpressionAst])              { "SubExpression" }
             ($expr -is [System.Management.Automation.Language.MemberExpressionAst])           { "Member" }
             ($expr -is [System.Management.Automation.Language.ParenExpressionAst])            { "Paren" }
+            ($expr -is [System.Management.Automation.Language.CommandAst])                    { "Command" }
             default { "Unknown" }
         }
+
+        # 计算嵌套深度（有多少个目标类型的祖先）
+        $depth = 0
+        $ancestor = $expr.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $node.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { break }
+            foreach ($t in $targetTypes) {
+                if ($ancestor -is $t) { $depth++; break }
+            }
+            $ancestor = $ancestor.Parent
+        }
+
         $node.Resolvables += @{
-            Type = $type
-            Ast  = $expr
-            Text = $expr.Extent.Text
+            Type        = $type
+            Ast         = $expr
+            Text        = $expr.Extent.Text
+            StartOffset = $expr.Extent.StartOffset  # 原脚本中的起始位置
+            EndOffset   = $expr.Extent.EndOffset    # 原脚本中的结束位置
+            Depth       = $depth                     # 嵌套深度（0=最外层）
         }
     }
 }
