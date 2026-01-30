@@ -1924,6 +1924,72 @@ function Convert-IfAstNode {
     return $false  # 返回 false 表示不是所有分支都有 return
 }
 
+# 替换文本中的 $_ 变量引用为指定的中间变量
+function Replace-UnderscoreVariable {
+    param([string]$text, [string]$replacementVar)
+    # 注意：-replace 替换字符串中 $ 需要用 $$ 转义（.NET 正则替换语法）
+    return $text -replace '\$_(?![a-zA-Z0-9_])', ('$$' + $replacementVar)
+}
+
+# 将指定范围内的 CFG 节点中的 $_ 引用替换为 $currentVar
+# 同时更新变量追踪信息（VarsRead/VarsWritten 中的 $_ → $currentVar）
+function Replace-UnderscoreInNodes {
+    param(
+        [array]$nodes,
+        [int]$startIndex,
+        [string]$currentVar
+    )
+    $currentVarEntry = [PSCustomObject]@{ Name = $currentVar; Scope = [VarScope]::Unspecified }
+    for ($i = $startIndex; $i -lt $nodes.Count; $i++) {
+        $node = $nodes[$i]
+        # 替换 Text 中的 $_
+        $newText = Replace-UnderscoreVariable -text $node.Text -replacementVar $currentVar
+        if ($newText -ne $node.Text) {
+            $node.Text = $newText
+        }
+        # 替换 VarsRead 中的 $_
+        $hasUnderscoreRead = $node.VarsRead | Where-Object { $_.Name -eq "_" }
+        if ($hasUnderscoreRead) {
+            $node.VarsRead = @($node.VarsRead | Where-Object { $_.Name -ne "_" })
+            Add-VarToNode -node $node -varEntry $currentVarEntry -accessType "Read"
+        }
+        # 替换 VarsWritten 中的 $_
+        $hasUnderscoreWrite = $node.VarsWritten | Where-Object { $_.Name -eq "_" }
+        if ($hasUnderscoreWrite) {
+            $node.VarsWritten = @($node.VarsWritten | Where-Object { $_.Name -ne "_" })
+            Add-VarToNode -node $node -varEntry $currentVarEntry -accessType "Write"
+        }
+    }
+}
+
+# 生成 switch case 的可执行比较表达式
+function Build-SwitchCaseCondition {
+    param($clauseConditionAst, [string]$currentVar, [string[]]$switchFlags)
+
+    if ($null -eq $clauseConditionAst) { return "`$true" }
+
+    $isCaseSensitive = $switchFlags -contains "-CaseSensitive"
+    $isWildcard = $switchFlags -contains "-Wildcard"
+    $isRegex = $switchFlags -contains "-Regex"
+
+    $operator = if ($isWildcard) {
+        if ($isCaseSensitive) { "-clike" } else { "-like" }
+    } elseif ($isRegex) {
+        if ($isCaseSensitive) { "-cmatch" } else { "-match" }
+    } else {
+        if ($isCaseSensitive) { "-ceq" } else { "-eq" }
+    }
+
+    if ($clauseConditionAst -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+        # ScriptBlock 条件: { $_ -gt 5 } → 提取内部代码，替换 $_
+        $bodyStatements = $clauseConditionAst.ScriptBlock.EndBlock.Statements
+        $bodyText = ($bodyStatements | ForEach-Object { $_.Extent.Text }) -join "; "
+        return Replace-UnderscoreVariable -text $bodyText -replacementVar $currentVar
+    } else {
+        return "`$$currentVar $operator $($clauseConditionAst.Extent.Text)"
+    }
+}
+
 function Convert-SwitchAstNode {
     param(
         [hashtable]$cfg,
@@ -1947,10 +2013,12 @@ function Convert-SwitchAstNode {
     $guid = [guid]::NewGuid().ToString("N").Substring(0, 12)
     $collectionVar = "__sw_$guid"
     $indexVar = "__sw_${guid}_idx"
+    $currentVar = "__sw_${guid}_current"
 
     # 预定义内部变量的条目（用于手动设置 VarsRead/VarsWritten）
     $collectionVarEntry = [PSCustomObject]@{ Name = $collectionVar; Scope = [VarScope]::Unspecified }
     $indexVarEntry = [PSCustomObject]@{ Name = $indexVar; Scope = [VarScope]::Unspecified }
+    $currentVarEntry = [PSCustomObject]@{ Name = $currentVar; Scope = [VarScope]::Unspecified }
     $underscoreVarEntry = [PSCustomObject]@{ Name = "_"; Scope = [VarScope]::Unspecified }
 
     # 2. 获取 switch 的 flags（-Wildcard, -Regex, -CaseSensitive, -Exact, -File, -Parallel）
@@ -1981,7 +2049,7 @@ function Convert-SwitchAstNode {
     # VarsWritten: $__sw_xxx, $__sw_xxx_idx（手动添加）
     if ($null -ne $conditionExpansion) {
         # 有嵌套 Pipeline，使用修改后的文本
-        $initText = "`$$collectionVar = " + $conditionExpansion.ModifiedText + "; `$$indexVar = 0"
+        $initText = "`$$collectionVar = @(" + $conditionExpansion.ModifiedText + "); `$$indexVar = 0"
         $initNode = Add-Node -cfg $cfg -type "SwitchInit" -text $initText -line $switchAst.Condition.Extent.StartLineNumber -ast $switchAst.Condition
         # 添加 pipeVar 到 VarsRead
         foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
@@ -1993,7 +2061,7 @@ function Convert-SwitchAstNode {
         }
     } else {
         # 没有嵌套 Pipeline，正常创建
-        $initText = "`$$collectionVar = $switchConditionText; `$$indexVar = 0"
+        $initText = "`$$collectionVar = @($switchConditionText); `$$indexVar = 0"
         $initNode = Add-Node -cfg $cfg -type "SwitchInit" -text $initText -line $switchAst.Condition.Extent.StartLineNumber -ast $switchAst.Condition
         Add-Edge -cfg $cfg -from $switchStart.Id -to $initNode.Id
     }
@@ -2015,14 +2083,14 @@ function Convert-SwitchAstNode {
     $switchEnd = Add-Node -cfg $cfg -type "SwitchEnd" -text "End Switch" -line $switchAst.Extent.EndLineNumber -ast $null
     Add-Edge -cfg $cfg -from $conditionNode.Id -to $switchEnd.Id -label "False"
 
-    # 7. 创建 SwitchBind（绑定当前元素到 $_）
+    # 7. 创建 SwitchBind（绑定当前元素到 $currentVar 和 $_）
     # VarsRead: $__sw_xxx, $__sw_xxx_idx
-    # VarsWritten: $_
+    # VarsWritten: $__sw_xxx_current
     # ast = $null，ownerAst = $switchAst 用于 try/catch 嵌套判断
-    $bindText = "`$_ = `$$collectionVar[`$$indexVar]"
+    $bindText = "`$$currentVar = `$$collectionVar[`$$indexVar]"
     $bindNode = Add-Node -cfg $cfg -type "SwitchBind" -text $bindText -line $switchAst.Extent.StartLineNumber -ast $null -ownerAst $switchAst
     $bindNode.VarsRead = @($collectionVarEntry, $indexVarEntry)
-    $bindNode.VarsWritten = @($underscoreVarEntry)
+    $bindNode.VarsWritten = @($currentVarEntry)
     Add-Edge -cfg $cfg -from $conditionNode.Id -to $bindNode.Id -label "True"
 
     # 8. 创建 SwitchIter（递增索引，提前创建供 continue 跳转）
@@ -2059,11 +2127,13 @@ function Convert-SwitchAstNode {
         $isLastCase = ($caseIndex -eq $totalCases) -and ($null -eq $switchAst.Default)
 
         # 10.1 创建 CaseCondition 节点
-        $caseLabelText = if ($null -ne $clause.Item1) { $clause.Item1.Extent.Text } else { "Case" }
         $caseLineNumber = if ($null -ne $clause.Item1) { $clause.Item1.Extent.StartLineNumber } else { $switchAst.Extent.StartLineNumber }
-        $caseCondNode = Add-Node -cfg $cfg -type "CaseCondition" -text "Case $caseLabelText" -line $caseLineNumber -ast $clause.Item1
-        # 手动追加 $_ 的读取（CaseCondition 会隐式读取 $_）
-        Add-VarToNode -node $caseCondNode -varEntry $underscoreVarEntry -accessType "Read"
+        # 使用 Build-SwitchCaseCondition 生成可执行的比较表达式
+        $caseCondText = Build-SwitchCaseCondition -clauseConditionAst $clause.Item1 -currentVar $currentVar -switchFlags $switchFlags
+        $caseCondNode = Add-Node -cfg $cfg -type "CaseCondition" -text $caseCondText -line $caseLineNumber -ast $clause.Item1
+        # 修正变量追踪：移除 $_ 的读取，添加 $currentVar 的读取
+        $caseCondNode.VarsRead = @($caseCondNode.VarsRead | Where-Object { $_.Name -ne "_" })
+        Add-VarToNode -node $caseCondNode -varEntry $currentVarEntry -accessType "Read"
 
         # 10.2 连接到 CaseCondition
         if ($null -eq $previousCondNode) {
@@ -2088,6 +2158,7 @@ function Convert-SwitchAstNode {
         # 创建一个临时的 prevNode 用于处理分支体
         $branchPrev = $caseCondNode
         $firstBodyNodeId = $null
+        $bodyNodeCountBefore = $cfg.Nodes.Count
 
         foreach ($statement in $clause.Item2.Statements) {
             $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$branchPrev) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
@@ -2109,6 +2180,9 @@ function Convert-SwitchAstNode {
                 break
             }
         }
+
+        # 10.3.1 将 CaseBody 中所有新生成节点的 $_ 替换为 $currentVar
+        Replace-UnderscoreInNodes -nodes $cfg.Nodes -startIndex $bodyNodeCountBefore -currentVar $currentVar
 
         # 10.4 如果分支体为空，需要特殊处理
         # （空分支意味着 CaseCondition 的 True 边直接连到下一个 CaseCondition）
@@ -2149,6 +2223,7 @@ function Convert-SwitchAstNode {
         # 处理 Default 分支体
         $branchPrev = $defaultNode
         $defaultHasTerminator = $false
+        $defaultNodeCountBefore = $cfg.Nodes.Count
 
         foreach ($statement in $switchAst.Default.Statements) {
             $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$branchPrev) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $currentSwitchContext
@@ -2157,6 +2232,9 @@ function Convert-SwitchAstNode {
                 break
             }
         }
+
+        # 将 Default body 中所有新生成节点的 $_ 替换为 $currentVar
+        Replace-UnderscoreInNodes -nodes $cfg.Nodes -startIndex $defaultNodeCountBefore -currentVar $currentVar
 
         # Default 出口连接到 SwitchIter
         if (-not $defaultHasTerminator -and $null -ne $branchPrev) {

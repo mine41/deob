@@ -25,7 +25,7 @@ $cfg.Nodes | ForEach-Object {
         Write-Host "Node $($_.Id) ($($_.Type)):" -ForegroundColor Yellow
         Write-Host "  Text: $($_.Text)"
         $_.Resolvables | ForEach-Object {
-            Write-Host "  - [$($_.Type)] $($_.Text)" -ForegroundColor Green
+            Write-Host "  - [$($_.Type)] $($_.Text) -[$($_.Depth)]" -ForegroundColor Green
         }
     }
 }
@@ -41,3 +41,12 @@ $cfg.Nodes | ForEach-Object {
         }
     }
 }
+
+# CFG 遍历执行
+. .\Execute-CFG.ps1
+Write-Host "`n=== CFG Traversal ===" -ForegroundColor Yellow
+$logPath = Join-Path $PSScriptRoot 'in/execution.log'
+$result = Invoke-CFGTraversal -CFG $cfg -LogPath $logPath
+Write-Host "Total visits: $($result.TotalVisits)" -ForegroundColor Green
+Write-Host "Unique nodes: $($result.VisitedNodes.Count)" -ForegroundColor Green
+Write-Host "Log file: $logPath" -ForegroundColor Green

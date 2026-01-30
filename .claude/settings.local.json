@@ -12,7 +12,6 @@
       "Bash(powershell -ExecutionPolicy Bypass -File test-vars.ps1:*)",
       "Bash(del \"c:\\Users\\411\\Documents\\experiment\\new\\deob\\test-vars.ps1\")",
       "Bash(pwsh:*)",
-      "Bash(pwsh -c \"[System.Management.Automation.Language.Parser]::ParseInput(''Get-Process | Where-Object { $_.CPU -gt 100 } | Select-Object Name'', [ref]$null, [ref]$null).EndBlock.Statements[0].GetType().Name\")",
       "Bash(powershell -File:*)",
       "Bash(pwsh -NoProfile -Command \". ./Generate-CFG.ps1; $cfg = Get-ScriptControlFlow -ScriptPath ''./in/in.ps1''; $cfg.Nodes | Select-Object Id, Type, Text, Line | Format-Table -AutoSize; $cfg.Edges | Format-Table -AutoSize\")",
       "Bash(pwsh -NoProfile -File test-return-pipeline.ps1)",
@@ -45,7 +44,13 @@
       "Bash(pwsh -NoProfile -File - <<'EOF'\n$code = '\"当前时间: $\\({ Get-Date } | ForEach-Object { & $_ }\\)\"'\n$ast = [System.Management.Automation.Language.Parser]::ParseInput\\($code, [ref]$null, [ref]$null\\)\n$ast.EndBlock.Statements[0].PipelineElements[0].GetType\\(\\).Name\n$ast.EndBlock.Statements[0].PipelineElements[0].Expression.GetType\\(\\).Name\nEOF)",
       "Bash(pwsh -NoProfile -File -:*)",
       "Bash(pwsh -NoProfile -File test-dynamic-invoke.ps1)",
-      "Bash(pwsh -NoProfile -File test-cfg-output.ps1)"
+      "Bash(pwsh -NoProfile -File test-cfg-output.ps1)",
+      "Bash(dir:*)",
+      "Bash(tree:*)",
+      "Bash(du:*)",
+      "Bash(wc:*)",
+      "Bash(Select-Object -Last 20)",
+      "Bash(Select-String -Pattern \"CFG Traversal|Total|Unique|Log file\")"
     ]
   }
 }
