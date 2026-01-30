@@ -1776,7 +1776,7 @@ function Convert-IfAstNode {
 
         if ($null -ne $expansion) {
             # 有嵌套 Pipeline，使用修改后的文本创建条件节点
-            $condNode = Add-Node -cfg $cfg -type "Condition" -text $expansion.ModifiedText -line $conditionAst.Extent.StartLineNumber -ast $conditionAst
+            $condNode = Add-Node -cfg $cfg -type "Condition" -text "[bool]($($expansion.ModifiedText))" -line $conditionAst.Extent.StartLineNumber -ast $conditionAst
             # 添加 pipeVar 到 VarsRead
             foreach ($pipeVarEntry in $expansion.PipeVarEntries) {
                 Add-VarToNode -node $condNode -varEntry $pipeVarEntry -accessType "Read"
@@ -1787,7 +1787,7 @@ function Convert-IfAstNode {
             }
         } else {
             # 没有嵌套 Pipeline，正常创建条件节点
-            $condNode = Add-Node -cfg $cfg -type "Condition" -text $conditionAst.Extent.Text -line $conditionAst.Extent.StartLineNumber -ast $conditionAst
+            $condNode = Add-Node -cfg $cfg -type "Condition" -text "[bool]($($conditionAst.Extent.Text))" -line $conditionAst.Extent.StartLineNumber -ast $conditionAst
 
             if ($null -eq $previousCondNode) {
                 # 第一个条件从 ifNode 进入
@@ -1984,9 +1984,10 @@ function Build-SwitchCaseCondition {
         # ScriptBlock 条件: { $_ -gt 5 } → 提取内部代码，替换 $_
         $bodyStatements = $clauseConditionAst.ScriptBlock.EndBlock.Statements
         $bodyText = ($bodyStatements | ForEach-Object { $_.Extent.Text }) -join "; "
-        return Replace-UnderscoreVariable -text $bodyText -replacementVar $currentVar
+        $replaced = Replace-UnderscoreVariable -text $bodyText -replacementVar $currentVar
+        return "[bool]($replaced)"
     } else {
-        return "`$$currentVar $operator $($clauseConditionAst.Extent.Text)"
+        return "[bool](`$$currentVar $operator $($clauseConditionAst.Extent.Text))"
     }
 }
 
@@ -2072,7 +2073,7 @@ function Convert-SwitchAstNode {
     # 5. 创建 SwitchCondition（判断是否还有元素）
     # VarsRead: $__sw_xxx_idx, $__sw_xxx（手动设置）
     # ast = $null，ownerAst = $switchAst 用于 try/catch 嵌套判断
-    $condText = "`$$indexVar -lt `$$collectionVar.Count"
+    $condText = "[bool](`$$indexVar -lt `$$collectionVar.Count)"
     $conditionNode = Add-Node -cfg $cfg -type "SwitchCondition" -text $condText -line $switchAst.Extent.StartLineNumber -ast $null -ownerAst $switchAst
     # 清空自动分析的结果，手动设置内部变量的读取
     $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
@@ -2761,11 +2762,11 @@ function Get-ConditionLabel {
     switch ($loopAst) {
         # foreach 现在有专用处理逻辑（ForEachCondition），不再使用此函数
         {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} {
-            "Until ($($loopAst.Condition.Extent.Text))"
+            "[bool](-not ($($loopAst.Condition.Extent.Text)))"
         }
         default {
-            if ($null -eq $loopAst.Condition) { "AlwaysTrue" }
-            else { $($loopAst.Condition.Extent.Text) }
+            if ($null -eq $loopAst.Condition) { "`$true" }
+            else { "[bool]($($loopAst.Condition.Extent.Text))" }
         }
     }
 }
@@ -2892,7 +2893,7 @@ function Convert-LoopStatement {
         # VarsRead: $__fe_xxx_idx, $__fe_xxx（手动设置，因为这些是生成的变量）
         # VarsWritten: (无)
         # ast = $null，ownerAst = $loopAst 用于 try/catch 嵌套判断
-        $condText = "`$$indexVar -lt `$$collectionVar.Count"
+        $condText = "[bool](`$$indexVar -lt `$$collectionVar.Count)"
         $conditionNode = Add-Node -cfg $cfg -type "ForEachCondition" -text $condText -line $loopAst.Extent.StartLineNumber -ast $null -ownerAst $loopAst
         # 清空自动分析的结果，手动设置内部变量的读取
         $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
@@ -2976,7 +2977,7 @@ function Convert-LoopStatement {
         # 3.1.3 创建条件节点
         if ($null -ne $conditionExpansion) {
             # 有嵌套 Pipeline，使用修改后的文本创建条件节点
-            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text $conditionExpansion.ModifiedText -line $conditionLine -ast $conditionAst
+            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text "[bool]($($conditionExpansion.ModifiedText))" -line $conditionLine -ast $conditionAst
             # 添加 pipeVar 到 VarsRead
             foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
                 Add-VarToNode -node $conditionNode -varEntry $pipeVarEntry -accessType "Read"
@@ -3040,7 +3041,7 @@ function Convert-LoopStatement {
 
         if ($null -ne $conditionExpansion) {
             # 有嵌套 Pipeline，使用修改后的文本创建条件节点
-            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text $conditionExpansion.ModifiedText -line $conditionLine -ast $conditionAst
+            $conditionNode = Add-Node -cfg $cfg -type "Condition" -text "[bool]($($conditionExpansion.ModifiedText))" -line $conditionLine -ast $conditionAst
             # 添加 pipeVar 到 VarsRead
             foreach ($pipeVarEntry in $conditionExpansion.PipeVarEntries) {
                 Add-VarToNode -node $conditionNode -varEntry $pipeVarEntry -accessType "Read"

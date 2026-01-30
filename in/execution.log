@@ -1,200 +1,83 @@
-[05:13:11.013] === CFG 执行开始 ===
-[05:13:11.013] MaxIterations: 1000, MaxTotalNodes: 50000
-[05:13:11.013] 
-[05:13:11.014] --- Node 1 [SKIP] ---
-[05:13:11.014]   Type: Start
-[05:13:11.015]   Code: Script Start
-[05:13:11.015] --- Node 3 [SKIP] ---
-[05:13:11.016]   Type: MainStart
-[05:13:11.016]   Code: Main Script
-[05:13:11.016] --- Node 5 [SKIP] ---
-[05:13:11.017]   Type: SwitchStart
-[05:13:11.017]   Code: switch (1..3)
-[05:13:11.033] --- Node 6 [OK] ---
-[05:13:11.033]   Type: SwitchInit
-[05:13:11.034]   Code: $__sw_f840eb2dc0c0 = @(1..3); $__sw_f840eb2dc0c0_idx = 0
-[05:13:11.034]   VarsWritten:
-[05:13:11.036]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.036]     $__sw_f840eb2dc0c0_idx = 0
-[05:13:11.050] --- Node 7 [OK] ---
-[05:13:11.051]   Type: SwitchCondition
-[05:13:11.051]   Code: $__sw_f840eb2dc0c0_idx -lt $__sw_f840eb2dc0c0.Count
-[05:13:11.051]   VarsRead:
-[05:13:11.052]     $__sw_f840eb2dc0c0_idx = 0
-[05:13:11.052]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.053]   Result: @(True)
-[05:13:11.053]   ConditionResult: True
-[05:13:11.064] --- Node 9 [OK] ---
-[05:13:11.065]   Type: SwitchBind
-[05:13:11.065]   Code: $__sw_f840eb2dc0c0_current = $__sw_f840eb2dc0c0[$__sw_f840eb2dc0c0_idx]
-[05:13:11.066]   VarsRead:
-[05:13:11.066]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.066]     $__sw_f840eb2dc0c0_idx = 0
-[05:13:11.067]   VarsWritten:
-[05:13:11.067]     $__sw_f840eb2dc0c0_current = 1
-[05:13:11.076] --- Node 11 [OK] ---
-[05:13:11.077]   Type: CaseCondition
-[05:13:11.077]   Code: $__sw_f840eb2dc0c0_current -eq 1
-[05:13:11.078]   VarsRead:
-[05:13:11.078]     $__sw_f840eb2dc0c0_current = 1
-[05:13:11.078]   Result: @(True)
-[05:13:11.079]   ConditionResult: True
-[05:13:11.094] --- Node 12 [OK] ---
-[05:13:11.095]   Type: AssignmentStatementAst
-[05:13:11.095]   Code: $f += "-one"
-[05:13:11.095]   VarsRead:
-[05:13:11.096]     $f = $null
-[05:13:11.096]   VarsWritten:
-[05:13:11.096]     $f = "-one"
-[05:13:11.108] --- Node 13 [OK] ---
-[05:13:11.108]   Type: PipelineElement
-[05:13:11.109]   Code: write-Host $__sw_f840eb2dc0c0_current
-[05:13:11.109]   VarsRead:
-[05:13:11.110]     $__sw_f840eb2dc0c0_current = 1
-[05:13:11.118] --- Node 14 [OK] ---
-[05:13:11.118]   Type: CaseCondition
-[05:13:11.119]   Code: $__sw_f840eb2dc0c0_current -eq 2
-[05:13:11.119]   VarsRead:
-[05:13:11.119]     $__sw_f840eb2dc0c0_current = 1
-[05:13:11.120]   Result: @(False)
-[05:13:11.120]   ConditionResult: False
-[05:13:11.131] --- Node 17 [OK] ---
-[05:13:11.131]   Type: CaseCondition
-[05:13:11.131]   Code: $__sw_f840eb2dc0c0_current -eq 3
-[05:13:11.132]   VarsRead:
-[05:13:11.132]     $__sw_f840eb2dc0c0_current = 1
-[05:13:11.132]   Result: @(False)
-[05:13:11.133]   ConditionResult: False
-[05:13:11.143] --- Node 10 [OK] ---
-[05:13:11.143]   Type: SwitchIter
-[05:13:11.144]   Code: $__sw_f840eb2dc0c0_idx++
-[05:13:11.144]   VarsRead:
-[05:13:11.145]     $__sw_f840eb2dc0c0_idx = 0
-[05:13:11.145]   VarsWritten:
-[05:13:11.145]     $__sw_f840eb2dc0c0_idx = 1
-[05:13:11.147] --- Node 7 [OK] ---
-[05:13:11.147]   Type: SwitchCondition
-[05:13:11.148]   Code: $__sw_f840eb2dc0c0_idx -lt $__sw_f840eb2dc0c0.Count
-[05:13:11.148]   VarsRead:
-[05:13:11.148]     $__sw_f840eb2dc0c0_idx = 1
-[05:13:11.149]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.149]   Result: @(True)
-[05:13:11.149]   ConditionResult: True
-[05:13:11.151] --- Node 9 [OK] ---
-[05:13:11.151]   Type: SwitchBind
-[05:13:11.152]   Code: $__sw_f840eb2dc0c0_current = $__sw_f840eb2dc0c0[$__sw_f840eb2dc0c0_idx]
-[05:13:11.153]   VarsRead:
-[05:13:11.153]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.153]     $__sw_f840eb2dc0c0_idx = 1
-[05:13:11.154]   VarsWritten:
-[05:13:11.154]     $__sw_f840eb2dc0c0_current = 2
-[05:13:11.156] --- Node 11 [OK] ---
-[05:13:11.156]   Type: CaseCondition
-[05:13:11.156]   Code: $__sw_f840eb2dc0c0_current -eq 1
-[05:13:11.157]   VarsRead:
-[05:13:11.157]     $__sw_f840eb2dc0c0_current = 2
-[05:13:11.157]   Result: @(False)
-[05:13:11.158]   ConditionResult: False
-[05:13:11.159] --- Node 14 [OK] ---
-[05:13:11.160]   Type: CaseCondition
-[05:13:11.160]   Code: $__sw_f840eb2dc0c0_current -eq 2
-[05:13:11.160]   VarsRead:
-[05:13:11.160]     $__sw_f840eb2dc0c0_current = 2
-[05:13:11.161]   Result: @(True)
-[05:13:11.161]   ConditionResult: True
-[05:13:11.162] --- Node 15 [OK] ---
-[05:13:11.163]   Type: AssignmentStatementAst
-[05:13:11.163]   Code: $f += "-two"
-[05:13:11.163]   VarsRead:
-[05:13:11.164]     $f = "-one"
-[05:13:11.164]   VarsWritten:
-[05:13:11.164]     $f = "-one-two"
-[05:13:11.166] --- Node 16 [OK] ---
-[05:13:11.166]   Type: PipelineElement
-[05:13:11.167]   Code: write-Host $__sw_f840eb2dc0c0_current
-[05:13:11.167]   VarsRead:
-[05:13:11.167]     $__sw_f840eb2dc0c0_current = 2
-[05:13:11.168] --- Node 17 [OK] ---
-[05:13:11.169]   Type: CaseCondition
-[05:13:11.169]   Code: $__sw_f840eb2dc0c0_current -eq 3
-[05:13:11.170]   VarsRead:
-[05:13:11.170]     $__sw_f840eb2dc0c0_current = 2
-[05:13:11.170]   Result: @(False)
-[05:13:11.171]   ConditionResult: False
-[05:13:11.172] --- Node 10 [OK] ---
-[05:13:11.172]   Type: SwitchIter
-[05:13:11.173]   Code: $__sw_f840eb2dc0c0_idx++
-[05:13:11.173]   VarsRead:
-[05:13:11.173]     $__sw_f840eb2dc0c0_idx = 1
-[05:13:11.173]   VarsWritten:
-[05:13:11.174]     $__sw_f840eb2dc0c0_idx = 2
-[05:13:11.176] --- Node 7 [OK] ---
-[05:13:11.177]   Type: SwitchCondition
-[05:13:11.177]   Code: $__sw_f840eb2dc0c0_idx -lt $__sw_f840eb2dc0c0.Count
-[05:13:11.177]   VarsRead:
-[05:13:11.178]     $__sw_f840eb2dc0c0_idx = 2
-[05:13:11.178]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.179]   Result: @(True)
-[05:13:11.179]   ConditionResult: True
-[05:13:11.181] --- Node 9 [OK] ---
-[05:13:11.181]   Type: SwitchBind
-[05:13:11.181]   Code: $__sw_f840eb2dc0c0_current = $__sw_f840eb2dc0c0[$__sw_f840eb2dc0c0_idx]
-[05:13:11.182]   VarsRead:
-[05:13:11.182]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.182]     $__sw_f840eb2dc0c0_idx = 2
-[05:13:11.183]   VarsWritten:
-[05:13:11.183]     $__sw_f840eb2dc0c0_current = 3
-[05:13:11.184] --- Node 11 [OK] ---
-[05:13:11.184]   Type: CaseCondition
-[05:13:11.185]   Code: $__sw_f840eb2dc0c0_current -eq 1
-[05:13:11.185]   VarsRead:
-[05:13:11.185]     $__sw_f840eb2dc0c0_current = 3
-[05:13:11.186]   Result: @(False)
-[05:13:11.186]   ConditionResult: False
-[05:13:11.188] --- Node 14 [OK] ---
-[05:13:11.188]   Type: CaseCondition
-[05:13:11.188]   Code: $__sw_f840eb2dc0c0_current -eq 2
-[05:13:11.189]   VarsRead:
-[05:13:11.189]     $__sw_f840eb2dc0c0_current = 3
-[05:13:11.189]   Result: @(False)
-[05:13:11.190]   ConditionResult: False
-[05:13:11.191] --- Node 17 [OK] ---
-[05:13:11.191]   Type: CaseCondition
-[05:13:11.192]   Code: $__sw_f840eb2dc0c0_current -eq 3
-[05:13:11.192]   VarsRead:
-[05:13:11.192]     $__sw_f840eb2dc0c0_current = 3
-[05:13:11.193]   Result: @(True)
-[05:13:11.193]   ConditionResult: True
-[05:13:11.194] --- Node 18 [OK] ---
-[05:13:11.195]   Type: AssignmentStatementAst
-[05:13:11.195]   Code: $f += "-three"
-[05:13:11.195]   VarsRead:
-[05:13:11.196]     $f = "-one-two"
-[05:13:11.196]   VarsWritten:
-[05:13:11.196]     $f = "-one-two-three"
-[05:13:11.198] --- Node 10 [OK] ---
-[05:13:11.198]   Type: SwitchIter
-[05:13:11.198]   Code: $__sw_f840eb2dc0c0_idx++
-[05:13:11.199]   VarsRead:
-[05:13:11.199]     $__sw_f840eb2dc0c0_idx = 2
-[05:13:11.199]   VarsWritten:
-[05:13:11.199]     $__sw_f840eb2dc0c0_idx = 3
-[05:13:11.201] --- Node 7 [OK] ---
-[05:13:11.201]   Type: SwitchCondition
-[05:13:11.201]   Code: $__sw_f840eb2dc0c0_idx -lt $__sw_f840eb2dc0c0.Count
-[05:13:11.202]   VarsRead:
-[05:13:11.202]     $__sw_f840eb2dc0c0_idx = 3
-[05:13:11.202]     $__sw_f840eb2dc0c0 = @(1, 2, 3)
-[05:13:11.203]   Result: @(False)
-[05:13:11.203]   ConditionResult: False
-[05:13:11.204] --- Node 8 [SKIP] ---
-[05:13:11.204]   Type: SwitchEnd
-[05:13:11.204]   Code: End Switch
-[05:13:11.205] --- Node 4 [SKIP] ---
-[05:13:11.205]   Type: MainEnd
-[05:13:11.205]   Code: End Main Script
-[05:13:11.206] === 执行结束 ===
-[05:13:11.206] 
-[05:13:11.207] === 执行统计 ===
-[05:13:11.207] Total visits: 30
-[05:13:11.207] Unique nodes: 17
+[05:23:56.579] === CFG 执行开始 ===
+[05:23:56.579] MaxIterations: 1000, MaxTotalNodes: 50000
+[05:23:56.579] 
+[05:23:56.580] --- Node 1 [SKIP] ---
+[05:23:56.580]   Type: Start
+[05:23:56.580]   Code: Script Start
+[05:23:56.581] --- Node 3 [SKIP] ---
+[05:23:56.581]   Type: MainStart
+[05:23:56.582]   Code: Main Script
+[05:23:56.596] --- Node 5 [OK] ---
+[05:23:56.596]   Type: AssignmentStatementAst
+[05:23:56.597]   Code: $value = 15
+[05:23:56.597]   VarsWritten:
+[05:23:56.598]     $value = 15
+[05:23:56.599] --- Node 6 [SKIP] ---
+[05:23:56.599]   Type: SwitchStart
+[05:23:56.599]   Code: switch ($value)
+[05:23:56.611] --- Node 7 [OK] ---
+[05:23:56.611]   Type: SwitchInit
+[05:23:56.612]   Code: $__sw_5f8626d208ae = @($value); $__sw_5f8626d208ae_idx = 0
+[05:23:56.612]   VarsRead:
+[05:23:56.613]     $value = 15
+[05:23:56.613]   VarsWritten:
+[05:23:56.613]     $__sw_5f8626d208ae_idx = 0
+[05:23:56.613]     $__sw_5f8626d208ae = 15
+[05:23:56.624] --- Node 8 [OK] ---
+[05:23:56.625]   Type: SwitchCondition
+[05:23:56.625]   Code: [bool]($__sw_5f8626d208ae_idx -lt $__sw_5f8626d208ae.Count)
+[05:23:56.625]   VarsRead:
+[05:23:56.626]     $__sw_5f8626d208ae_idx = 0
+[05:23:56.626]     $__sw_5f8626d208ae = 15
+[05:23:56.626]   Result: @(True)
+[05:23:56.627]   ConditionResult: True
+[05:23:56.635] --- Node 10 [OK] ---
+[05:23:56.636]   Type: SwitchBind
+[05:23:56.636]   Code: $__sw_5f8626d208ae_current = $__sw_5f8626d208ae[$__sw_5f8626d208ae_idx]
+[05:23:56.637]   VarsRead:
+[05:23:56.637]     $__sw_5f8626d208ae_idx = 0
+[05:23:56.638]     $__sw_5f8626d208ae = 15
+[05:23:56.638]   VarsWritten:
+[05:23:56.638]     $__sw_5f8626d208ae_current = 15
+[05:23:56.648] --- Node 12 [OK] ---
+[05:23:56.648]   Type: CaseCondition
+[05:23:56.662]   Code: [bool]($__sw_5f8626d208ae_current -lt 10)
+[05:23:56.662]   VarsRead:
+[05:23:56.662]     $__sw_5f8626d208ae_current = 15
+[05:23:56.663]   Result: @(False)
+[05:23:56.663]   ConditionResult: False
+[05:23:56.664] --- Node 14 [SKIP] ---
+[05:23:56.678]   Type: Default
+[05:23:56.679]   Code: Default
+[05:23:56.692] --- Node 15 [OK] ---
+[05:23:56.692]   Type: PipelineElement
+[05:23:56.693]   Code: "$__sw_5f8626d208ae_current 是其他数字"
+[05:23:56.693]   VarsRead:
+[05:23:56.710]     $__sw_5f8626d208ae_current = 15
+[05:23:56.712]   Result: @("15 是其他数字")
+[05:23:56.724] --- Node 11 [OK] ---
+[05:23:56.724]   Type: SwitchIter
+[05:23:56.725]   Code: $__sw_5f8626d208ae_idx++
+[05:23:56.725]   VarsRead:
+[05:23:56.726]     $__sw_5f8626d208ae_idx = 0
+[05:23:56.726]   VarsWritten:
+[05:23:56.726]     $__sw_5f8626d208ae_idx = 1
+[05:23:56.728] --- Node 8 [OK] ---
+[05:23:56.728]   Type: SwitchCondition
+[05:23:56.729]   Code: [bool]($__sw_5f8626d208ae_idx -lt $__sw_5f8626d208ae.Count)
+[05:23:56.729]   VarsRead:
+[05:23:56.729]     $__sw_5f8626d208ae_idx = 1
+[05:23:56.730]     $__sw_5f8626d208ae = 15
+[05:23:56.730]   Result: @(False)
+[05:23:56.730]   ConditionResult: False
+[05:23:56.731] --- Node 9 [SKIP] ---
+[05:23:56.731]   Type: SwitchEnd
+[05:23:56.732]   Code: End Switch
+[05:23:56.732] --- Node 4 [SKIP] ---
+[05:23:56.732]   Type: MainEnd
+[05:23:56.733]   Code: End Main Script
+[05:23:56.733] === 执行结束 ===
+[05:23:56.733] 
+[05:23:56.734] === 执行统计 ===
+[05:23:56.734] Total visits: 14
+[05:23:56.734] Unique nodes: 13
