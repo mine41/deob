@@ -1,83 +1,59 @@
-[05:23:56.579] === CFG 执行开始 ===
-[05:23:56.579] MaxIterations: 1000, MaxTotalNodes: 50000
-[05:23:56.579] 
-[05:23:56.580] --- Node 1 [SKIP] ---
-[05:23:56.580]   Type: Start
-[05:23:56.580]   Code: Script Start
-[05:23:56.581] --- Node 3 [SKIP] ---
-[05:23:56.581]   Type: MainStart
-[05:23:56.582]   Code: Main Script
-[05:23:56.596] --- Node 5 [OK] ---
-[05:23:56.596]   Type: AssignmentStatementAst
-[05:23:56.597]   Code: $value = 15
-[05:23:56.597]   VarsWritten:
-[05:23:56.598]     $value = 15
-[05:23:56.599] --- Node 6 [SKIP] ---
-[05:23:56.599]   Type: SwitchStart
-[05:23:56.599]   Code: switch ($value)
-[05:23:56.611] --- Node 7 [OK] ---
-[05:23:56.611]   Type: SwitchInit
-[05:23:56.612]   Code: $__sw_5f8626d208ae = @($value); $__sw_5f8626d208ae_idx = 0
-[05:23:56.612]   VarsRead:
-[05:23:56.613]     $value = 15
-[05:23:56.613]   VarsWritten:
-[05:23:56.613]     $__sw_5f8626d208ae_idx = 0
-[05:23:56.613]     $__sw_5f8626d208ae = 15
-[05:23:56.624] --- Node 8 [OK] ---
-[05:23:56.625]   Type: SwitchCondition
-[05:23:56.625]   Code: [bool]($__sw_5f8626d208ae_idx -lt $__sw_5f8626d208ae.Count)
-[05:23:56.625]   VarsRead:
-[05:23:56.626]     $__sw_5f8626d208ae_idx = 0
-[05:23:56.626]     $__sw_5f8626d208ae = 15
-[05:23:56.626]   Result: @(True)
-[05:23:56.627]   ConditionResult: True
-[05:23:56.635] --- Node 10 [OK] ---
-[05:23:56.636]   Type: SwitchBind
-[05:23:56.636]   Code: $__sw_5f8626d208ae_current = $__sw_5f8626d208ae[$__sw_5f8626d208ae_idx]
-[05:23:56.637]   VarsRead:
-[05:23:56.637]     $__sw_5f8626d208ae_idx = 0
-[05:23:56.638]     $__sw_5f8626d208ae = 15
-[05:23:56.638]   VarsWritten:
-[05:23:56.638]     $__sw_5f8626d208ae_current = 15
-[05:23:56.648] --- Node 12 [OK] ---
-[05:23:56.648]   Type: CaseCondition
-[05:23:56.662]   Code: [bool]($__sw_5f8626d208ae_current -lt 10)
-[05:23:56.662]   VarsRead:
-[05:23:56.662]     $__sw_5f8626d208ae_current = 15
-[05:23:56.663]   Result: @(False)
-[05:23:56.663]   ConditionResult: False
-[05:23:56.664] --- Node 14 [SKIP] ---
-[05:23:56.678]   Type: Default
-[05:23:56.679]   Code: Default
-[05:23:56.692] --- Node 15 [OK] ---
-[05:23:56.692]   Type: PipelineElement
-[05:23:56.693]   Code: "$__sw_5f8626d208ae_current 是其他数字"
-[05:23:56.693]   VarsRead:
-[05:23:56.710]     $__sw_5f8626d208ae_current = 15
-[05:23:56.712]   Result: @("15 是其他数字")
-[05:23:56.724] --- Node 11 [OK] ---
-[05:23:56.724]   Type: SwitchIter
-[05:23:56.725]   Code: $__sw_5f8626d208ae_idx++
-[05:23:56.725]   VarsRead:
-[05:23:56.726]     $__sw_5f8626d208ae_idx = 0
-[05:23:56.726]   VarsWritten:
-[05:23:56.726]     $__sw_5f8626d208ae_idx = 1
-[05:23:56.728] --- Node 8 [OK] ---
-[05:23:56.728]   Type: SwitchCondition
-[05:23:56.729]   Code: [bool]($__sw_5f8626d208ae_idx -lt $__sw_5f8626d208ae.Count)
-[05:23:56.729]   VarsRead:
-[05:23:56.729]     $__sw_5f8626d208ae_idx = 1
-[05:23:56.730]     $__sw_5f8626d208ae = 15
-[05:23:56.730]   Result: @(False)
-[05:23:56.730]   ConditionResult: False
-[05:23:56.731] --- Node 9 [SKIP] ---
-[05:23:56.731]   Type: SwitchEnd
-[05:23:56.732]   Code: End Switch
-[05:23:56.732] --- Node 4 [SKIP] ---
-[05:23:56.732]   Type: MainEnd
-[05:23:56.733]   Code: End Main Script
-[05:23:56.733] === 执行结束 ===
-[05:23:56.733] 
-[05:23:56.734] === 执行统计 ===
-[05:23:56.734] Total visits: 14
-[05:23:56.734] Unique nodes: 13
+[00:54:39.746] === CFG 执行开始 ===
+[00:54:39.751] MaxIterations: 1000, MaxTotalNodes: 50000
+[00:54:39.752] 
+[00:54:39.765] --- Node 1 [SKIP] ---
+[00:54:39.766]   Type: Start
+[00:54:39.767]   Code: Script Start
+[00:54:39.777] --- Node 3 [SKIP] ---
+[00:54:39.778]   Type: MainStart
+[00:54:39.779]   Code: Main Script
+[00:54:39.796] --- Node 5 [OK] ---
+[00:54:39.797]   Type: AssignmentStatementAst
+[00:54:39.797]   Code: $e = 0
+[00:54:39.798]   VarsWritten:
+[00:54:39.802]     $e = 0
+[00:54:39.805] --- Node 6 [SKIP] ---
+[00:54:39.806]   Type: LoopStart
+[00:54:39.807]   Code: DoUntil
+[00:54:39.810] --- Node 9 [OK] ---
+[00:54:39.811]   Type: PipelineElement
+[00:54:39.811]   Code: $e++
+[00:54:39.812]   VarsRead:
+[00:54:39.812]     $e = 0
+[00:54:39.813]   VarsWritten:
+[00:54:39.814]     $e = 1
+[00:54:39.817] --- Node 8 [OK] ---
+[00:54:39.818]   Type: Condition
+[00:54:39.818]   Code: [bool]($e -ge 2)
+[00:54:39.819]   VarsRead:
+[00:54:39.820]     $e = 1
+[00:54:39.825]   Result: @(False)
+[00:54:39.827]   ConditionResult: False
+[00:54:39.829] --- Node 6 [SKIP] ---
+[00:54:39.829]   Type: LoopStart
+[00:54:39.830]   Code: DoUntil
+[00:54:39.833] --- Node 9 [OK] ---
+[00:54:39.833]   Type: PipelineElement
+[00:54:39.834]   Code: $e++
+[00:54:39.834]   VarsRead:
+[00:54:39.835]     $e = 1
+[00:54:39.836]   VarsWritten:
+[00:54:39.836]     $e = 2
+[00:54:39.839] --- Node 8 [OK] ---
+[00:54:39.840]   Type: Condition
+[00:54:39.840]   Code: [bool]($e -ge 2)
+[00:54:39.841]   VarsRead:
+[00:54:39.841]     $e = 2
+[00:54:39.842]   Result: @(True)
+[00:54:39.843]   ConditionResult: True
+[00:54:39.845] --- Node 7 [SKIP] ---
+[00:54:39.845]   Type: LoopEnd
+[00:54:39.846]   Code: End DoUntil
+[00:54:39.847] --- Node 4 [SKIP] ---
+[00:54:39.848]   Type: MainEnd
+[00:54:39.849]   Code: End Main Script
+[00:54:39.850] === 执行结束 ===
+[00:54:39.850] 
+[00:54:39.851] === 执行统计 ===
+[00:54:39.853] Total visits: 11
+[00:54:39.854] Unique nodes: 8

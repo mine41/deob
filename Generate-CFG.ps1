@@ -2760,10 +2760,6 @@ function Get-ConditionLabel {
     param($loopAst)
 
     switch ($loopAst) {
-        # foreach 现在有专用处理逻辑（ForEachCondition），不再使用此函数
-        {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} {
-            "[bool](-not ($($loopAst.Condition.Extent.Text)))"
-        }
         default {
             if ($null -eq $loopAst.Condition) { "`$true" }
             else { "[bool]($($loopAst.Condition.Extent.Text))" }
@@ -2773,13 +2769,12 @@ function Get-ConditionLabel {
 
 function Get-ExitLabel {
     param($loopAst)
-
-    switch ($loopAst) {
-        {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} { "Until True" }
-        {$_ -is [System.Management.Automation.Language.DoWhileStatementAst]} { "While False" }
-        {$_ -is [System.Management.Automation.Language.ForEachStatementAst]} { "No more items" }
-        default { "Condition False" }
+    # do-until: 条件为真时退出循环
+    # 其他循环: 条件为假时退出循环
+    if ($loopAst -is [System.Management.Automation.Language.DoUntilStatementAst]) {
+        return "True"
     }
+    return "False"
 }
 
 function Get-LoopEndText {
@@ -2790,12 +2785,12 @@ function Get-LoopEndText {
 
 function Get-LoopBackLabel {
     param($loopAst)
-
-    switch ($loopAst) {
-        {$_ -is [System.Management.Automation.Language.DoWhileStatementAst]} { "While True" }
-        {$_ -is [System.Management.Automation.Language.DoUntilStatementAst]} { "Until False" }
-        default { "Next Iteration" }
+    # do-until: 条件为假时继续循环
+    # 其他循环: 条件为真时继续循环
+    if ($loopAst -is [System.Management.Automation.Language.DoUntilStatementAst]) {
+        return "False"
     }
+    return "True"
 }
 
 function Convert-LoopStatement {
@@ -3088,8 +3083,22 @@ function Convert-LoopStatement {
     }
 
     # 5. 处理非 do-xx 的循环体（先判断后执行）
+    $firstBodyNodeId = $null
     foreach ($statement in $loopAst.Body.Statements) {
         $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+
+        # 记录第一个 body 节点的 ID（用于设置 "True" 标签）
+        if ($null -eq $firstBodyNodeId -and $currentNode.Id -ne $conditionNode.Id) {
+            $firstBodyNodeId = $currentNode.Id
+            # 找到从 conditionNode 到 firstBodyNode 的边，添加 "True" 标签
+            foreach ($edge in $cfg.Edges) {
+                if ($edge.From -eq $conditionNode.Id -and $edge.To -eq $firstBodyNodeId) {
+                    $edge.Label = "True"
+                    break
+                }
+            }
+        }
+
         if ($hasReturn) {
             break
         }
