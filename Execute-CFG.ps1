@@ -3,6 +3,113 @@
 
 . "$PSScriptRoot\ConvertTo-Expression-origin.ps1"
 
+# 占位符标识常量 - 重建脚本时遇到此值则不替换原片段
+$script:BlockedPlaceholderMarker = "__BLOCKED_PLACEHOLDER__"
+
+# 定义占位符类 - 用于被阻止的命令结果，支持链式属性/方法访问而不报错
+Add-Type -TypeDefinition @'
+using System;
+using System.Dynamic;
+using System.Linq.Expressions;
+
+public class BlockedCommandPlaceholder : DynamicObject
+{
+    // 统一的标识字符串
+    public static readonly string Marker = "__BLOCKED_PLACEHOLDER__";
+
+    public string BlockedCommand { get; set; }
+    public string Reason { get; set; }
+
+    public BlockedCommandPlaceholder() { }
+    public BlockedCommandPlaceholder(string command, string reason)
+    {
+        BlockedCommand = command;
+        Reason = reason;
+    }
+
+    // 任何属性访问返回自身
+    public override bool TryGetMember(GetMemberBinder binder, out object result)
+    {
+        result = this;
+        return true;
+    }
+
+    // 任何属性设置静默成功
+    public override bool TrySetMember(SetMemberBinder binder, object value)
+    {
+        return true;
+    }
+
+    // 任何方法调用返回自身
+    public override bool TryInvokeMember(InvokeMemberBinder binder, object[] args, out object result)
+    {
+        result = this;
+        return true;
+    }
+
+    // 任何索引访问返回自身
+    public override bool TryGetIndex(GetIndexBinder binder, object[] indexes, out object result)
+    {
+        result = this;
+        return true;
+    }
+
+    // 任何索引设置静默成功
+    public override bool TrySetIndex(SetIndexBinder binder, object[] indexes, object value)
+    {
+        return true;
+    }
+
+    // 作为函数调用时返回自身
+    public override bool TryInvoke(InvokeBinder binder, object[] args, out object result)
+    {
+        result = this;
+        return true;
+    }
+
+    // 类型转换 - 返回标识字符串
+    public override bool TryConvert(ConvertBinder binder, out object result)
+    {
+        if (binder.Type == typeof(string))
+        {
+            result = Marker;
+            return true;
+        }
+        if (binder.Type == typeof(bool))
+        {
+            result = false;
+            return true;
+        }
+        if (binder.Type == typeof(int) || binder.Type == typeof(long) ||
+            binder.Type == typeof(double) || binder.Type == typeof(float))
+        {
+            result = 0;
+            return true;
+        }
+        result = null;
+        return false;
+    }
+
+    // ToString 返回标识字符串
+    public override string ToString()
+    {
+        return Marker;
+    }
+
+    // 用于判断是否为占位符
+    public bool IsBlockedPlaceholder { get { return true; } }
+}
+'@ -ErrorAction SilentlyContinue
+
+# 创建占位符实例的辅助函数
+function New-BlockedPlaceholder {
+    param(
+        [string]$Command,
+        [string]$Reason = "Forbidden command"
+    )
+    return [BlockedCommandPlaceholder]::new($Command, $Reason)
+}
+
 # 创建执行上下文（Runspace）
 function New-ExecutionContext {
     $runspace = [runspacefactory]::CreateRunspace()
@@ -275,24 +382,100 @@ function Format-ResolvableValue {
 
     if ($null -eq $Value) { return '$null' }
 
+    # 占位符类型 - 直接返回标识字符串
+    if ($Value -is [BlockedCommandPlaceholder]) {
+        return $script:BlockedPlaceholderMarker
+    }
+
     # 处理 PSObject Collection（Invoke-InContext 返回类型）
     if ($Value -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
         if ($Value.Count -eq 0) { return '$null' }
-        if ($Value.Count -eq 1) { return ConvertTo-Expression -Object $Value[0] -Expand -1 }
-        # 多元素：逐个序列化后包装为 @()
-        $items = $Value | ForEach-Object { ConvertTo-Expression -Object $_ -Expand -1 }
+        # 检查是否包含占位符
+        if ($Value.Count -eq 1) {
+            if ($Value[0] -is [BlockedCommandPlaceholder]) {
+                return $script:BlockedPlaceholderMarker
+            }
+            return ConvertTo-Expression -Object $Value[0] -Expand -1
+        }
+        # 多元素：逐个序列化
+        $items = $Value | ForEach-Object {
+            if ($_ -is [BlockedCommandPlaceholder]) {
+                $script:BlockedPlaceholderMarker
+            } else {
+                ConvertTo-Expression -Object $_ -Expand -1
+            }
+        }
         return '@(' + ($items -join ', ') + ')'
     }
 
     # 处理普通数组
     if ($Value -is [array]) {
         if ($Value.Count -eq 0) { return '$null' }
-        if ($Value.Count -eq 1) { return ConvertTo-Expression -Object $Value[0] -Expand -1 }
-        $items = $Value | ForEach-Object { ConvertTo-Expression -Object $_ -Expand -1 }
+        if ($Value.Count -eq 1) {
+            if ($Value[0] -is [BlockedCommandPlaceholder]) {
+                return $script:BlockedPlaceholderMarker
+            }
+            return ConvertTo-Expression -Object $Value[0] -Expand -1
+        }
+        $items = $Value | ForEach-Object {
+            if ($_ -is [BlockedCommandPlaceholder]) {
+                $script:BlockedPlaceholderMarker
+            } else {
+                ConvertTo-Expression -Object $_ -Expand -1
+            }
+        }
         return '@(' + ($items -join ', ') + ')'
     }
 
     return ConvertTo-Expression -Object $Value -Expand -1
+}
+
+# 检查值是否适合作为还原结果（简单值类型才有意义替换回脚本）
+function Test-ResolvableValue {
+    param($Value)
+
+    if ($null -eq $Value) { return $true }
+
+    # PSObject Collection —— 检查内部元素
+    if ($Value -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+        if ($Value.Count -eq 0) { return $true }
+        foreach ($item in $Value) {
+            if (-not (Test-ResolvableValue $item)) { return $false }
+        }
+        return $true
+    }
+
+    # 普通数组 —— 检查每个元素
+    if ($Value -is [array]) {
+        if ($Value.Count -eq 0) { return $true }
+        foreach ($item in $Value) {
+            if (-not (Test-ResolvableValue $item)) { return $false }
+        }
+        return $true
+    }
+
+    # 允许的简单类型
+    if ($Value -is [string])    { return $true }
+    if ($Value -is [char])      { return $true }
+    if ($Value -is [bool])      { return $true }
+    if ($Value -is [byte])      { return $true }
+    if ($Value -is [sbyte])     { return $true }
+    if ($Value -is [int16])     { return $true }
+    if ($Value -is [uint16])    { return $true }
+    if ($Value -is [int])       { return $true }
+    if ($Value -is [uint32])    { return $true }
+    if ($Value -is [int64])     { return $true }
+    if ($Value -is [uint64])    { return $true }
+    if ($Value -is [float])     { return $true }
+    if ($Value -is [double])    { return $true }
+    if ($Value -is [decimal])   { return $true }
+    if ($Value -is [scriptblock]) { return $true }
+
+    # 占位符类型 - 放行记录，重建脚本时再根据标识跳过
+    if ($Value -is [BlockedCommandPlaceholder]) { return $true }
+
+    # 其他类型（复杂对象）不适合还原
+    return $false
 }
 
 # 求值节点中的可还原表达式
@@ -322,6 +505,11 @@ function Evaluate-NodeResolvables {
         $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $resolvable.Text
 
         if ($evalResult.Success) {
+            # 检查结果是否为适合还原的简单类型
+            if (-not (Test-ResolvableValue $evalResult.Result)) {
+                continue
+            }
+
             $value = Format-ResolvableValue $evalResult.Result
 
             # 记录到结果集
@@ -337,11 +525,12 @@ function Evaluate-NodeResolvables {
     }
 }
 
-# 执行节点
-function Invoke-Node {
+# 直接执行节点（原 Invoke-Node，不进行安全检查）
+function Invoke-NodeDirect {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [string]$CodeOverride = $null    # 可选的代码覆盖（用于变量名转换后的代码）
     )
 
     # 虚拟节点（无需执行）
@@ -359,6 +548,7 @@ function Invoke-Node {
             Executed = $false
             Result   = $null
             Error    = $null
+            Action   = "Skip"
         }
     }
 
@@ -372,7 +562,9 @@ function Invoke-Node {
     )
 
     # 获取要执行的代码
-    $code = if ($Node.Type -in $syntheticTypes) {
+    $code = if ($CodeOverride) {
+        $CodeOverride
+    } elseif ($Node.Type -in $syntheticTypes) {
         $Node.Text
     } elseif ($Node.Ast) {
         $Node.Ast.Extent.Text
@@ -404,17 +596,353 @@ function Invoke-Node {
         }
     }
 
-    # 执行成功后，对节点中的可还原表达式求值
-    if ($execResult.Success) {
-        Evaluate-NodeResolvables -Node $Node -Context $Context
-    }
-
     return @{
         Success  = $execResult.Success
         Executed = $true
         Result   = $execResult.Result
         Error    = $execResult.Error
+        Action   = "Execute"
     }
+}
+
+# 安全执行节点（新的主入口，包含安全检查）
+function Invoke-NodeSafe {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    # 虚拟节点类型
+    $virtualTypes = @(
+        'Start', 'End', 'MainStart', 'MainEnd',
+        'FuncStart', 'FuncEnd', 'BlockStart', 'BlockEnd',
+        'LoopStart', 'LoopEnd', 'SwitchStart', 'SwitchEnd',
+        'If Condition', 'Else', 'Merge', 'Default',
+        'Try', 'Catch', 'Finally', 'FunctionDef'
+    )
+
+    # 1. 虚拟节点检查 → 跳过执行
+    if ($Node.Type -in $virtualTypes) {
+        return @{
+            Success  = $true
+            Executed = $false
+            Result   = $null
+            Error    = $null
+            Action   = "Skip"
+        }
+    }
+
+    # 检测可疑变量名
+    Test-SuspiciousVariables -Node $Node -Context $Context
+
+    # 2. Phase 1: 还原非 Command 表达式
+    $resolvedValues = Resolve-NonCommandExpressions -Node $Node -Context $Context
+
+    # 3. Phase 2: 解析真实命令名
+    $commandInfo = Get-ResolvedCommandInfo -Node $Node -Context $Context -ResolvedValues $resolvedValues
+
+    # 4. Phase 3: 安全检查
+    $checkResult = Test-CommandSafety -CommandInfo $commandInfo -Context $Context
+
+    # 4.5. 记录别名解析结果为可还原表达式
+    if ($commandInfo.HasCommand -and $commandInfo.IsAlias) {
+        Record-AliasResolution -Node $Node -Context $Context -CommandInfo $commandInfo
+    }
+
+    if ($checkResult.IsForbidden) {
+        Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Forbidden command: $($commandInfo.ResolvedName) (original: $($commandInfo.OriginalName))"
+
+        # 创建占位符对象
+        $placeholder = New-BlockedPlaceholder -Command $commandInfo.ResolvedName -Reason $checkResult.Reason
+
+        # 如果节点有写入的变量，将其设置为占位符，防止后续引用报错
+        if ($Node.VarsWritten) {
+            foreach ($varInfo in $Node.VarsWritten) {
+                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varInfo.Name, $placeholder)
+                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($varInfo.Name) = [BlockedPlaceholder]"
+            }
+        }
+
+        return @{
+            Success   = $true
+            Executed  = $false
+            Result    = $placeholder
+            Error     = $null
+            Action    = "Blocked"
+            Command   = $commandInfo.ResolvedName
+            Reason    = $checkResult.Reason
+        }
+    }
+
+    # 5. Phase 4: 执行（根据检查结果选择执行方式）
+    switch ($checkResult.Action) {
+        "Execute" {
+            # 普通执行
+            $result = Invoke-NodeDirect -Node $Node -Context $Context
+
+            # 执行成功后，对 Command 类型的可还原表达式求值
+            if ($result.Success) {
+                Evaluate-NodeResolvables -Node $Node -Context $Context
+            }
+
+            return $result
+        }
+        "CallFunction" {
+            Write-ExecutionLog -Context $Context -Message "  [CALL] Function: $($checkResult.Target)"
+            return Invoke-FunctionCall -FuncName $checkResult.Target -CallerNode $Node -Context $Context
+        }
+        "CallScriptBlock" {
+            Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $($checkResult.Target)"
+            return Invoke-ScriptBlockCall -BlockName $checkResult.Target -CallerNode $Node -Context $Context
+        }
+        "DynamicInvoke" {
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dynamic invoke detected: $($checkResult.Target)"
+            return Handle-DynamicInvoke -Node $Node -Context $Context -CommandInfo $commandInfo
+        }
+        default {
+            # 默认执行
+            $result = Invoke-NodeDirect -Node $Node -Context $Context
+
+            if ($result.Success) {
+                Evaluate-NodeResolvables -Node $Node -Context $Context
+            }
+
+            return $result
+        }
+    }
+}
+
+# ========== 函数和脚本块调用 ==========
+
+# 查找函数/脚本块的结束节点
+function Get-SubgraphEndNode {
+    param(
+        [hashtable]$CFG,
+        [string]$StartType,      # "FuncStart" 或 "BlockStart"
+        [string]$Name            # 函数名或块名
+    )
+
+    $endType = if ($StartType -eq "FuncStart") { "FuncEnd" } else { "BlockEnd" }
+    $pattern = if ($StartType -eq "FuncStart") {
+        "^End function $([regex]::Escape($Name))$"
+    } else {
+        "^End ScriptBlock $([regex]::Escape($Name))$"
+    }
+
+    foreach ($node in $CFG.Nodes) {
+        if ($node.Type -eq $endType -and $node.Text -match $pattern) {
+            return $node
+        }
+    }
+
+    return $null
+}
+
+# 执行函数调用
+function Invoke-FunctionCall {
+    param(
+        [string]$FuncName,
+        $CallerNode,
+        [hashtable]$Context
+    )
+
+    # 1. 检查调用深度
+    if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] Max call depth ($($Context.MaxCallDepth)) exceeded"
+        return @{
+            Success = $false
+            Error   = "Max call depth exceeded"
+            Action  = "CallFunction"
+            Target  = $FuncName
+        }
+    }
+
+    # 2. 获取函数入口节点
+    $funcStartId = $Context.FunctionSubgraphs[$FuncName]
+    if (-not $funcStartId) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] Function not found: $FuncName"
+        return @{
+            Success = $false
+            Error   = "Function not found: $FuncName"
+            Action  = "CallFunction"
+            Target  = $FuncName
+        }
+    }
+
+    # 3. 获取函数子图的结束节点
+    $funcEndNode = Get-SubgraphEndNode -CFG $Context.CFG -StartType "FuncStart" -Name $FuncName
+    if (-not $funcEndNode) {
+        Write-ExecutionLog -Context $Context -Message "  [WARN] Function end node not found for: $FuncName"
+    }
+    $funcEndId = if ($funcEndNode) { $funcEndNode.Id } else { $null }
+
+    # 4. 收集局部变量
+    $localVars = @()
+    if ($funcEndId) {
+        $localVars = Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $funcStartId -EndNodeId $funcEndId
+    }
+
+    # 5. 计算返回节点（调用者的下一个节点）
+    $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context
+    $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
+
+    # 6. Push 作用域
+    Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName -ReturnNodeId $returnNodeId
+    if ($Context.ScopeStack.Count -gt 0) {
+        $Context.ScopeStack[-1].LocalVars = $localVars
+    }
+
+    # 7. 跳转执行函数子图
+    $funcStartNode = Get-NodeById -CFG $Context.CFG -Id $funcStartId
+
+    # 记录函数调用
+    Write-ExecutionLog -Context $Context -Message "  [FUNC] Entering function '$FuncName' at Node $funcStartId"
+
+    return @{
+        Success       = $true
+        Executed      = $false    # 节点本身未执行，而是跳转
+        Action        = "CallFunction"
+        Target        = $FuncName
+        JumpToNode    = $funcStartNode
+        LocalVars     = $localVars
+    }
+}
+
+# 执行脚本块调用
+function Invoke-ScriptBlockCall {
+    param(
+        [string]$BlockName,
+        $CallerNode,
+        [hashtable]$Context
+    )
+
+    # 1. 检查调用深度
+    if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] Max call depth ($($Context.MaxCallDepth)) exceeded"
+        return @{
+            Success = $false
+            Error   = "Max call depth exceeded"
+            Action  = "CallScriptBlock"
+            Target  = $BlockName
+        }
+    }
+
+    # 2. 获取脚本块入口节点
+    $blockStartId = $Context.ScriptBlockSubgraphs[$BlockName]
+    if (-not $blockStartId) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] ScriptBlock not found: $BlockName"
+        return @{
+            Success = $false
+            Error   = "ScriptBlock not found: $BlockName"
+            Action  = "CallScriptBlock"
+            Target  = $BlockName
+        }
+    }
+
+    # 3. 获取脚本块的结束节点
+    $blockEndNode = Get-SubgraphEndNode -CFG $Context.CFG -StartType "BlockStart" -Name $BlockName
+    if (-not $blockEndNode) {
+        Write-ExecutionLog -Context $Context -Message "  [WARN] ScriptBlock end node not found for: $BlockName"
+    }
+    $blockEndId = if ($blockEndNode) { $blockEndNode.Id } else { $null }
+
+    # 4. 收集局部变量
+    $localVars = @()
+    if ($blockEndId) {
+        $localVars = Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $blockStartId -EndNodeId $blockEndId
+    }
+
+    # 5. 计算返回节点
+    $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context
+    $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
+
+    # 6. Push 作用域
+    Push-ExecutionScope -Context $Context -ScopeType "ScriptBlock" -ScopeName $BlockName -ReturnNodeId $returnNodeId
+    if ($Context.ScopeStack.Count -gt 0) {
+        $Context.ScopeStack[-1].LocalVars = $localVars
+    }
+
+    # 7. 跳转执行脚本块子图
+    $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+
+    Write-ExecutionLog -Context $Context -Message "  [BLOCK] Entering ScriptBlock '$BlockName' at Node $blockStartId"
+
+    return @{
+        Success       = $true
+        Executed      = $false
+        Action        = "CallScriptBlock"
+        Target        = $BlockName
+        JumpToNode    = $blockStartNode
+        LocalVars     = $localVars
+    }
+}
+
+# 处理动态执行（iex 等）
+function Handle-DynamicInvoke {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo
+    )
+
+    # 尝试获取 iex 的参数值
+    $argumentValue = $null
+
+    if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 1) {
+        # 获取第一个参数
+        $argElement = $CommandInfo.Ast.CommandElements[1]
+
+        if ($argElement) {
+            # 尝试在当前上下文中求值
+            $argCode = $argElement.Extent.Text
+            $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+
+            if ($evalResult.Success -and $null -ne $evalResult.Result) {
+                if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                    if ($evalResult.Result.Count -gt 0) {
+                        $argumentValue = $evalResult.Result[0]
+                    }
+                } else {
+                    $argumentValue = $evalResult.Result
+                }
+            }
+        }
+    }
+
+    # 记录动态执行信息
+    $dynamicRecord = @{
+        NodeId        = $Node.Id
+        Command       = $CommandInfo.ResolvedName
+        ArgumentCode  = if ($CommandInfo.Ast.CommandElements.Count -gt 1) { $CommandInfo.Ast.CommandElements[1].Extent.Text } else { $null }
+        ArgumentValue = $argumentValue
+        Timestamp     = Get-Date
+    }
+    $Context.DynamicInvokeResults += $dynamicRecord
+
+    Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Command: $($CommandInfo.ResolvedName)"
+    if ($argumentValue) {
+        $truncatedValue = if ($argumentValue.Length -gt 200) {
+            $argumentValue.Substring(0, 197) + "..."
+        } else {
+            $argumentValue
+        }
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] ArgumentValue: $truncatedValue"
+    }
+
+    # 执行节点（让 iex 实际执行，但记录其参数）
+    # 注意：这里我们选择执行，以便后续代码能够继续。
+    # 如果需要阻止 iex 执行，可以返回 Blocked
+    $result = Invoke-NodeDirect -Node $Node -Context $Context
+
+    # 执行成功后求值可还原表达式
+    if ($result.Success) {
+        Evaluate-NodeResolvables -Node $Node -Context $Context
+    }
+
+    $result.Action = "DynamicInvoke"
+    $result.DynamicRecord = $dynamicRecord
+
+    return $result
 }
 
 # 节点遍历（递归）
@@ -430,6 +958,19 @@ function Invoke-NodeTraverse {
     if ($Node.Type -eq "End") {
         Write-ExecutionLog -Context $Context -Message "=== 执行结束 ==="
         return
+    }
+
+    # 处理 FuncEnd / BlockEnd - 返回到调用者
+    if ($Node.Type -eq "FuncEnd" -or $Node.Type -eq "BlockEnd") {
+        $scope = Pop-ExecutionScope -Context $Context
+        if ($scope -and $scope.ReturnNodeId) {
+            Write-ExecutionLog -Context $Context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
+            $returnNode = Get-NodeById -CFG $Context.CFG -Id $scope.ReturnNodeId
+            if ($returnNode) {
+                Invoke-NodeTraverse -Node $returnNode -Context $Context
+            }
+        }
+        return  # 不继续遍历 FuncEnd/BlockEnd 的后继
     }
 
     if ($Context.TotalVisits -ge $Context.MaxTotalNodes) {
@@ -459,7 +1000,7 @@ function Invoke-NodeTraverse {
     }
 
     # 执行节点
-    $execResult = Invoke-Node -Node $Node -Context $Context
+    $execResult = Invoke-NodeSafe -Node $Node -Context $Context
 
     # 记录执行后的变量值（写入的变量）
     $varsAfter = @{}
@@ -471,11 +1012,30 @@ function Invoke-NodeTraverse {
 
     # 写日志
     $shortText = $Node.Text  # 显示完整代码
-    $status = if (-not $execResult.Executed) { "SKIP" } elseif ($execResult.Success) { "OK" } else { "ERR" }
+    $status = if ($execResult.Action -eq "Blocked") {
+        "BLOCKED"
+    } elseif (-not $execResult.Executed) {
+        "SKIP"
+    } elseif ($execResult.Success) {
+        "OK"
+    } else {
+        "ERR"
+    }
 
     Write-ExecutionLog -Context $Context -Message "--- Node $($Node.Id) [$status] ---"
     Write-ExecutionLog -Context $Context -Message "  Type: $($Node.Type)"
     Write-ExecutionLog -Context $Context -Message "  Code: $shortText"
+
+    # 记录额外的执行动作信息
+    if ($execResult.Action -and $execResult.Action -notin @("Execute", "Skip")) {
+        Write-ExecutionLog -Context $Context -Message "  Action: $($execResult.Action)"
+        if ($execResult.Target) {
+            Write-ExecutionLog -Context $Context -Message "  Target: $($execResult.Target)"
+        }
+        if ($execResult.Reason) {
+            Write-ExecutionLog -Context $Context -Message "  Reason: $($execResult.Reason)"
+        }
+    }
 
     if ($execResult.Executed) {
         # 记录读取的变量
@@ -513,11 +1073,500 @@ function Invoke-NodeTraverse {
         }
     }
 
+    # 处理函数/脚本块调用 - 跳转到子图
+    if ($execResult.Action -in @("CallFunction", "CallScriptBlock") -and $execResult.JumpToNode) {
+        Write-ExecutionLog -Context $Context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
+        Invoke-NodeTraverse -Node $execResult.JumpToNode -Context $Context
+        return  # 函数调用后不继续遍历当前节点的后继（返回时会跳转到正确位置）
+    }
+
+    # 如果命令被阻止，仍然继续遍历后继节点
     # 获取后继节点并遍历
     $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $Node -Context $Context
     foreach ($next in $nextNodes) {
         Invoke-NodeTraverse -Node $next -Context $Context
     }
+}
+
+# ========== 作用域管理函数 ==========
+
+# PowerShell 自动变量白名单（不添加作用域前缀）
+$script:AutoVariables = @(
+    '_', 'args', 'input', 'this', 'PSItem', 'PSCmdlet',
+    'MyInvocation', 'PSScriptRoot', 'PSCommandPath',
+    'true', 'false', 'null', 'Error', 'Host', 'PID',
+    'PWD', 'ShellId', 'StackTrace', 'switch', 'foreach',
+    'Matches', 'LastExitCode', 'PSBoundParameters', 'PSDefaultParameterValues'
+)
+
+# 动态执行命令列表
+$script:DynamicInvokeCommands = @(
+    'Invoke-Expression', 'iex'
+)
+
+# Push 作用域到栈
+function Push-ExecutionScope {
+    param(
+        [hashtable]$Context,
+        [string]$ScopeType,          # "Function" | "ScriptBlock"
+        [string]$ScopeName,          # 函数名或块名
+        [int]$ReturnNodeId           # 返回后继续执行的节点 Id
+    )
+
+    # 使用 GUID 生成唯一前缀，避免与用户代码冲突
+    $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+    $prefix = "_sc_${guid}_"
+
+    $scope = @{
+        ScopeType    = $ScopeType
+        ScopeName    = $ScopeName
+        ScopePrefix  = $prefix
+        ReturnNodeId = $ReturnNodeId
+        LocalVars    = @()           # 该作用域内定义的局部变量名（不含前缀）
+    }
+
+    $Context.ScopeStack += $scope
+    $Context.CurrentScopePrefix = $prefix
+
+    # 添加到调用栈
+    $Context.CallStack += @{
+        Type         = $ScopeType
+        Name         = $ScopeName
+        ReturnNodeId = $ReturnNodeId
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [SCOPE] Push: $ScopeType '$ScopeName' (prefix=$prefix, returnTo=$ReturnNodeId)"
+}
+
+# Pop 作用域
+function Pop-ExecutionScope {
+    param([hashtable]$Context)
+
+    if ($Context.ScopeStack.Count -eq 0) {
+        Write-ExecutionLog -Context $Context -Message "  [SCOPE] Warning: Scope stack is empty, cannot pop"
+        return $null
+    }
+
+    $scope = $Context.ScopeStack[-1]
+
+    # 从栈中移除
+    if ($Context.ScopeStack.Count -eq 1) {
+        $Context.ScopeStack = @()
+    } else {
+        $Context.ScopeStack = @($Context.ScopeStack[0..($Context.ScopeStack.Count - 2)])
+    }
+
+    # 清理该作用域的变量
+    foreach ($varName in $scope.LocalVars) {
+        $fullName = $scope.ScopePrefix + $varName
+        try {
+            $Context.ExecContext.Runspace.SessionStateProxy.PSVariable.Remove($fullName)
+        } catch {
+            # 忽略清理错误
+        }
+    }
+
+    # 更新当前作用域前缀
+    if ($Context.ScopeStack.Count -gt 0) {
+        $Context.CurrentScopePrefix = $Context.ScopeStack[-1].ScopePrefix
+    } else {
+        $Context.CurrentScopePrefix = ""
+    }
+
+    # 从调用栈移除
+    if ($Context.CallStack.Count -gt 0) {
+        if ($Context.CallStack.Count -eq 1) {
+            $Context.CallStack = @()
+        } else {
+            $Context.CallStack = @($Context.CallStack[0..($Context.CallStack.Count - 2)])
+        }
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [SCOPE] Pop: $($scope.ScopeType) '$($scope.ScopeName)' (returnTo=$($scope.ReturnNodeId))"
+    return $scope
+}
+
+# 收集子图中定义的局部变量
+function Get-SubgraphLocalVars {
+    param(
+        [hashtable]$CFG,
+        [int]$StartNodeId,
+        [int]$EndNodeId
+    )
+
+    $localVars = @{}
+    $visited = @{}
+    $queue = [System.Collections.Generic.Queue[int]]::new()
+    $queue.Enqueue($StartNodeId)
+
+    while ($queue.Count -gt 0) {
+        $nodeId = $queue.Dequeue()
+
+        if ($visited.ContainsKey($nodeId)) { continue }
+        $visited[$nodeId] = $true
+
+        $node = $CFG.Nodes | Where-Object { $_.Id -eq $nodeId } | Select-Object -First 1
+        if ($null -eq $node) { continue }
+        if ($nodeId -eq $EndNodeId) { continue }
+
+        # 收集写入的变量（Local 作用域或未指定作用域）
+        if ($node.VarsWritten) {
+            foreach ($varInfo in $node.VarsWritten) {
+                # 跳过 global/script 作用域变量
+                if ($varInfo.Scope -notin @('Global', 'Script')) {
+                    $localVars[$varInfo.Name] = $true
+                }
+            }
+        }
+
+        # 继续遍历后继节点
+        $edges = $CFG.Edges | Where-Object { $_.From -eq $nodeId }
+        foreach ($edge in $edges) {
+            if (-not $visited.ContainsKey($edge.To)) {
+                $queue.Enqueue($edge.To)
+            }
+        }
+    }
+
+    return @($localVars.Keys)
+}
+
+# 转换代码中的变量名（添加作用域前缀）
+function Convert-VariableNames {
+    param(
+        [string]$Code,
+        [string]$ScopePrefix,
+        [array]$LocalVarNames        # 需要转换的变量名列表
+    )
+
+    if ([string]::IsNullOrEmpty($ScopePrefix) -or $LocalVarNames.Count -eq 0) {
+        return $Code
+    }
+
+    $result = $Code
+
+    foreach ($varName in $LocalVarNames) {
+        # 跳过自动变量
+        if ($varName -in $script:AutoVariables) { continue }
+
+        # 跳过已有作用域前缀的变量
+        if ($varName -match '^_sc_[a-f0-9]{8}_') { continue }
+
+        # 跳过管道变量
+        if ($varName -match '^_pipe_[a-f0-9]+$') { continue }
+
+        # 替换 $varName 为 $prefix_varName
+        # 使用负向前瞻避免替换已有前缀的变量和变量名的一部分
+        $pattern = '\$' + [regex]::Escape($varName) + '(?![a-zA-Z0-9_])'
+        $replacement = '$' + $ScopePrefix + $varName
+        $result = $result -replace $pattern, $replacement
+    }
+
+    return $result
+}
+
+# 检测可疑变量名（尝试绕过作用域隔离）
+function Test-SuspiciousVariables {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $suspicious = @()
+
+    $allVars = @()
+    if ($Node.VarsRead) { $allVars += $Node.VarsRead }
+    if ($Node.VarsWritten) { $allVars += $Node.VarsWritten }
+
+    foreach ($varInfo in $allVars) {
+        if ($varInfo.Name -match '^_sc_[a-f0-9]{8}_') {
+            $suspicious += $varInfo.Name
+        }
+    }
+
+    if ($suspicious.Count -gt 0) {
+        Write-ExecutionLog -Context $Context -Message "  [WARN] Suspicious variable names detected: $($suspicious -join ', ')"
+    }
+}
+
+# ========== 命令解析与安全检查 ==========
+
+# 从节点中提取命令信息
+function Get-ResolvedCommandInfo {
+    param(
+        $Node,
+        [hashtable]$Context,
+        [hashtable]$ResolvedValues   # 已还原的表达式值
+    )
+
+    # 从 Resolvables 中找 Command 类型
+    $commandResolvables = @()
+    if ($Node.Resolvables) {
+        $commandResolvables = @($Node.Resolvables | Where-Object { $_.Type -eq "Command" })
+    }
+
+    if ($commandResolvables.Count -eq 0) {
+        return @{ HasCommand = $false }
+    }
+
+    foreach ($cmdRes in $commandResolvables) {
+        $cmdAst = $cmdRes.Ast
+        $cmdName = $null
+
+        # 尝试获取静态命令名
+        if ($cmdAst -and $cmdAst.GetCommandName) {
+            $cmdName = $cmdAst.GetCommandName()
+        }
+
+        # 如果命令名是变量/表达式，尝试从已还原的值中获取
+        if (-not $cmdName -and $cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 0) {
+            $firstElement = $cmdAst.CommandElements[0]
+            if ($firstElement.Extent) {
+                $key = "$($Node.Id):$($firstElement.Extent.StartOffset):$($firstElement.Extent.EndOffset)"
+                if ($ResolvedValues -and $ResolvedValues.ContainsKey($key)) {
+                    $cmdName = $ResolvedValues[$key]
+                }
+            }
+        }
+
+        # 如果还是没有命令名，尝试从 Text 中提取
+        if (-not $cmdName -and $cmdRes.Text) {
+            # 简单提取第一个 token
+            if ($cmdRes.Text -match '^\s*([^\s\(]+)') {
+                $cmdName = $Matches[1]
+            }
+        }
+
+        if (-not $cmdName) { continue }
+
+        # 检查别名
+        $realName = $cmdName
+        if ($Context.CFG.DefinedAliases -and $Context.CFG.DefinedAliases.ContainsKey($cmdName)) {
+            $realName = $Context.CFG.DefinedAliases[$cmdName]
+            return @{
+                HasCommand   = $true
+                OriginalName = $cmdName
+                ResolvedName = $realName
+                IsAlias      = $true
+                Ast          = $cmdAst
+                Resolvable   = $cmdRes
+            }
+        }
+
+        return @{
+            HasCommand   = $true
+            OriginalName = $cmdName
+            ResolvedName = $cmdName
+            IsAlias      = $false
+            Ast          = $cmdAst
+            Resolvable   = $cmdRes
+        }
+    }
+
+    return @{ HasCommand = $false }
+}
+
+# 检查命令安全性并确定执行动作
+function Test-CommandSafety {
+    param(
+        $CommandInfo,
+        [hashtable]$Context
+    )
+
+    if (-not $CommandInfo.HasCommand) {
+        return @{ Action = "Execute"; IsForbidden = $false }
+    }
+
+    $cmdName = $CommandInfo.ResolvedName
+
+    # 1. 违禁命令检查
+    if ($cmdName -in $Context.ForbiddenCommands) {
+        return @{
+            Action      = "Block"
+            IsForbidden = $true
+            Reason      = "Forbidden command"
+            Command     = $cmdName
+        }
+    }
+
+    # 2. 动态执行检查
+    if ($cmdName -in $script:DynamicInvokeCommands) {
+        return @{
+            Action      = "DynamicInvoke"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 3. 用户定义函数检查
+    if ($Context.FunctionSubgraphs.ContainsKey($cmdName)) {
+        return @{
+            Action      = "CallFunction"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 4. ScriptBlock 调用检查 (& $sb 或 . $sb)
+    if ($cmdName -match '^_block_[a-f0-9]{8}$') {
+        return @{
+            Action      = "CallScriptBlock"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 检查是否为 ScriptBlock 变量调用
+    if ($Context.ScriptBlockSubgraphs.ContainsKey($cmdName)) {
+        return @{
+            Action      = "CallScriptBlock"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 5. 普通命令
+    return @{ Action = "Execute"; IsForbidden = $false }
+}
+
+# 还原非 Command 类型的表达式
+function Resolve-NonCommandExpressions {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $resolvedValues = @{}
+
+    # 跳过没有 Resolvables 的节点
+    if ($null -eq $Node.Resolvables -or $Node.Resolvables.Count -eq 0) {
+        return $resolvedValues
+    }
+
+    # 跳过求值的类型（有副作用或需要特殊处理）
+    $skipEvalTypes = @('Command', 'Unary')
+
+    foreach ($resolvable in $Node.Resolvables) {
+        if ($resolvable.Type -in $skipEvalTypes) {
+            continue
+        }
+
+        $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+
+        # 在当前 Runspace 上下文中求值
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $resolvable.Text
+
+        if ($evalResult.Success) {
+            # 检查结果是否为适合还原的简单类型
+            if (-not (Test-ResolvableValue $evalResult.Result)) {
+                continue
+            }
+
+            $value = Format-ResolvableValue $evalResult.Result
+
+            # 记录到结果集
+            if (-not $Context.ResolvableResults.ContainsKey($key)) {
+                $Context.ResolvableResults[$key] = @{
+                    NodeId     = $Node.Id
+                    Resolvable = $resolvable
+                    Values     = @()
+                }
+            }
+            $Context.ResolvableResults[$key].Values += $value
+
+            # 同时记录到本次返回的字典中
+            $resolvedValues[$key] = $value
+        }
+    }
+
+    return $resolvedValues
+}
+
+# 记录别名解析结果为可还原表达式
+function Record-AliasResolution {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo
+    )
+
+    # 获取命令名元素的位置信息
+    $cmdNameElement = $null
+    if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 0) {
+        $cmdNameElement = $CommandInfo.Ast.CommandElements[0]
+    }
+
+    if (-not $cmdNameElement -or -not $cmdNameElement.Extent) {
+        # 如果没有位置信息，尝试从 Resolvable 获取
+        if ($CommandInfo.Resolvable) {
+            $startOffset = $CommandInfo.Resolvable.StartOffset
+            $endOffset = $CommandInfo.Resolvable.EndOffset
+        } else {
+            Write-ExecutionLog -Context $Context -Message "  [ALIAS] Cannot record alias resolution: no position info"
+            return
+        }
+    } else {
+        $startOffset = $cmdNameElement.Extent.StartOffset
+        $endOffset = $cmdNameElement.Extent.EndOffset
+    }
+
+    $key = "$($Node.Id):${startOffset}:${endOffset}"
+
+    # 创建一个伪 Resolvable 对象来记录别名
+    $aliasResolvable = @{
+        Type        = "Alias"
+        Text        = $CommandInfo.OriginalName
+        StartOffset = $startOffset
+        EndOffset   = $endOffset
+        Depth       = 0
+        Ast         = $cmdNameElement
+        # 额外信息
+        AliasName   = $CommandInfo.OriginalName
+        TargetName  = $CommandInfo.ResolvedName
+    }
+
+    # 记录到结果集
+    if (-not $Context.ResolvableResults.ContainsKey($key)) {
+        $Context.ResolvableResults[$key] = @{
+            NodeId     = $Node.Id
+            Resolvable = $aliasResolvable
+            Values     = @()
+        }
+    }
+
+    # 别名解析结果是目标命令名
+    $Context.ResolvableResults[$key].Values += $CommandInfo.ResolvedName
+
+    Write-ExecutionLog -Context $Context -Message "  [ALIAS] Recorded: $($CommandInfo.OriginalName) -> $($CommandInfo.ResolvedName)"
+}
+
+# 初始化函数和脚本块子图映射
+function Initialize-SubgraphMappings {
+    param(
+        [hashtable]$CFG,
+        [hashtable]$Context
+    )
+
+    foreach ($node in $CFG.Nodes) {
+        if ($node.Type -eq "FuncStart") {
+            # 从 Text 提取函数名: "function MyFunc" → "MyFunc"
+            if ($node.Text -match '^function\s+(.+)$') {
+                $funcName = $Matches[1]
+                $Context.FunctionSubgraphs[$funcName] = $node.Id
+                Write-ExecutionLog -Context $Context -Message "  [INIT] Function subgraph: $funcName -> Node $($node.Id)"
+            }
+        }
+        elseif ($node.Type -eq "BlockStart") {
+            # 从 Text 提取块名: "ScriptBlock _block_xxx" → "_block_xxx"
+            if ($node.Text -match '^ScriptBlock\s+(.+)$') {
+                $blockName = $Matches[1]
+                $Context.ScriptBlockSubgraphs[$blockName] = $node.Id
+                Write-ExecutionLog -Context $Context -Message "  [INIT] ScriptBlock subgraph: $blockName -> Node $($node.Id)"
+            }
+        }
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [INIT] Total functions: $($Context.FunctionSubgraphs.Count), ScriptBlocks: $($Context.ScriptBlockSubgraphs.Count)"
 }
 
 # 主入口
@@ -546,10 +1595,36 @@ function Invoke-CFGTraversal {
         TotalVisits         = 0
         LastConditionResult = $true
         ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
+
+        # 新增字段 - 安全执行与作用域管理
+        ScopeStack            = @()          # 作用域栈 [{ ScopeType; ScopeName; ScopePrefix; ReturnNodeId; LocalVars }]
+        CurrentScopePrefix    = ""           # 当前作用域变量前缀
+        ForbiddenCommands     = @(           # 违禁命令列表
+            'Remove-Item', 'del', 'rm', 'rmdir', 'rd',
+            'Format-Volume', 'Clear-Disk',
+            'Stop-Process', 'kill', 'spps',
+            'Stop-Computer', 'Restart-Computer',
+            'Set-ExecutionPolicy',
+            'New-Service', 'Remove-Service',
+            'Clear-Content', 'Clear-ItemProperty',
+            'Remove-ItemProperty', 'Clear-RecycleBin',
+            'Start-Process', 'Invoke-WebRequest', 'Invoke-RestMethod',
+            'New-Object', 'Add-Type'  # 危险的 .NET 操作
+        )
+        FunctionSubgraphs     = @{}          # 函数名 -> FuncStart 节点 Id
+        ScriptBlockSubgraphs  = @{}          # _block_xxx -> BlockStart 节点 Id
+        CallStack             = @()          # 调用栈 [{ Type; Name; ReturnNodeId }]
+        MaxCallDepth          = 100          # 最大调用深度
+        DynamicInvokeResults  = @()          # 动态执行记录 [{ NodeId; Command; ArgumentValue }]
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
     Write-ExecutionLog -Context $context -Message "MaxIterations: $MaxIterations, MaxTotalNodes: $MaxTotalNodes"
+    Write-ExecutionLog -Context $context -Message ""
+
+    # 初始化子图映射
+    Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
+    Initialize-SubgraphMappings -CFG $CFG -Context $context
     Write-ExecutionLog -Context $context -Message ""
 
     try {
