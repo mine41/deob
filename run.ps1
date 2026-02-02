@@ -50,3 +50,49 @@ $result = Invoke-CFGTraversal -CFG $cfg -LogPath $logPath
 Write-Host "Total visits: $($result.TotalVisits)" -ForegroundColor Green
 Write-Host "Unique nodes: $($result.VisitedNodes.Count)" -ForegroundColor Green
 Write-Host "Log file: $logPath" -ForegroundColor Green
+
+# 显示可还原表达式的求值结果
+Write-Host "`n=== Resolvable Values ===" -ForegroundColor Cyan
+if ($result.ResolvableResults.Count -eq 0) {
+    Write-Host "  (No resolvable expressions evaluated)" -ForegroundColor Gray
+} else {
+    # 按 StartOffset 排序
+    $sorted = $result.ResolvableResults.GetEnumerator() |
+        Sort-Object { $_.Value.Resolvable.StartOffset }
+
+    foreach ($entry in $sorted) {
+        $record = $entry.Value
+        $r = $record.Resolvable
+
+        # 判断一致性
+        $consistent = $true
+        if ($record.Values.Count -gt 1) {
+            $firstValue = $record.Values[0]
+            foreach ($v in $record.Values) {
+                if ($v -ne $firstValue) {
+                    $consistent = $false
+                    break
+                }
+            }
+        }
+
+        # 显示格式
+        $offsetInfo = "[$($r.StartOffset)-$($r.EndOffset)]"
+        $typeInfo = "[$($r.Type)]"
+        $depthInfo = "[Depth:$($r.Depth)]"
+
+        Write-Host "  $offsetInfo $typeInfo $depthInfo" -ForegroundColor Yellow -NoNewline
+        Write-Host " $($r.Text)" -ForegroundColor White
+
+        if ($record.Values.Count -eq 0) {
+            Write-Host "    => (No values)" -ForegroundColor Gray
+        } elseif ($record.Values.Count -eq 1) {
+            Write-Host "    => $($record.Values[0])" -ForegroundColor Green
+        } elseif ($consistent) {
+            Write-Host "    => $($record.Values[0]) ($($record.Values.Count) executions, consistent)" -ForegroundColor Green
+        } else {
+            Write-Host "    => INCONSISTENT: " -ForegroundColor Red -NoNewline
+            Write-Host ($record.Values -join ', ') -ForegroundColor Yellow
+        }
+    }
+}

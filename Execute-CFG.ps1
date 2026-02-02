@@ -1,6 +1,8 @@
 # Execute-CFG.ps1
 # CFG 遍历执行器 - 基础版本
 
+. "$PSScriptRoot\ConvertTo-Expression-origin.ps1"
+
 # 创建执行上下文（Runspace）
 function New-ExecutionContext {
     $runspace = [runspacefactory]::CreateRunspace()
@@ -267,6 +269,74 @@ function Get-NextNodes {
     }
 }
 
+# 格式化可还原表达式的值（用于显示和比较）
+function Format-ResolvableValue {
+    param($Value)
+
+    if ($null -eq $Value) { return '$null' }
+
+    # 处理 PSObject Collection（Invoke-InContext 返回类型）
+    if ($Value -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+        if ($Value.Count -eq 0) { return '$null' }
+        if ($Value.Count -eq 1) { return ConvertTo-Expression -Object $Value[0] -Expand -1 }
+        # 多元素：逐个序列化后包装为 @()
+        $items = $Value | ForEach-Object { ConvertTo-Expression -Object $_ -Expand -1 }
+        return '@(' + ($items -join ', ') + ')'
+    }
+
+    # 处理普通数组
+    if ($Value -is [array]) {
+        if ($Value.Count -eq 0) { return '$null' }
+        if ($Value.Count -eq 1) { return ConvertTo-Expression -Object $Value[0] -Expand -1 }
+        $items = $Value | ForEach-Object { ConvertTo-Expression -Object $_ -Expand -1 }
+        return '@(' + ($items -join ', ') + ')'
+    }
+
+    return ConvertTo-Expression -Object $Value -Expand -1
+}
+
+# 求值节点中的可还原表达式
+function Evaluate-NodeResolvables {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    # 跳过没有 Resolvables 的节点
+    if ($null -eq $Node.Resolvables -or $Node.Resolvables.Count -eq 0) {
+        return
+    }
+
+    # 跳过求值的类型（有副作用或不适合求值）
+    $skipEvalTypes = @('Command', 'Unary')  # Command 和 Unary（可能有副作用如 ++/--）
+
+    foreach ($resolvable in $Node.Resolvables) {
+        # 跳过 Command 类型
+        if ($resolvable.Type -in $skipEvalTypes) {
+            continue
+        }
+
+        $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+
+        # 在当前 Runspace 上下文中求值
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $resolvable.Text
+
+        if ($evalResult.Success) {
+            $value = Format-ResolvableValue $evalResult.Result
+
+            # 记录到结果集
+            if (-not $Context.ResolvableResults.ContainsKey($key)) {
+                $Context.ResolvableResults[$key] = @{
+                    NodeId     = $Node.Id
+                    Resolvable = $resolvable
+                    Values     = @()
+                }
+            }
+            $Context.ResolvableResults[$key].Values += $value
+        }
+    }
+}
+
 # 执行节点
 function Invoke-Node {
     param(
@@ -332,6 +402,11 @@ function Invoke-Node {
         } else {
             $Context.LastConditionResult = $false
         }
+    }
+
+    # 执行成功后，对节点中的可还原表达式求值
+    if ($execResult.Success) {
+        Evaluate-NodeResolvables -Node $Node -Context $Context
     }
 
     return @{
@@ -470,6 +545,7 @@ function Invoke-CFGTraversal {
         MaxTotalNodes       = $MaxTotalNodes
         TotalVisits         = 0
         LastConditionResult = $true
+        ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
