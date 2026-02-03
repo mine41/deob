@@ -480,31 +480,38 @@ function Populate-NodeVariableUsage {
         }
         if ([string]::IsNullOrWhiteSpace($name)) { continue }
 
-        $entry = [PSCustomObject]@{
+        # 为读取的变量添加位置信息
+        $readEntry = [PSCustomObject]@{
+            Name        = $name
+            Scope       = $scope
+            StartOffset = $v.Extent.StartOffset
+            EndOffset   = $v.Extent.EndOffset
+            Text        = $v.Extent.Text
+        }
+
+        # 写入的变量保持原有格式（只需知道哪些变量被写）
+        $writeEntry = [PSCustomObject]@{
             Name  = $name
             Scope = $scope
         }
 
         switch ($kind) {
             "Read" {
-                $reads += $entry
+                $reads += $readEntry
             }
             "Write" {
-                $writes += $entry
+                $writes += $writeEntry
             }
             "ReadWrite" {
-                $reads  += $entry
-                $writes += $entry
+                $reads  += $readEntry
+                $writes += $writeEntry
             }
         }
     }
 
-    # 去重：按 Name + Scope 组合去重
-    $node.VarsRead = @(
-        $reads |
-            Group-Object Name, Scope |
-            ForEach-Object { $_.Group[0] }
-    )
+    # VarsRead 不去重，保留每个变量引用的位置信息
+    $node.VarsRead = @($reads)
+    # VarsWritten 保持去重（写入只需要知道哪些变量被写）
     $node.VarsWritten = @(
         $writes |
             Group-Object Name, Scope |

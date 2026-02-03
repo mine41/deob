@@ -51,48 +51,92 @@ Write-Host "Total visits: $($result.TotalVisits)" -ForegroundColor Green
 Write-Host "Unique nodes: $($result.VisitedNodes.Count)" -ForegroundColor Green
 Write-Host "Log file: $logPath" -ForegroundColor Green
 
-# 显示可还原表达式的求值结果
-Write-Host "`n=== Resolvable Values ===" -ForegroundColor Cyan
-if ($result.ResolvableResults.Count -eq 0) {
-    Write-Host "  (No resolvable expressions evaluated)" -ForegroundColor Gray
+# 显示可还原表达式和变量读取值（按节点分组）
+Write-Host "`n=== Execution Results (by Node) ===" -ForegroundColor Cyan
+
+# 收集所有有结果的节点 ID
+$nodeIds = @()
+$result.ResolvableResults.Values | ForEach-Object { $nodeIds += $_.NodeId }
+$result.VariableReadResults.Values | ForEach-Object { $nodeIds += $_.NodeId }
+$nodeIds = @($nodeIds | Sort-Object -Unique)
+
+if ($nodeIds.Count -eq 0) {
+    Write-Host "  (No values recorded)" -ForegroundColor Gray
 } else {
-    # 按 StartOffset 排序
-    $sorted = $result.ResolvableResults.GetEnumerator() |
-        Sort-Object { $_.Value.Resolvable.StartOffset }
+    foreach ($nodeId in $nodeIds) {
+        # 获取节点信息
+        $node = $cfg.Nodes | Where-Object { $_.Id -eq $nodeId }
+        if (-not $node) { continue }
 
-    foreach ($entry in $sorted) {
-        $record = $entry.Value
-        $r = $record.Resolvable
+        Write-Host "`nNode $nodeId ($($node.Type)):" -ForegroundColor Yellow
+        Write-Host "  Code: $($node.Text)" -ForegroundColor White
 
-        # 判断一致性
-        $consistent = $true
-        if ($record.Values.Count -gt 1) {
-            $firstValue = $record.Values[0]
-            foreach ($v in $record.Values) {
-                if ($v -ne $firstValue) {
-                    $consistent = $false
-                    break
-                }
+        # 收集该节点的 Resolvables
+        $nodeResolvables = @($result.ResolvableResults.Values | Where-Object { $_.NodeId -eq $nodeId })
+        # 收集该节点的 VariableReads
+        $nodeVarReads = @($result.VariableReadResults.Values | Where-Object { $_.NodeId -eq $nodeId })
+
+        # 按 StartOffset 排序合并展示
+        $allItems = @()
+
+        foreach ($record in $nodeResolvables) {
+            $r = $record.Resolvable
+            $uniqueValues = @($record.Values | Select-Object -Unique)
+            $consistent = $uniqueValues.Count -le 1
+            $allItems += [PSCustomObject]@{
+                Type        = "Resolvable"
+                StartOffset = $r.StartOffset
+                EndOffset   = $r.EndOffset
+                Text        = $r.Text
+                SubType     = $r.Type
+                Depth       = $r.Depth
+                Values      = $record.Values
+                Consistent  = $consistent
+                UniqueVals  = $uniqueValues
             }
         }
 
-        # 显示格式
-        $offsetInfo = "[$($r.StartOffset)-$($r.EndOffset)]"
-        $typeInfo = "[$($r.Type)]"
-        $depthInfo = "[Depth:$($r.Depth)]"
+        foreach ($record in $nodeVarReads) {
+            $v = $record.VarInfo
+            $uniqueValues = @($record.Values | Select-Object -Unique)
+            $consistent = $uniqueValues.Count -le 1
+            $allItems += [PSCustomObject]@{
+                Type        = if ($v.IsInlineResult) { "Inline" } else { "VarRead" }
+                StartOffset = $v.StartOffset
+                EndOffset   = $v.EndOffset
+                Text        = $v.Text
+                SubType     = $null
+                Depth       = $null
+                Values      = $record.Values
+                Consistent  = $consistent
+                UniqueVals  = $uniqueValues
+            }
+        }
 
-        Write-Host "  $offsetInfo $typeInfo $depthInfo" -ForegroundColor Yellow -NoNewline
-        Write-Host " $($r.Text)" -ForegroundColor White
+        # 按 StartOffset 排序
+        $allItems = $allItems | Sort-Object StartOffset
 
-        if ($record.Values.Count -eq 0) {
-            Write-Host "    => (No values)" -ForegroundColor Gray
-        } elseif ($record.Values.Count -eq 1) {
-            Write-Host "    => $($record.Values[0])" -ForegroundColor Green
-        } elseif ($consistent) {
-            Write-Host "    => $($record.Values[0]) ($($record.Values.Count) executions, consistent)" -ForegroundColor Green
-        } else {
-            Write-Host "    => INCONSISTENT: " -ForegroundColor Red -NoNewline
-            Write-Host ($record.Values -join ', ') -ForegroundColor Yellow
+        foreach ($item in $allItems) {
+            $offsetInfo = "[$($item.StartOffset)-$($item.EndOffset)]"
+            $typeTag = switch ($item.Type) {
+                "Resolvable" { "[$($item.SubType)]" }
+                "Inline"     { "[Inline]" }
+                "VarRead"    { "[Var]" }
+            }
+            $depthInfo = if ($null -ne $item.Depth) { " [D:$($item.Depth)]" } else { "" }
+
+            Write-Host "    $offsetInfo $typeTag$depthInfo" -ForegroundColor Gray -NoNewline
+            Write-Host " $($item.Text)" -ForegroundColor White
+
+            if ($item.Values.Count -eq 0) {
+                Write-Host "      => (No values)" -ForegroundColor Gray
+            } elseif ($item.Consistent) {
+                $suffix = if ($item.Values.Count -gt 1) { " (x$($item.Values.Count))" } else { "" }
+                Write-Host "      => $($item.UniqueVals[0])$suffix" -ForegroundColor Green
+            } else {
+                Write-Host "      => INCONSISTENT: " -ForegroundColor Red -NoNewline
+                Write-Host ($item.Values -join ', ') -ForegroundColor Yellow
+            }
         }
     }
 }
