@@ -1,275 +1,49 @@
-[22:01:58.421] === CFG 执行开始 ===
-[22:01:58.422] MaxIterations: 1000, MaxTotalNodes: 50000
-[22:01:58.422] 
-[22:01:58.423] === 初始化子图映射 ===
-[22:01:58.424]   [INIT] Function subgraph: Get-Double -> Node 6
-[22:01:58.425]   [INIT] Function subgraph: Get-Triple -> Node 11
-[22:01:58.425]   [INIT] Total functions: 2, ScriptBlocks: 0
-[22:01:58.425] 
-[22:01:58.429] --- Node 1 [Start] ---
-[22:01:58.429]   Code: Script Start
-[22:01:58.431]   Status: SKIP
-[22:01:58.435] --- Node 3 [MainStart] ---
-[22:01:58.435]   Code: Main Script
-[22:01:58.436]   Status: SKIP
-[22:01:58.437] --- Node 5 [FunctionDef] ---
-[22:01:58.437]   Code: function Get-Double
-[22:01:58.438]   Status: SKIP
-[22:01:58.438] --- Node 10 [FunctionDef] ---
-[22:01:58.439]   Code: function Get-Triple
-[22:01:58.439]   Status: SKIP
-[22:01:58.439] --- Node 15 [AssignmentStatementAst] ---
-[22:01:58.440]   Code: $a = 3
-[22:01:58.451]   Status: OK
-[22:01:58.451]   VarsWritten:
-[22:01:58.453]     $a = 3
-[22:01:58.454] --- Node 16 [AssignmentStatementAst] ---
-[22:01:58.455]   Code: $b = "hello"
-[22:01:58.457]   Status: OK
-[22:01:58.458]   VarsWritten:
-[22:01:58.458]     $b = "hello"
-[22:01:58.459] --- Node 17 [AssignmentStatementAst] ---
-[22:01:58.459]   Code: $c = $a + 2
-[22:01:58.465]   Status: OK
-[22:01:58.472]   VarsRead:
-[22:01:58.473]     $a = 3
-[22:01:58.473]   VarsWritten:
-[22:01:58.474]     $c = 5
-[22:01:58.474] --- Node 18 [PipelineElement] ---
-[22:01:58.475]   Code: Write-Host $a
-[22:01:58.477]   Status: OK
-[22:01:58.477]   VarsRead:
-[22:01:58.478]     $a = 3
-[22:01:58.478] --- Node 19 [PipelineElement] ---
-[22:01:58.479]   Code: Write-Host $b
-[22:01:58.481]   Status: OK
-[22:01:58.481]   VarsRead:
-[22:01:58.481]     $b = "hello"
-[22:01:58.482] --- Node 20 [PipelineElement] ---
-[22:01:58.482]   Code: Write-Host $c
-[22:01:58.484]   Status: OK
-[22:01:58.484]   VarsRead:
-[22:01:58.485]     $c = 5
-[22:01:58.485] --- Node 21 [PipelineElement] ---
-[22:01:58.485]   Code: Write-Host (Get-Double 5)
-[22:01:58.504]   [INLINE] Resolving: Get-Double 5 with args: 5
-[22:01:58.510]   [SCOPE] Push: Function 'Get-Double' (prefix=_sc_f297e9e9_, returnTo=0, endNode=7)
-[22:01:58.510]   [INLINE] Entering function 'Get-Double'
-[22:01:58.511] --- Node 6 [FuncStart] ---
-[22:01:58.511]   Code: function Get-Double
-[22:01:58.512]   Status: SKIP
-[22:01:58.512] --- Node 8 [FuncParams] ---
-[22:01:58.512]   Code: param($n)
-[22:01:58.514]   [BIND] $_sc_f297e9e9_n = 5
-[22:01:58.514]   Status: SKIP
-[22:01:58.515] --- Node 9 [Return] ---
-[22:01:58.515]   Code: return $n * 2
-[22:01:58.529]   [RETURN] Expression value: 10
-[22:01:58.530]   [RETURN] Jumping to EndNode 7
-[22:01:58.530] --- Node 7 [FuncEnd] ---
-[22:01:58.530]   Code: End function Get-Double
-[22:01:58.532]   [SCOPE] Pop: Function 'Get-Double' (returnTo=0)
-[22:01:58.532]   [RETURN] Inline call completed, preserving result: 10
-[22:01:58.532]   [INLINE] Exited function 'Get-Double' with result: 10
-[22:01:58.533]   [INLINE] Created temp var $_inline_c720368d = 10
-[22:01:58.534]   [INLINE] Result: Get-Double => 10
-[22:01:58.558]   Status: OK
-[22:01:58.559] --- Node 22 [PipelineElement] ---
-[22:01:58.559]   Code: Write-Host (Get-Triple $a)
-[22:01:58.575]   [INLINE] Resolving: Get-Triple $a with args: 3
-[22:01:58.577]   [SCOPE] Push: Function 'Get-Triple' (prefix=_sc_2c3ba5f2_, returnTo=0, endNode=12)
-[22:01:58.577]   [INLINE] Entering function 'Get-Triple'
-[22:01:58.589] --- Node 11 [FuncStart] ---
-[22:01:58.590]   Code: function Get-Triple
-[22:01:58.590]   Status: SKIP
-[22:01:58.591] --- Node 13 [FuncParams] ---
-[22:01:58.591]   Code: param($x)
-[22:01:58.592]   [BIND] $_sc_2c3ba5f2_x = 3
-[22:01:58.592]   Status: SKIP
-[22:01:58.593] --- Node 14 [Return] ---
-[22:01:58.593]   Code: return $x * 3
-[22:01:58.605]   [RETURN] Expression value: 9
-[22:01:58.605]   [RETURN] Jumping to EndNode 12
-[22:01:58.606] --- Node 12 [FuncEnd] ---
-[22:01:58.606]   Code: End function Get-Triple
-[22:01:58.606]   [SCOPE] Pop: Function 'Get-Triple' (returnTo=0)
-[22:01:58.607]   [RETURN] Inline call completed, preserving result: 9
-[22:01:58.607]   [INLINE] Exited function 'Get-Triple' with result: 9
-[22:01:58.608]   [INLINE] Created temp var $_inline_59c011a8 = 9
-[22:01:58.608]   [INLINE] Result: Get-Triple => 9
-[22:01:58.632]   Status: OK
-[22:01:58.632]   VarsRead:
-[22:01:58.633]     $a = 3
-[22:01:58.634] --- Node 23 [LoopStart] ---
-[22:01:58.634]   Code: foreach ($i in 1..3)
-[22:01:58.634]   Status: SKIP
-[22:01:58.636] --- Node 24 [ForEachInit] ---
-[22:01:58.636]   Code: $__fe_78be30d04573 = 1..3; $__fe_78be30d04573_idx = 0
-[22:01:58.653]   Status: OK
-[22:01:58.654]   VarsWritten:
-[22:01:58.654]     $__fe_78be30d04573_idx = 0
-[22:01:58.656]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.657] --- Node 25 [ForEachCondition] ---
-[22:01:58.657]   Code: [bool]($__fe_78be30d04573_idx -lt $__fe_78be30d04573.Count)
-[22:01:58.670]   Status: OK
-[22:01:58.671]   VarsRead:
-[22:01:58.671]     $__fe_78be30d04573_idx = 0
-[22:01:58.672]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.673]   Result: @(True)
-[22:01:58.673]   ConditionResult: True
-[22:01:58.675] --- Node 27 [ForEachBind] ---
-[22:01:58.676]   Code: $i = $__fe_78be30d04573[$__fe_78be30d04573_idx]
-[22:01:58.689]   Status: OK
-[22:01:58.690]   VarsRead:
-[22:01:58.691]     $__fe_78be30d04573_idx = 0
-[22:01:58.691]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.692]   VarsWritten:
-[22:01:58.692]     $i = 1
-[22:01:58.693] --- Node 29 [PipelineElement] ---
-[22:01:58.694]   Code: Write-Host $i
-[22:01:58.697]   Status: OK
-[22:01:58.697]   VarsRead:
-[22:01:58.698]     $i = 1
-[22:01:58.699] --- Node 28 [ForEachIter] ---
-[22:01:58.699]   Code: $__fe_78be30d04573_idx++
-[22:01:58.712]   Status: OK
-[22:01:58.713]   VarsRead:
-[22:01:58.713]     $__fe_78be30d04573_idx = 0
-[22:01:58.714]   VarsWritten:
-[22:01:58.714]     $__fe_78be30d04573_idx = 1
-[22:01:58.715] --- Node 25 [ForEachCondition] ---
-[22:01:58.715]   Code: [bool]($__fe_78be30d04573_idx -lt $__fe_78be30d04573.Count)
-[22:01:58.718]   Status: OK
-[22:01:58.718]   VarsRead:
-[22:01:58.719]     $__fe_78be30d04573_idx = 1
-[22:01:58.722]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.723]   Result: @(True)
-[22:01:58.724]   ConditionResult: True
-[22:01:58.725] --- Node 27 [ForEachBind] ---
-[22:01:58.725]   Code: $i = $__fe_78be30d04573[$__fe_78be30d04573_idx]
-[22:01:58.727]   Status: OK
-[22:01:58.728]   VarsRead:
-[22:01:58.728]     $__fe_78be30d04573_idx = 1
-[22:01:58.729]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.729]   VarsWritten:
-[22:01:58.730]     $i = 2
-[22:01:58.731] --- Node 29 [PipelineElement] ---
-[22:01:58.731]   Code: Write-Host $i
-[22:01:58.734]   Status: OK
-[22:01:58.734]   VarsRead:
-[22:01:58.735]     $i = 2
-[22:01:58.736] --- Node 28 [ForEachIter] ---
-[22:01:58.736]   Code: $__fe_78be30d04573_idx++
-[22:01:58.739]   Status: OK
-[22:01:58.739]   VarsRead:
-[22:01:58.740]     $__fe_78be30d04573_idx = 1
-[22:01:58.741]   VarsWritten:
-[22:01:58.741]     $__fe_78be30d04573_idx = 2
-[22:01:58.742] --- Node 25 [ForEachCondition] ---
-[22:01:58.743]   Code: [bool]($__fe_78be30d04573_idx -lt $__fe_78be30d04573.Count)
-[22:01:58.745]   Status: OK
-[22:01:58.745]   VarsRead:
-[22:01:58.746]     $__fe_78be30d04573_idx = 2
-[22:01:58.746]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.747]   Result: @(True)
-[22:01:58.747]   ConditionResult: True
-[22:01:58.748] --- Node 27 [ForEachBind] ---
-[22:01:58.749]   Code: $i = $__fe_78be30d04573[$__fe_78be30d04573_idx]
-[22:01:58.750]   Status: OK
-[22:01:58.751]   VarsRead:
-[22:01:58.752]     $__fe_78be30d04573_idx = 2
-[22:01:58.752]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.753]   VarsWritten:
-[22:01:58.753]     $i = 3
-[22:01:58.754] --- Node 29 [PipelineElement] ---
-[22:01:58.755]   Code: Write-Host $i
-[22:01:58.758]   Status: OK
-[22:01:58.758]   VarsRead:
-[22:01:58.759]     $i = 3
-[22:01:58.760] --- Node 28 [ForEachIter] ---
-[22:01:58.760]   Code: $__fe_78be30d04573_idx++
-[22:01:58.762]   Status: OK
-[22:01:58.763]   VarsRead:
-[22:01:58.763]     $__fe_78be30d04573_idx = 2
-[22:01:58.764]   VarsWritten:
-[22:01:58.764]     $__fe_78be30d04573_idx = 3
-[22:01:58.765] --- Node 25 [ForEachCondition] ---
-[22:01:58.766]   Code: [bool]($__fe_78be30d04573_idx -lt $__fe_78be30d04573.Count)
-[22:01:58.768]   Status: OK
-[22:01:58.769]   VarsRead:
-[22:01:58.769]     $__fe_78be30d04573_idx = 3
-[22:01:58.770]     $__fe_78be30d04573 = @(1, 2, 3)
-[22:01:58.770]   Result: @(False)
-[22:01:58.771]   ConditionResult: False
-[22:01:58.773] --- Node 26 [LoopEnd] ---
-[22:01:58.774]   Code: End ForEach
-[22:01:58.774]   Status: SKIP
-[22:01:58.778] --- Node 30 [AssignmentStatementAst] ---
-[22:01:58.778]   Code: $x = 100
-[22:01:58.781]   Status: OK
-[22:01:58.782]   VarsWritten:
-[22:01:58.782]     $x = 100
-[22:01:58.783] --- Node 31 [LoopStart] ---
-[22:01:58.784]   Code: for ($j = 0; $j -lt 2; $j++)
-[22:01:58.784]   Status: SKIP
-[22:01:58.785] --- Node 32 [ForInit] ---
-[22:01:58.786]   Code: $j = 0
-[22:01:58.789]   Status: OK
-[22:01:58.789]   VarsWritten:
-[22:01:58.790]     $j = 0
-[22:01:58.791] --- Node 33 [Condition] ---
-[22:01:58.792]   Code: [bool]($j -lt 2)
-[22:01:58.797]   Status: OK
-[22:01:58.798]   VarsRead:
-[22:01:58.798]     $j = 0
-[22:01:58.799]   Result: @(True)
-[22:01:58.799]   ConditionResult: True
-[22:01:58.802] --- Node 36 [PipelineElement] ---
-[22:01:58.802]   Code: Write-Host $x
-[22:01:58.806]   Status: OK
-[22:01:58.806]   VarsRead:
-[22:01:58.807]     $x = 100
-[22:01:58.808] --- Node 35 [ForIter] ---
-[22:01:58.809]   Code: $j++
-[22:01:58.812]   Status: OK
-[22:01:58.813]   VarsRead:
-[22:01:58.813]     $j = 0
-[22:01:58.814]   VarsWritten:
-[22:01:58.814]     $j = 1
-[22:01:58.815] --- Node 33 [Condition] ---
-[22:01:58.816]   Code: [bool]($j -lt 2)
-[22:01:58.822]   Status: OK
-[22:01:58.823]   VarsRead:
-[22:01:58.824]     $j = 1
-[22:01:58.824]   Result: @(True)
-[22:01:58.825]   ConditionResult: True
-[22:01:58.826] --- Node 36 [PipelineElement] ---
-[22:01:58.827]   Code: Write-Host $x
-[22:01:58.830]   Status: OK
-[22:01:58.830]   VarsRead:
-[22:01:58.831]     $x = 100
-[22:01:58.831] --- Node 35 [ForIter] ---
-[22:01:58.832]   Code: $j++
-[22:01:58.834]   Status: OK
-[22:01:58.835]   VarsRead:
-[22:01:58.835]     $j = 1
-[22:01:58.836]   VarsWritten:
-[22:01:58.836]     $j = 2
-[22:01:58.837] --- Node 33 [Condition] ---
-[22:01:58.838]   Code: [bool]($j -lt 2)
-[22:01:58.847]   Status: OK
-[22:01:58.848]   VarsRead:
-[22:01:58.849]     $j = 2
-[22:01:58.849]   Result: @(False)
-[22:01:58.850]   ConditionResult: False
-[22:01:58.852] --- Node 34 [LoopEnd] ---
-[22:01:58.853]   Code: End For
-[22:01:58.853]   Status: SKIP
-[22:01:58.854] --- Node 4 [MainEnd] ---
-[22:01:58.855]   Code: End Main Script
-[22:01:58.855]   Status: SKIP
-[22:01:58.856] === 执行结束 ===
-[22:01:58.857] 
-[22:01:58.857] === 执行统计 ===
-[22:01:58.857] Total visits: 46
-[22:01:58.858] Unique nodes: 33
+[20:08:22.782] === CFG 执行开始 ===
+[20:08:22.783] MaxIterations: 1000, MaxTotalNodes: 50000
+[20:08:22.783] 
+[20:08:22.783] === 初始化子图映射 ===
+[20:08:22.784]   [INIT] ScriptBlock subgraph: _block_d3278b37 -> Node 6
+[20:08:22.784]   [INIT] Total functions: 0, ScriptBlocks: 1
+[20:08:22.785] 
+[20:08:22.785] --- Node 1 [Start] ---
+[20:08:22.785]   Code: Script Start
+[20:08:22.786]   Status: SKIP
+[20:08:22.786] --- Node 3 [MainStart] ---
+[20:08:22.787]   Code: Main Script
+[20:08:22.787]   Status: SKIP
+[20:08:22.787] --- Node 5 [PipelineElement] ---
+[20:08:22.788]   Code: 1..5
+[20:08:22.793]   Status: OK
+[20:08:22.794]   VarsWritten:
+[20:08:22.795]     $_pipe_addd803b = @(1, 2, 3, 4, 5)
+[20:08:22.795]   Result: @(1, 2, 3, 4, 5)
+[20:08:22.796] --- Node 9 [PipelineElement] ---
+[20:08:22.796]   Code: $_pipe_addd803b | & $_block_d3278b37
+[20:08:22.797]   [CALL] ScriptBlock: _block_d3278b37 (via Ampersand detection)
+[20:08:22.799]   [SCOPE] Push: ScriptBlock '_block_d3278b37' (prefix=_sc_f1102834_, returnTo=4, endNode=7)
+[20:08:22.799]   [BLOCK] Entering ScriptBlock '_block_d3278b37' at Node 6
+[20:08:22.800]   Status: SKIP
+[20:08:22.800]   Action: CallScriptBlock
+[20:08:22.801]   Target: _block_d3278b37
+[20:08:22.801]   [JUMP] Jumping to Node 6
+[20:08:22.801] --- Node 6 [BlockStart] ---
+[20:08:22.802]   Code: ScriptBlock _block_d3278b37
+[20:08:22.802]   Status: SKIP
+[20:08:22.803] --- Node 8 [PipelineElement] ---
+[20:08:22.803]   Code: "处理: $_"
+[20:08:22.806]   Status: OK
+[20:08:22.807]   VarsRead:
+[20:08:22.807]     $_ = $null
+[20:08:22.808]   Result: @("处理: ")
+[20:08:22.808] --- Node 7 [BlockEnd] ---
+[20:08:22.809]   Code: End ScriptBlock _block_d3278b37
+[20:08:22.809]   [SCOPE] Pop: ScriptBlock '_block_d3278b37' (returnTo=4)
+[20:08:22.809]   [RETURN] Returning from ScriptBlock '_block_d3278b37' to Node 4
+[20:08:22.810] --- Node 4 [MainEnd] ---
+[20:08:22.810]   Code: End Main Script
+[20:08:22.811]   Status: SKIP
+[20:08:22.811] === 执行结束 ===
+[20:08:22.812] 
+[20:08:22.812] === 执行统计 ===
+[20:08:22.812] Total visits: 7
+[20:08:22.813] Unique nodes: 7

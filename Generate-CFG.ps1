@@ -1038,8 +1038,30 @@ function Convert-ScriptBlockBody {
         $prevNodeRef.Value = $paramNode
     }
 
-    # 2. 处理 EndBlock（主体代码）
-    if ($null -ne $scriptBlockAst.EndBlock) {
+    # 2. 处理 BeginBlock（如果存在）
+    if ($null -ne $scriptBlockAst.BeginBlock -and $scriptBlockAst.BeginBlock.Statements.Count -gt 0) {
+        foreach ($statement in $scriptBlockAst.BeginBlock.Statements) {
+            $stmtHasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+            if ($stmtHasTerminator) {
+                $hasTerminator = $true
+                break
+            }
+        }
+    }
+
+    # 3. 处理 ProcessBlock（如果存在）- 用于管道处理
+    if ($null -ne $scriptBlockAst.ProcessBlock -and $scriptBlockAst.ProcessBlock.Statements.Count -gt 0) {
+        foreach ($statement in $scriptBlockAst.ProcessBlock.Statements) {
+            $stmtHasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
+            if ($stmtHasTerminator) {
+                $hasTerminator = $true
+                break
+            }
+        }
+    }
+
+    # 4. 处理 EndBlock（主体代码）
+    if ($null -ne $scriptBlockAst.EndBlock -and $scriptBlockAst.EndBlock.Statements.Count -gt 0) {
         foreach ($statement in $scriptBlockAst.EndBlock.Statements) {
             $stmtHasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
             if ($stmtHasTerminator) {
@@ -3355,6 +3377,14 @@ function Convert-PipelineAstNode {
             if ($null -ne $scriptBlockExpansion) {
                 if ($scriptBlockExpansion.InvokeOnlyExpanded) {
                     # InvokeOnly 类型（如 & { } 或 . { }）已经完全展开，不需要创建后续节点
+                    # 但如果是 pipeline 的非首元素，需要修改已创建的节点，添加管道输入
+                    if ($i -gt 0 -and $null -ne $prevNodeRef.Value) {
+                        $createdNode = $prevNodeRef.Value
+                        # 修改节点文本，添加管道前缀
+                        $createdNode.Text = "`$$pipeVarName | " + $createdNode.Text
+                        # 添加管道变量读取
+                        Add-VarToNode -node $createdNode -varEntry $pipeVarEntry -accessType "Read"
+                    }
                     $skipNodeCreation = $true
                 } elseif ($null -ne $scriptBlockExpansion.ModifiedText) {
                     $baseText = $scriptBlockExpansion.ModifiedText

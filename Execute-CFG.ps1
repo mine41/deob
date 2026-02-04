@@ -658,6 +658,24 @@ function Invoke-NodeSafe {
         }
     }
 
+    # 2. 脚本块调用检测 - 统一使用 Get-ScriptBlockCallInfo 处理各种形式
+    if ($Context.ScriptBlockSubgraphs.Count -gt 0 -and $Node.Ast) {
+        $callInfo = Get-ScriptBlockCallInfo -Node $Node -Context $Context
+        if ($callInfo -and $callInfo.BlockName -and $Context.ScriptBlockSubgraphs.ContainsKey($callInfo.BlockName)) {
+            Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $($callInfo.BlockName) (via $($callInfo.CallType) detection)"
+            return Invoke-ScriptBlockCall -BlockName $callInfo.BlockName -CallerNode $Node -Context $Context -PreParsedArguments $callInfo.Arguments
+        }
+    }
+
+    # 2.5. 备用：静态检测（当动态检测失败时，使用 Invokes.ScriptBlocks）
+    if ($Node.Invokes -and $Node.Invokes.ScriptBlocks -and $Node.Invokes.ScriptBlocks.Count -gt 0) {
+        $blockName = $Node.Invokes.ScriptBlocks[0]
+        if ($Context.ScriptBlockSubgraphs.ContainsKey($blockName)) {
+            Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $blockName (via Invokes.ScriptBlocks fallback)"
+            return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+        }
+    }
+
     # 检测可疑变量名
     Test-SuspiciousVariables -Node $Node -Context $Context
 
@@ -1066,7 +1084,8 @@ function Invoke-ScriptBlockCall {
     param(
         [string]$BlockName,
         $CallerNode,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [array]$PreParsedArguments = $null  # 预解析的参数（来自 Get-ScriptBlockCallInfo）
     )
 
     # 1. 检查调用深度
@@ -1109,13 +1128,101 @@ function Invoke-ScriptBlockCall {
     $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context
     $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
 
-    # 6. Push 作用域
+    # 6. 提取调用者的实参并求值
+    $arguments = @()
+
+    # 优先使用预解析的参数（来自 Get-ScriptBlockCallInfo，用于 Invoke-Command 等形式）
+    if ($null -ne $PreParsedArguments) {
+        $arguments = $PreParsedArguments
+        for ($i = 0; $i -lt $arguments.Count; $i++) {
+            Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: (pre-parsed) = $(Format-VariableValue $arguments[$i])"
+        }
+    }
+    # 否则从 AST 解析参数
+    elseif ($CallerNode.Ast) {
+        $cmdAst = $null
+        # 如果是赋值语句，取右侧的 Pipeline
+        if ($CallerNode.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+            $pipeline = $CallerNode.Ast.Right
+            if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and $pipeline.PipelineElements.Count -gt 0) {
+                $cmdAst = $pipeline.PipelineElements[0]
+            }
+        } elseif ($CallerNode.Ast -is [System.Management.Automation.Language.CommandAst]) {
+            $cmdAst = $CallerNode.Ast
+        }
+
+        # 对于脚本块调用 `& $_block_xxx -param value`
+        # CommandElements[0] = & (调用操作符，可能不存在于 CommandElements)
+        # CommandElements[0] 或 [1] = $_block_xxx
+        # 后续元素 = 参数
+        if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
+            # 找到脚本块变量之后的参数
+            $startIndex = 1
+            for ($i = 0; $i -lt $cmdAst.CommandElements.Count; $i++) {
+                $elem = $cmdAst.CommandElements[$i]
+                if ($elem -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                    $varName = $elem.VariablePath.UserPath
+                    if ($varName -eq $BlockName) {
+                        $startIndex = $i + 1
+                        break
+                    }
+                }
+            }
+
+            # 从脚本块变量之后开始提取参数
+            for ($i = $startIndex; $i -lt $cmdAst.CommandElements.Count; $i++) {
+                $argAst = $cmdAst.CommandElements[$i]
+                $argCode = $argAst.Extent.Text
+
+                # 跳过参数名（如 -name）
+                if ($argAst -is [System.Management.Automation.Language.CommandParameterAst]) {
+                    continue
+                }
+
+                # 如果当前在函数/脚本块作用域中，对参数表达式应用变量前缀转换
+                if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
+                    $currentScope = $Context.ScopeStack[-1]
+                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+                    }
+                }
+
+                # 求值参数
+                $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+                if ($argResult.Success) {
+                    $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
+                        $argResult.Result[0]
+                    } else {
+                        $argResult.Result
+                    }
+                    $arguments += $argValue
+                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$($arguments.Count - 1)]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)"
+                } else {
+                    $arguments += $null
+                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$($arguments.Count)]: $($argAst.Extent.Text) = (eval failed)"
+                }
+            }
+        }
+    }
+
+    # 7. 获取调用者的目标变量（如果是赋值语句）
+    $targetVarName = $null
+    if ($CallerNode.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        $leftAst = $CallerNode.Ast.Left
+        if ($leftAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $targetVarName = $leftAst.VariablePath.UserPath
+        }
+    }
+
+    # 8. Push 作用域
     Push-ExecutionScope -Context $Context -ScopeType "ScriptBlock" -ScopeName $BlockName -ReturnNodeId $returnNodeId -EndNodeId $blockEndId
     if ($Context.ScopeStack.Count -gt 0) {
         $Context.ScopeStack[-1].LocalVars = $localVars
+        $Context.ScopeStack[-1].Arguments = $arguments
+        $Context.ScopeStack[-1].TargetVarName = $targetVarName
     }
 
-    # 7. 跳转执行脚本块子图
+    # 9. 跳转执行脚本块子图
     $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
 
     Write-ExecutionLog -Context $Context -Message "  [BLOCK] Entering ScriptBlock '$BlockName' at Node $blockStartId"
@@ -1904,6 +2011,292 @@ function Resolve-NonCommandExpressions {
     }
 
     return $resolvedValues
+}
+
+# 检测脚本块调用并返回调用信息
+# 支持多种调用形式：& $block, . $block, Invoke-Command -ScriptBlock $block, $sb.Invoke()
+# 返回 @{ BlockName; Arguments; CallType } 或 $null
+function Get-ScriptBlockCallInfo {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    # 获取 CommandAst
+    $cmdAst = $null
+    if ($Node.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        $pipeline = $Node.Ast.Right
+        if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and $pipeline.PipelineElements.Count -gt 0) {
+            $cmdAst = $pipeline.PipelineElements[0]
+        }
+    } elseif ($Node.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $cmdAst = $Node.Ast
+    }
+
+    if (-not $cmdAst) {
+        return $null
+    }
+
+    # 收集已知脚本块名称（来自 Invokes.ScriptBlocks），供各检测函数使用
+    $knownBlockNames = @()
+    if ($Node.Invokes -and $Node.Invokes.ScriptBlocks) {
+        $knownBlockNames = @($Node.Invokes.ScriptBlocks)
+    }
+
+    # 检测 Invoke-Command -ScriptBlock 形式
+    $cmdName = $cmdAst.GetCommandName()
+    if ($cmdName -in @('Invoke-Command', 'icm')) {
+        return Get-InvokeCommandCallInfo -CmdAst $cmdAst -Context $Context -KnownBlockNames $knownBlockNames
+    }
+
+    # 检测 & $var 或 . $var 形式
+    if ($cmdAst.InvocationOperator -in @([System.Management.Automation.Language.TokenKind]::Ampersand,
+                                          [System.Management.Automation.Language.TokenKind]::Dot)) {
+        return Get-AmpersandDotCallInfo -CmdAst $cmdAst -Context $Context -KnownBlockNames $knownBlockNames
+    }
+
+    return $null
+}
+
+# 解析 Invoke-Command -ScriptBlock $block -ArgumentList @(...) 形式
+function Get-InvokeCommandCallInfo {
+    param(
+        $CmdAst,
+        [hashtable]$Context,
+        [array]$KnownBlockNames = @()
+    )
+
+    $blockName = $null
+    $arguments = @()
+
+    # 遍历命令元素，查找 -ScriptBlock 和 -ArgumentList 参数
+    $i = 1  # 跳过命令名
+    while ($i -lt $CmdAst.CommandElements.Count) {
+        $elem = $CmdAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramName = $elem.ParameterName
+
+            # -ScriptBlock 参数
+            if ($paramName -in @('ScriptBlock', 'sb')) {
+                # 参数值可能在同一元素中（-ScriptBlock:$sb）或下一个元素
+                if ($elem.Argument) {
+                    $blockName = Get-ScriptBlockNameFromAst -Ast $elem.Argument -Context $Context -KnownBlockNames $KnownBlockNames
+                } elseif ($i + 1 -lt $CmdAst.CommandElements.Count) {
+                    $i++
+                    $blockName = Get-ScriptBlockNameFromAst -Ast $CmdAst.CommandElements[$i] -Context $Context -KnownBlockNames $KnownBlockNames
+                }
+            }
+            # -ArgumentList 参数
+            elseif ($paramName -in @('ArgumentList', 'Args')) {
+                if ($elem.Argument) {
+                    $arguments = Get-ArgumentListValues -Ast $elem.Argument -Context $Context
+                } elseif ($i + 1 -lt $CmdAst.CommandElements.Count) {
+                    $i++
+                    $arguments = Get-ArgumentListValues -Ast $CmdAst.CommandElements[$i] -Context $Context
+                }
+            }
+        }
+        $i++
+    }
+
+    if ($blockName) {
+        return @{
+            BlockName = $blockName
+            Arguments = $arguments
+            CallType  = "InvokeCommand"
+        }
+    }
+
+    return $null
+}
+
+# 解析 & $var 或 . $var 形式
+function Get-AmpersandDotCallInfo {
+    param(
+        $CmdAst,
+        [hashtable]$Context,
+        [array]$KnownBlockNames = @()
+    )
+
+    if (-not $CmdAst.CommandElements -or $CmdAst.CommandElements.Count -lt 1) {
+        return $null
+    }
+
+    # 获取第一个命令元素（脚本块变量）
+    $firstElement = $CmdAst.CommandElements[0]
+    $blockName = Get-ScriptBlockNameFromAst -Ast $firstElement -Context $Context -KnownBlockNames $KnownBlockNames
+
+    if (-not $blockName) {
+        return $null
+    }
+
+    # 提取参数（从第二个元素开始，跳过参数名）
+    $arguments = @()
+    for ($i = 1; $i -lt $CmdAst.CommandElements.Count; $i++) {
+        $argAst = $CmdAst.CommandElements[$i]
+
+        # 跳过参数名（如 -name）
+        if ($argAst -is [System.Management.Automation.Language.CommandParameterAst]) {
+            continue
+        }
+
+        $argValue = Get-AstValue -Ast $argAst -Context $Context
+        $arguments += $argValue
+    }
+
+    $callType = if ($CmdAst.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot) {
+        "Dot"
+    } else {
+        "Ampersand"
+    }
+
+    return @{
+        BlockName = $blockName
+        Arguments = $arguments
+        CallType  = $callType
+    }
+}
+
+# 从 AST 获取脚本块名称
+function Get-ScriptBlockNameFromAst {
+    param(
+        $Ast,
+        [hashtable]$Context,
+        [array]$KnownBlockNames = @()  # 来自 Invokes.ScriptBlocks 的已知名称
+    )
+
+    # 变量表达式：$block, $_block_xxx
+    if ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $varName = $Ast.VariablePath.UserPath
+
+        # 检查是否是已知的脚本块变量
+        if ($Context.ScriptBlockSubgraphs.ContainsKey($varName)) {
+            return $varName
+        }
+
+        # 动态查找：获取变量值并匹配
+        $actualVarName = $varName
+        if ($Context.ScopeStack.Count -gt 0) {
+            $currentScope = $Context.ScopeStack[-1]
+            if ($currentScope.LocalVars -and $varName -in $currentScope.LocalVars) {
+                $actualVarName = $currentScope.ScopePrefix + $varName
+            }
+        }
+
+        $varValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
+        if ($varValue -is [scriptblock]) {
+            # 通过内容匹配查找脚本块名称
+            $sbText = $varValue.ToString().Trim()
+            foreach ($blockName in $Context.ScriptBlockSubgraphs.Keys) {
+                $blockStartId = $Context.ScriptBlockSubgraphs[$blockName]
+                $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+                if ($blockStartNode.Ast) {
+                    $blockText = $blockStartNode.Ast.Extent.Text.Trim()
+                    if ($blockText.StartsWith('{') -and $blockText.EndsWith('}')) {
+                        $blockText = $blockText.Substring(1, $blockText.Length - 2).Trim()
+                    }
+                    if ($sbText -eq $blockText) {
+                        return $blockName
+                    }
+                }
+            }
+        }
+    }
+    # ScriptBlockExpressionAst：直接的 { } 表达式（AST 中保留了原始脚本块）
+    elseif ($Ast -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+        # 优先使用 KnownBlockNames（来自 Invokes.ScriptBlocks，CFG 已经静态分析过）
+        if ($KnownBlockNames.Count -gt 0) {
+            foreach ($name in $KnownBlockNames) {
+                if ($Context.ScriptBlockSubgraphs.ContainsKey($name)) {
+                    return $name
+                }
+            }
+        }
+
+        # 备用：通过内容匹配查找
+        $sbText = $Ast.ScriptBlock.Extent.Text.Trim()
+        foreach ($blockName in $Context.ScriptBlockSubgraphs.Keys) {
+            $blockStartId = $Context.ScriptBlockSubgraphs[$blockName]
+            $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+            if ($blockStartNode.Ast) {
+                $blockText = $blockStartNode.Ast.Extent.Text.Trim()
+                if ($sbText -eq $blockText) {
+                    return $blockName
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+# 从 AST 获取 ArgumentList 的值（数组）
+function Get-ArgumentListValues {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    $values = @()
+
+    # ArrayLiteralAst：5, 3 形式
+    if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        foreach ($elem in $Ast.Elements) {
+            $values += Get-AstValue -Ast $elem -Context $Context
+        }
+    }
+    # ArrayExpressionAst：@(5, 3) 形式
+    elseif ($Ast -is [System.Management.Automation.Language.ArrayExpressionAst]) {
+        if ($Ast.SubExpression -and $Ast.SubExpression.Statements) {
+            foreach ($stmt in $Ast.SubExpression.Statements) {
+                if ($stmt.PipelineElements -and $stmt.PipelineElements.Count -gt 0) {
+                    $expr = $stmt.PipelineElements[0].Expression
+                    if ($expr -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+                        foreach ($elem in $expr.Elements) {
+                            $values += Get-AstValue -Ast $elem -Context $Context
+                        }
+                    } else {
+                        $values += Get-AstValue -Ast $expr -Context $Context
+                    }
+                }
+            }
+        }
+    }
+    # 单个值
+    else {
+        $values += Get-AstValue -Ast $Ast -Context $Context
+    }
+
+    return $values
+}
+
+# 从 AST 求值获取值
+function Get-AstValue {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    $code = $Ast.Extent.Text
+
+    # 应用变量前缀转换
+    if ($Context.ScopeStack.Count -gt 0) {
+        $currentScope = $Context.ScopeStack[-1]
+        if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+            $code = Convert-VariableNames -Code $code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+        }
+    }
+
+    $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
+    if ($evalResult.Success) {
+        if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $evalResult.Result.Count -eq 1) {
+            return $evalResult.Result[0]
+        }
+        return $evalResult.Result
+    }
+
+    return $null
 }
 
 # 记录别名解析结果为可还原表达式
