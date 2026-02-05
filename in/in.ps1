@@ -1,7 +1,5 @@
-function Double {
-    process {
-        $_ * 2
-    }
-}
-
-1,2,3 | Double
+Invoke-Expression 'Write-Host "Hello"'
+iex 'Write-Host "Hello"'
+IEX 'Write-Host "Hello"'
+$t = 'Write-Host "Hello"'
+iex $t

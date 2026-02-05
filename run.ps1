@@ -7,8 +7,6 @@ $cfg.Edges | Format-Table -AutoSize
 $dotPath = Join-Path $PSScriptRoot 'in/in.dot'
 Export-CfgToDot -finalCFG $cfg -outputPath $dotPath
 
-Start-Process 'in/in.png'
-
 $cfg.DefinedFunctions
 $cfg.ProcessedScriptBlocks
 
@@ -50,6 +48,9 @@ $result = Invoke-CFGTraversal -CFG $cfg -LogPath $logPath
 Write-Host "Total visits: $($result.TotalVisits)" -ForegroundColor Green
 Write-Host "Unique nodes: $($result.VisitedNodes.Count)" -ForegroundColor Green
 Write-Host "Log file: $logPath" -ForegroundColor Green
+
+# 执行后重新导出 DOT（包含动态创建的子图）
+Export-CfgToDot -finalCFG $cfg -outputPath $dotPath
 
 # 显示可还原表达式和变量读取值（按节点分组）
 Write-Host "`n=== Execution Results (by Node) ===" -ForegroundColor Cyan
@@ -140,3 +141,5 @@ if ($nodeIds.Count -eq 0) {
         }
     }
 }
+
+Start-Process 'in/in.png'

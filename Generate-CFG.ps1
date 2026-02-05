@@ -1095,8 +1095,10 @@ function Convert-ScriptBlockDefinition {
         $blockName = "__block_$guid"
     }
 
-    # 创建 BlockStart 节点（包含块名称）
+    # 创建 BlockStart 节点（不存储 AST，避免 Resolvables 误检测）
     $blockStart = Add-Node -cfg $cfg -type "BlockStart" -text "ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.StartLineNumber -ast $null
+    # 存储脚本块内容文本，用于运行时匹配（不使用 AST 属性，避免被 Populate-NodeResolvables 处理）
+    $blockStart | Add-Member -NotePropertyName "ScriptBlockText" -NotePropertyValue $scriptBlockExprAst.Extent.Text -Force
     $blockEnd = Add-Node -cfg $cfg -type "BlockEnd" -text "End ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.EndLineNumber -ast $null
 
     $prevNode = $blockStart
@@ -4341,7 +4343,59 @@ $($edgeDefinitions -join "`n")
     }
 }
 
+# 运行时创建脚本块子图（用于动态执行的代码）
+# 完整支持控制流结构
+function New-RuntimeSubgraph {
+    param(
+        [hashtable]$cfg,              # 现有的 CFG
+        [string]$Code,                # 动态执行的代码字符串
+        [string]$BlockNamePrefix = "_dyn_"  # 块名前缀
+    )
 
+    # 1. 解析代码字符串为 AST
+    $errors = $null
+    $tokens = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($Code, [ref]$tokens, [ref]$errors)
+
+    if ($errors -and $errors.Count -gt 0) {
+        return @{
+            Success = $false
+            Error = $errors[0].Message
+        }
+    }
+
+    # 2. 生成唯一块名称
+    $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
+    $blockName = "$BlockNamePrefix$guid"
+
+    # 3. 创建 BlockStart 和 BlockEnd 节点
+    $blockStart = Add-Node -cfg $cfg -type "BlockStart" -text "DynamicBlock $blockName" -line 0 -ast $null
+    # 存储脚本块内容文本，用于运行时匹配
+    $blockStart | Add-Member -NotePropertyName "ScriptBlockText" -NotePropertyValue "{$Code}" -Force
+    $blockEnd = Add-Node -cfg $cfg -type "BlockEnd" -text "End DynamicBlock $blockName" -line 0 -ast $null
+
+    $prevNode = $blockStart
+    $prev = [ref]$prevNode
+    $endRef = [ref]$blockEnd
+
+    # 4. 使用 Convert-ScriptBlockBody 完整处理 AST（支持控制流）
+    $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $ast -prevNodeRef $prev -endNodeRef $endRef -paramNodeType "BlockParams"
+
+    # 5. 连接最后节点到 BlockEnd
+    if ($null -ne $prev.Value -and $prev.Value.Id -ne $blockEnd.Id) {
+        $lastType = $prev.Value.Type
+        if ($lastType -notin @("Return", "Exit", "Throw", "Break", "Continue", "End")) {
+            Add-Edge -cfg $cfg -from $prev.Value.Id -to $blockEnd.Id
+        }
+    }
+
+    return @{
+        Success = $true
+        BlockName = $blockName
+        BlockStartId = $blockStart.Id
+        BlockEndId = $blockEnd.Id
+    }
+}
 
 
 # # 生成控制流图

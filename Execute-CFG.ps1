@@ -668,11 +668,42 @@ function Invoke-NodeSafe {
     }
 
     # 2.5. 备用：静态检测（当动态检测失败时，使用 Invokes.ScriptBlocks）
+    # 【重要】排除定义/赋值节点 - 只有在真正调用脚本块时才跳转
+    # 定义/赋值节点的 VarsWritten 会包含脚本块变量，但不应该触发跳转
     if ($Node.Invokes -and $Node.Invokes.ScriptBlocks -and $Node.Invokes.ScriptBlocks.Count -gt 0) {
         $blockName = $Node.Invokes.ScriptBlocks[0]
         if ($Context.ScriptBlockSubgraphs.ContainsKey($blockName)) {
-            Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $blockName (via Invokes.ScriptBlocks fallback)"
-            return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+            # 检查是否是定义/赋值节点（VarsWritten 包含脚本块变量）
+            $isDefinitionNode = $false
+            if ($Node.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                $isDefinitionNode = $true
+            }
+            # 也检查 VarsWritten 是否包含脚本块变量名（排除纯定义节点）
+            if ($Node.VarsWritten) {
+                foreach ($varInfo in $Node.VarsWritten) {
+                    if ($varInfo.Name -eq $blockName -or $varInfo.Name -match '^_block_') {
+                        $isDefinitionNode = $true
+                        break
+                    }
+                }
+            }
+
+            if (-not $isDefinitionNode) {
+                Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $blockName (via Invokes.ScriptBlocks fallback)"
+                return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+            }
+        }
+    }
+
+    # 3. ScriptBlockCreate / NewScriptBlock 动态执行检测
+    # 这些不是命令，而是方法调用，需要单独检测
+    if ($Node.DynamicInvoke) {
+        $dynInfoList = if ($Node.DynamicInvoke -is [array]) { $Node.DynamicInvoke } else { @($Node.DynamicInvoke) }
+        foreach ($dynInfo in $dynInfoList) {
+            if ($dynInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock")) {
+                Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dynamic invoke detected: $($dynInfo.Type)"
+                return Handle-DynamicInvoke -Node $Node -Context $Context -DynamicInfo $dynInfo
+            }
         }
     }
 
@@ -741,7 +772,7 @@ function Invoke-NodeSafe {
         }
         "DynamicInvoke" {
             Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dynamic invoke detected: $($checkResult.Target)"
-            return Handle-DynamicInvoke -Node $Node -Context $Context -CommandInfo $commandInfo
+            return Handle-DynamicInvoke -Node $Node -Context $Context -CommandInfo $commandInfo -DynamicTypeFromCommand $checkResult.DynamicType
         }
         default {
             # 默认执行
@@ -770,7 +801,8 @@ function Get-SubgraphEndNode {
     $pattern = if ($StartType -eq "FuncStart") {
         "^End function $([regex]::Escape($Name))$"
     } else {
-        "^End ScriptBlock $([regex]::Escape($Name))$"
+        # 支持 ScriptBlock 和 DynamicBlock 两种格式
+        "^End (ScriptBlock|DynamicBlock) $([regex]::Escape($Name))$"
     }
 
     foreach ($node in $CFG.Nodes) {
@@ -1237,33 +1269,101 @@ function Invoke-ScriptBlockCall {
     }
 }
 
-# 处理动态执行（iex 等）
+# 处理动态执行（iex / ScriptBlockCreate / NewScriptBlock）- 创建 CFG 子图
 function Handle-DynamicInvoke {
     param(
         $Node,
         [hashtable]$Context,
-        $CommandInfo
+        $CommandInfo = $null,         # IEX / ScriptBlockCreate 命令名类型时由 Test-CommandSafety 传入
+        $DynamicInfo = $null,         # ScriptBlockCreate / NewScriptBlock AST 类型时由 Invoke-NodeSafe 传入
+        $DynamicTypeFromCommand = $null  # 从 Test-CommandSafety 传入的动态类型标记
     )
 
-    # 尝试获取 iex 的参数值
+    # 1. 根据类型提取参数值
     $argumentValue = $null
+    $dynType = $null
+    $isScriptBlockCreateFromCommand = $false  # 标记是否为命令名形式的 ScriptBlockCreate
 
-    if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 1) {
-        # 获取第一个参数
-        $argElement = $CommandInfo.Ast.CommandElements[1]
+    # 判断类型：DynamicInfo AST 类型 > 命令名类型 > IEX
+    if ($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock")) {
+        # ScriptBlockCreate / NewScriptBlock：参数从 DynamicInfo.ArgAst 提取
+        $dynType = $DynamicInfo.Type
 
-        if ($argElement) {
-            # 尝试在当前上下文中求值
-            $argCode = $argElement.Extent.Text
+        if ($DynamicInfo.ArgAst) {
+            $argCode = $DynamicInfo.ArgAst.Extent.Text
+
+            # 应用变量前缀转换
+            if ($Context.ScopeStack.Count -gt 0) {
+                $currentScope = $Context.ScopeStack[-1]
+                if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+                    $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+                }
+            }
+
             $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-
             if ($evalResult.Success -and $null -ne $evalResult.Result) {
                 if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                    if ($evalResult.Result.Count -gt 0) {
-                        $argumentValue = $evalResult.Result[0]
-                    }
+                    if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
+                } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
+                    $argumentValue = $evalResult.Result[0]
                 } else {
                     $argumentValue = $evalResult.Result
+                }
+            }
+        }
+    } elseif ($DynamicTypeFromCommand -eq "ScriptBlockCreate") {
+        # 命令名形式的 [ScriptBlock]::Create($arg)：参数从 CommandElements[1] 提取
+        $dynType = "ScriptBlockCreate"
+        $isScriptBlockCreateFromCommand = $true
+
+        if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 1) {
+            $argElement = $CommandInfo.Ast.CommandElements[1]
+            if ($argElement) {
+                $argCode = $argElement.Extent.Text
+
+                if ($Context.ScopeStack.Count -gt 0) {
+                    $currentScope = $Context.ScopeStack[-1]
+                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+                    }
+                }
+
+                $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+                if ($evalResult.Success -and $null -ne $evalResult.Result) {
+                    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                        if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
+                    } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
+                        $argumentValue = $evalResult.Result[0]
+                    } else {
+                        $argumentValue = $evalResult.Result
+                    }
+                }
+            }
+        }
+    } else {
+        # IEX：参数从 CommandInfo.Ast.CommandElements[1] 提取
+        $dynType = "IEX"
+        if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 1) {
+            $argElement = $CommandInfo.Ast.CommandElements[1]
+            if ($argElement) {
+                $argCode = $argElement.Extent.Text
+
+                if ($Context.ScopeStack.Count -gt 0) {
+                    $currentScope = $Context.ScopeStack[-1]
+                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+                    }
+                }
+
+                $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+                if ($evalResult.Success -and $null -ne $evalResult.Result) {
+                    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                        if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
+                    } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
+                        $argumentValue = $evalResult.Result[0]
+                    } else {
+                        $argumentValue = $evalResult.Result
+                    }
                 }
             }
         }
@@ -1272,37 +1372,225 @@ function Handle-DynamicInvoke {
     # 记录动态执行信息
     $dynamicRecord = @{
         NodeId        = $Node.Id
-        Command       = $CommandInfo.ResolvedName
-        ArgumentCode  = if ($CommandInfo.Ast.CommandElements.Count -gt 1) { $CommandInfo.Ast.CommandElements[1].Extent.Text } else { $null }
+        Command       = $dynType
+        ArgumentCode  = if ($DynamicInfo -and $DynamicInfo.ArgAst) { $DynamicInfo.ArgAst.Extent.Text } elseif ($CommandInfo -and $CommandInfo.Ast -and $CommandInfo.Ast.CommandElements.Count -gt 1) { $CommandInfo.Ast.CommandElements[1].Extent.Text } else { $null }
         ArgumentValue = $argumentValue
         Timestamp     = Get-Date
     }
     $Context.DynamicInvokeResults += $dynamicRecord
 
-    Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Command: $($CommandInfo.ResolvedName)"
-    if ($argumentValue) {
-        $truncatedValue = if ($argumentValue.Length -gt 200) {
-            $argumentValue.Substring(0, 197) + "..."
-        } else {
-            $argumentValue
+    Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Type: $dynType"
+
+    # 2. 验证参数值是字符串
+    if (-not ($argumentValue -is [string]) -or [string]::IsNullOrWhiteSpace($argumentValue)) {
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Cannot resolve argument to string, falling back to direct execution"
+        $result = Invoke-NodeDirect -Node $Node -Context $Context
+        if ($result.Success) {
+            Evaluate-NodeResolvables -Node $Node -Context $Context
         }
-        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] ArgumentValue: $truncatedValue"
+        $result.Action = "DynamicInvoke"
+        $result.DynamicRecord = $dynamicRecord
+        return $result
     }
 
-    # 执行节点（让 iex 实际执行，但记录其参数）
-    # 注意：这里我们选择执行，以便后续代码能够继续。
-    # 如果需要阻止 iex 执行，可以返回 Blocked
-    $result = Invoke-NodeDirect -Node $Node -Context $Context
+    $codePreview = if ($argumentValue.Length -gt 100) { $argumentValue.Substring(0, 100) + "..." } else { $argumentValue }
+    Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Code to execute: $codePreview"
 
-    # 执行成功后求值可还原表达式
-    if ($result.Success) {
+    # 3. 根据类型选择不同的处理方式
+    if (($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock")) -or $isScriptBlockCreateFromCommand) {
+        # ScriptBlockCreate / NewScriptBlock：
+        # 1. 创建前置节点：$_dyn_xxx = {xxx}（显示转换过程）
+        # 2. 原节点中的 [ScriptBlock]::Create(xxx) 替换为 $_dyn_xxx
+
+        # 创建运行时子图
+        $subgraphResult = New-RuntimeSubgraph -cfg $Context.CFG -Code $argumentValue
+
+        if (-not $subgraphResult.Success) {
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Parse error: $($subgraphResult.Error), falling back to direct execution"
+            $result = Invoke-NodeDirect -Node $Node -Context $Context
+            if ($result.Success) {
+                Evaluate-NodeResolvables -Node $Node -Context $Context
+            }
+            $result.Action = "DynamicInvoke"
+            $result.DynamicRecord = $dynamicRecord
+            return $result
+        }
+
+        $blockName = $subgraphResult.BlockName
+        $blockVarRef = "`$$blockName"
+        $scriptBlockLiteral = "{$argumentValue}"
+
+        # 注册子图
+        $Context.ScriptBlockSubgraphs[$blockName] = $subgraphResult.BlockStartId
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created subgraph: $blockName (Nodes $($subgraphResult.BlockStartId)-$($subgraphResult.BlockEndId))"
+
+        # 创建前置转换节点（显示 $_dyn_xxx = {xxx}）
+        $translationText = "$blockVarRef = $scriptBlockLiteral"
+        $translationNode = Add-Node -cfg $Context.CFG -type "DynamicTranslation" -text $translationText -line $Node.Line -ast $null
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created translation node: $translationText"
+
+        # 将转换节点插入到 CFG 中作为当前节点的前置节点
+        # 1. 找到所有指向当前节点的边，改为指向转换节点
+        foreach ($edge in $Context.CFG.Edges) {
+            if ($edge.To -eq $Node.Id) {
+                $edge.To = $translationNode.Id
+            }
+        }
+        # 2. 添加从转换节点到当前节点的边
+        Add-Edge -cfg $Context.CFG -from $translationNode.Id -to $Node.Id
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Inserted translation node before Node $($Node.Id)"
+
+        # 执行前置节点：设置 $_dyn_xxx 变量为脚本块
+        $sbCode = "[ScriptBlock]::Create('$($argumentValue.Replace("'", "''"))')"
+        $sbResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $sbCode
+        if ($sbResult.Success) {
+            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($blockName, $sbResult.Result)
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Set `$$blockName = [ScriptBlock]"
+        }
+
+        # 记录前置节点执行（用于输出显示）
+        Write-ExecutionLog -Context $Context -Message "--- Node $($translationNode.Id) [DynamicTranslation] ---"
+        Write-ExecutionLog -Context $Context -Message "  Code: $translationText"
+        Write-ExecutionLog -Context $Context -Message "  Status: OK (Dynamic)"
+        Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
+        Write-ExecutionLog -Context $Context -Message "    `$$blockName = [ScriptBlock]"
+        $Context.TotalVisits++
+
+        # 找到要替换的调用表达式，替换为 $_dyn_xxx
+        if ($isScriptBlockCreateFromCommand) {
+            # 命令名形式：& [ScriptBlock]::Create($b) -> & $_dyn_xxx
+            # CommandInfo.Ast 是整个 CommandAst
+            $nodeOrigText = $Node.Text
+            $cmdAst = $CommandInfo.Ast  # CommandAst
+
+            # 获取命令元素的范围（从第一个元素到最后一个元素）
+            # 例如从 [ScriptBlock]::Create 到 ($b) 或 $b
+            $firstElement = $cmdAst.CommandElements[0]
+            $lastElement = $cmdAst.CommandElements[$cmdAst.CommandElements.Count - 1]
+
+            # 使用从第一个元素开始到最后一个元素结束的文本
+            $startOffset = $firstElement.Extent.StartOffset
+            $endOffset = $lastElement.Extent.EndOffset
+            $sourceText = $cmdAst.Extent.StartScriptPosition.GetFullScript()
+            $replaceText = $sourceText.Substring($startOffset, $endOffset - $startOffset)
+
+            $newText = $nodeOrigText.Replace($replaceText, $blockVarRef)
+            $Node.Text = $newText
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Original node text replaced: $newText"
+        } elseif ($DynamicInfo -and $DynamicInfo.ArgAst) {
+            $invokeAst = $DynamicInfo.ArgAst.Parent  # InvokeMemberExpressionAst
+            if ($invokeAst) {
+                $replaceText = $invokeAst.Extent.Text
+                $nodeOrigText = $Node.Text
+
+                # 向上遍历找到最外层包装（ParenExpression），但不包括 CommandAst
+                $current = $invokeAst.Parent
+                while ($current -and $current -ne $Node.Ast) {
+                    if ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
+                        $replaceText = $current.Extent.Text
+                    }
+                    if ($current -is [System.Management.Automation.Language.CommandAst]) {
+                        break
+                    }
+                    $current = $current.Parent
+                }
+
+                $newText = $nodeOrigText.Replace($replaceText, $blockVarRef)
+                $Node.Text = $newText
+                Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Original node text replaced: $newText"
+            }
+        }
+
+        # 清除 DynamicInvoke 标记
+        $Node.DynamicInvoke = $null
+
+        # 检查修改后的节点是否为调用形式（& $_dyn_xxx 或 . $_dyn_xxx）
+        # 如果是，需要跳转到子图执行，而不是直接执行
+        $isCallForm = $Node.Text -match '^[&\.]?\s*\$' -and -not $Node.VarsWritten
+
+        if ($isCallForm) {
+            # 设置调用节点的 Invokes 信息，让后续调用检测能找到
+            if (-not $Node.Invokes) {
+                $Node.Invokes = @{ ScriptBlocks = @() }
+            }
+            $Node.Invokes.ScriptBlocks = @($blockName)
+
+            Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $blockName (via DynamicTranslation)"
+            return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+        }
+
+        # 赋值形式（$delegate = $_dyn_xxx）：执行修改后的代码
+        $execCode = $Node.Text
+        if ($Context.ScopeStack.Count -gt 0) {
+            $currentScope = $Context.ScopeStack[-1]
+            if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+                $execCode = Convert-VariableNames -Code $execCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+            }
+        }
+
+        $execResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $execCode
+
+        # 记录变量到块名的映射（用于后续调用时查找正确的子图）
+        if ($Node.VarsWritten -and $Node.VarsWritten.Count -gt 0) {
+            foreach ($varInfo in $Node.VarsWritten) {
+                # 将赋值目标变量映射到块名
+                $Context.VarToBlockMapping[$varInfo.Name] = $blockName
+                Write-ExecutionLog -Context $Context -Message "  [MAPPING] `$$($varInfo.Name) -> $blockName"
+            }
+        }
+
+        # 记录变量写入
+        if ($Node.VarsWritten -and $Node.VarsWritten.Count -gt 0) {
+            Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
+            foreach ($varInfo in $Node.VarsWritten) {
+                $varValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varInfo.Name
+                Write-ExecutionLog -Context $Context -Message "    `$$($varInfo.Name) = $(Format-VariableValue $varValue)"
+            }
+        }
+
         Evaluate-NodeResolvables -Node $Node -Context $Context
+
+        $result = @{
+            Success     = $execResult.Success
+            Executed    = $true
+            Result      = $execResult.Result
+            Error       = $execResult.Error
+            Action      = "DynamicInvoke"
+            DynamicRecord = $dynamicRecord
+        }
+        return $result
+    } else {
+        # IEX：创建子图并跳转执行（保持原有逻辑）
+        $subgraphResult = New-RuntimeSubgraph -cfg $Context.CFG -Code $argumentValue
+
+        if (-not $subgraphResult.Success) {
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Parse error: $($subgraphResult.Error), falling back to direct execution"
+            $result = Invoke-NodeDirect -Node $Node -Context $Context
+            if ($result.Success) {
+                Evaluate-NodeResolvables -Node $Node -Context $Context
+            }
+            $result.Action = "DynamicInvoke"
+            $result.DynamicRecord = $dynamicRecord
+            return $result
+        }
+
+        $blockName = $subgraphResult.BlockName
+        $Context.ScriptBlockSubgraphs[$blockName] = $subgraphResult.BlockStartId
+
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created subgraph: $blockName (Nodes $($subgraphResult.BlockStartId)-$($subgraphResult.BlockEndId))"
+
+        # IEX：用 & $_dyn_xxx 替换整个 iex 调用
+        $blockVarRef = "`$$blockName"
+        $Node.Text = "& $blockVarRef"
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Node text replaced: & $blockVarRef"
+
+        # 设置调用节点的 Invokes 信息
+        $Node.Invokes.ScriptBlocks = @($blockName)
+        $Node.DynamicInvoke = $null
+
+        # 跳转执行子图
+        return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
     }
-
-    $result.Action = "DynamicInvoke"
-    $result.DynamicRecord = $dynamicRecord
-
-    return $result
 }
 
 # 节点遍历（递归）
@@ -1918,6 +2206,17 @@ function Test-CommandSafety {
         }
     }
 
+    # 2.5. [ScriptBlock]::Create / [System.Management.Automation.ScriptBlock]::Create 作为命令名
+    # PowerShell 解析 "& [ScriptBlock]::Create($b)" 时把 [ScriptBlock]::Create 当作命令名
+    if ($cmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$') {
+        return @{
+            Action      = "DynamicInvoke"
+            IsForbidden = $false
+            Target      = $cmdName
+            DynamicType = "ScriptBlockCreate"
+        }
+    }
+
     # 3. 用户定义函数检查
     if ($Context.FunctionSubgraphs.ContainsKey($cmdName)) {
         return @{
@@ -2022,12 +2321,48 @@ function Get-ScriptBlockCallInfo {
         [hashtable]$Context
     )
 
-    # 获取 CommandAst
+    # 收集已知脚本块名称（来自 Invokes.ScriptBlocks），供各检测函数使用
+    $knownBlockNames = @()
+    if ($Node.Invokes -and $Node.Invokes.ScriptBlocks) {
+        $knownBlockNames = @($Node.Invokes.ScriptBlocks)
+    }
+
+    # 1. 检测 $var.Invoke() 形式（InvokeMemberExpressionAst）
+    $invokeAst = $null
+    if ($Node.Ast -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        $expr = $Node.Ast.Expression
+        if ($expr -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+            $invokeAst = $expr
+        }
+    } elseif ($Node.Ast -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        $invokeAst = $Node.Ast
+    }
+    # 也处理赋值语句右侧的 .Invoke()，例如 $result = $sb.Invoke()
+    if (-not $invokeAst -and $Node.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        $pipeline = $Node.Ast.Right
+        if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and $pipeline.PipelineElements.Count -gt 0) {
+            $pipeElem = $pipeline.PipelineElements[0]
+            if ($pipeElem -is [System.Management.Automation.Language.CommandExpressionAst] -and
+                $pipeElem.Expression -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+                $invokeAst = $pipeElem.Expression
+            }
+        }
+    }
+
+    if ($invokeAst -and $invokeAst.Member -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        $invokeAst.Member.Value -eq 'Invoke') {
+        return Get-InvokeMemberCallInfo -InvokeAst $invokeAst -Context $Context -KnownBlockNames $knownBlockNames
+    }
+
+    # 2. 获取 CommandAst（用于 & . Invoke-Command 形式）
     $cmdAst = $null
     if ($Node.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
         $pipeline = $Node.Ast.Right
         if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and $pipeline.PipelineElements.Count -gt 0) {
-            $cmdAst = $pipeline.PipelineElements[0]
+            $pipeElem = $pipeline.PipelineElements[0]
+            if ($pipeElem -is [System.Management.Automation.Language.CommandAst]) {
+                $cmdAst = $pipeElem
+            }
         }
     } elseif ($Node.Ast -is [System.Management.Automation.Language.CommandAst]) {
         $cmdAst = $Node.Ast
@@ -2035,12 +2370,6 @@ function Get-ScriptBlockCallInfo {
 
     if (-not $cmdAst) {
         return $null
-    }
-
-    # 收集已知脚本块名称（来自 Invokes.ScriptBlocks），供各检测函数使用
-    $knownBlockNames = @()
-    if ($Node.Invokes -and $Node.Invokes.ScriptBlocks) {
-        $knownBlockNames = @($Node.Invokes.ScriptBlocks)
     }
 
     # 检测 Invoke-Command -ScriptBlock 形式
@@ -2056,6 +2385,38 @@ function Get-ScriptBlockCallInfo {
     }
 
     return $null
+}
+
+# 解析 $var.Invoke() 形式
+function Get-InvokeMemberCallInfo {
+    param(
+        $InvokeAst,
+        [hashtable]$Context,
+        [array]$KnownBlockNames = @()
+    )
+
+    # 获取调用目标表达式（$var 部分）
+    $targetExpr = $InvokeAst.Expression
+    $blockName = Get-ScriptBlockNameFromAst -Ast $targetExpr -Context $Context -KnownBlockNames $KnownBlockNames
+
+    if (-not $blockName) {
+        return $null
+    }
+
+    # 提取 .Invoke() 的参数
+    $arguments = @()
+    if ($InvokeAst.Arguments) {
+        foreach ($arg in $InvokeAst.Arguments) {
+            $argValue = Get-AstValue -Ast $arg -Context $Context
+            $arguments += $argValue
+        }
+    }
+
+    return @{
+        BlockName = $blockName
+        Arguments = $arguments
+        CallType  = "InvokeMethod"
+    }
 }
 
 # 解析 Invoke-Command -ScriptBlock $block -ArgumentList @(...) 形式
@@ -2175,6 +2536,11 @@ function Get-ScriptBlockNameFromAst {
             return $varName
         }
 
+        # 检查变量到块名的映射（用于动态创建的脚本块）
+        if ($Context.VarToBlockMapping -and $Context.VarToBlockMapping.ContainsKey($varName)) {
+            return $Context.VarToBlockMapping[$varName]
+        }
+
         # 动态查找：获取变量值并匹配
         $actualVarName = $varName
         if ($Context.ScopeStack.Count -gt 0) {
@@ -2191,8 +2557,9 @@ function Get-ScriptBlockNameFromAst {
             foreach ($blockName in $Context.ScriptBlockSubgraphs.Keys) {
                 $blockStartId = $Context.ScriptBlockSubgraphs[$blockName]
                 $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
-                if ($blockStartNode.Ast) {
-                    $blockText = $blockStartNode.Ast.Extent.Text.Trim()
+                # 使用 ScriptBlockText 属性进行匹配（不使用 Ast，避免 Resolvables 误检测）
+                if ($blockStartNode.ScriptBlockText) {
+                    $blockText = $blockStartNode.ScriptBlockText.Trim()
                     if ($blockText.StartsWith('{') -and $blockText.EndsWith('}')) {
                         $blockText = $blockText.Substring(1, $blockText.Length - 2).Trim()
                     }
@@ -2219,8 +2586,9 @@ function Get-ScriptBlockNameFromAst {
         foreach ($blockName in $Context.ScriptBlockSubgraphs.Keys) {
             $blockStartId = $Context.ScriptBlockSubgraphs[$blockName]
             $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
-            if ($blockStartNode.Ast) {
-                $blockText = $blockStartNode.Ast.Extent.Text.Trim()
+            # 使用 ScriptBlockText 属性进行匹配
+            if ($blockStartNode.ScriptBlockText) {
+                $blockText = $blockStartNode.ScriptBlockText.Trim()
                 if ($sbText -eq $blockText) {
                     return $blockName
                 }
@@ -2431,6 +2799,7 @@ function Invoke-CFGTraversal {
         )
         FunctionSubgraphs     = @{}          # 函数名 -> FuncStart 节点 Id
         ScriptBlockSubgraphs  = @{}          # _block_xxx -> BlockStart 节点 Id
+        VarToBlockMapping     = @{}          # 变量名 -> 块名 映射（用于动态创建的脚本块跟踪）
         CallStack             = @()          # 调用栈 [{ Type; Name; ReturnNodeId }]
         MaxCallDepth          = 100          # 最大调用深度
         DynamicInvokeResults  = @()          # 动态执行记录 [{ NodeId; Command; ArgumentValue }]

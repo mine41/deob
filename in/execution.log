@@ -1,49 +1,121 @@
-[20:08:22.782] === CFG 执行开始 ===
-[20:08:22.783] MaxIterations: 1000, MaxTotalNodes: 50000
-[20:08:22.783] 
-[20:08:22.783] === 初始化子图映射 ===
-[20:08:22.784]   [INIT] ScriptBlock subgraph: _block_d3278b37 -> Node 6
-[20:08:22.784]   [INIT] Total functions: 0, ScriptBlocks: 1
-[20:08:22.785] 
-[20:08:22.785] --- Node 1 [Start] ---
-[20:08:22.785]   Code: Script Start
-[20:08:22.786]   Status: SKIP
-[20:08:22.786] --- Node 3 [MainStart] ---
-[20:08:22.787]   Code: Main Script
-[20:08:22.787]   Status: SKIP
-[20:08:22.787] --- Node 5 [PipelineElement] ---
-[20:08:22.788]   Code: 1..5
-[20:08:22.793]   Status: OK
-[20:08:22.794]   VarsWritten:
-[20:08:22.795]     $_pipe_addd803b = @(1, 2, 3, 4, 5)
-[20:08:22.795]   Result: @(1, 2, 3, 4, 5)
-[20:08:22.796] --- Node 9 [PipelineElement] ---
-[20:08:22.796]   Code: $_pipe_addd803b | & $_block_d3278b37
-[20:08:22.797]   [CALL] ScriptBlock: _block_d3278b37 (via Ampersand detection)
-[20:08:22.799]   [SCOPE] Push: ScriptBlock '_block_d3278b37' (prefix=_sc_f1102834_, returnTo=4, endNode=7)
-[20:08:22.799]   [BLOCK] Entering ScriptBlock '_block_d3278b37' at Node 6
-[20:08:22.800]   Status: SKIP
-[20:08:22.800]   Action: CallScriptBlock
-[20:08:22.801]   Target: _block_d3278b37
-[20:08:22.801]   [JUMP] Jumping to Node 6
-[20:08:22.801] --- Node 6 [BlockStart] ---
-[20:08:22.802]   Code: ScriptBlock _block_d3278b37
-[20:08:22.802]   Status: SKIP
-[20:08:22.803] --- Node 8 [PipelineElement] ---
-[20:08:22.803]   Code: "处理: $_"
-[20:08:22.806]   Status: OK
-[20:08:22.807]   VarsRead:
-[20:08:22.807]     $_ = $null
-[20:08:22.808]   Result: @("处理: ")
-[20:08:22.808] --- Node 7 [BlockEnd] ---
-[20:08:22.809]   Code: End ScriptBlock _block_d3278b37
-[20:08:22.809]   [SCOPE] Pop: ScriptBlock '_block_d3278b37' (returnTo=4)
-[20:08:22.809]   [RETURN] Returning from ScriptBlock '_block_d3278b37' to Node 4
-[20:08:22.810] --- Node 4 [MainEnd] ---
-[20:08:22.810]   Code: End Main Script
-[20:08:22.811]   Status: SKIP
-[20:08:22.811] === 执行结束 ===
-[20:08:22.812] 
-[20:08:22.812] === 执行统计 ===
-[20:08:22.812] Total visits: 7
-[20:08:22.813] Unique nodes: 7
+[18:50:49.658] === CFG 执行开始 ===
+[18:50:49.664] MaxIterations: 1000, MaxTotalNodes: 50000
+[18:50:49.664] 
+[18:50:49.665] === 初始化子图映射 ===
+[18:50:49.668]   [INIT] Total functions: 0, ScriptBlocks: 0
+[18:50:49.668] 
+[18:50:49.681] --- Node 1 [Start] ---
+[18:50:49.682]   Code: Script Start
+[18:50:49.686]   Status: SKIP
+[18:50:49.695] --- Node 3 [MainStart] ---
+[18:50:49.696]   Code: Main Script
+[18:50:49.696]   Status: SKIP
+[18:50:49.697] --- Node 5 [PipelineElement] ---
+[18:50:49.698]   Code: Invoke-Expression 'Write-Host "Hello"'
+[18:50:49.710]   [DYNAMIC] Dynamic invoke detected: Invoke-Expression
+[18:50:49.728]   [DYNAMIC] Type: IEX
+[18:50:49.731]   [DYNAMIC] Code to execute: Write-Host "Hello"
+[18:50:49.748]   [DYNAMIC] Created subgraph: _dyn_88ac7c3f (Nodes 10-11)
+[18:50:49.749]   [DYNAMIC] Node text replaced: & $_dyn_88ac7c3f
+[18:50:49.786]   [ARGS] Arg[0]: 'Write-Host "Hello"' = "Write-Host "Hello""
+[18:50:49.789]   [SCOPE] Push: ScriptBlock '_dyn_88ac7c3f' (prefix=_sc_d2972ce3_, returnTo=6, endNode=11)
+[18:50:49.792]   [BLOCK] Entering ScriptBlock '_dyn_88ac7c3f' at Node 10
+[18:50:49.793]   Status: SKIP
+[18:50:49.793]   Action: CallScriptBlock
+[18:50:49.794]   Target: _dyn_88ac7c3f
+[18:50:49.795]   [JUMP] Jumping to Node 10
+[18:50:49.796] --- Node 10 [BlockStart] ---
+[18:50:49.796]   Code: DynamicBlock _dyn_88ac7c3f
+[18:50:49.797]   Status: SKIP
+[18:50:49.798] --- Node 12 [PipelineElement] ---
+[18:50:49.798]   Code: Write-Host "Hello"
+[18:50:49.810]   Status: OK
+[18:50:49.811] --- Node 11 [BlockEnd] ---
+[18:50:49.811]   Code: End DynamicBlock _dyn_88ac7c3f
+[18:50:49.816]   [SCOPE] Pop: ScriptBlock '_dyn_88ac7c3f' (returnTo=6)
+[18:50:49.817]   [RETURN] Returning from ScriptBlock '_dyn_88ac7c3f' to Node 6
+[18:50:49.818] --- Node 6 [PipelineElement] ---
+[18:50:49.818]   Code: iex 'Write-Host "Hello"'
+[18:50:49.819]   [DYNAMIC] Dynamic invoke detected: iex
+[18:50:49.821]   [DYNAMIC] Type: IEX
+[18:50:49.821]   [DYNAMIC] Code to execute: Write-Host "Hello"
+[18:50:49.826]   [DYNAMIC] Created subgraph: _dyn_5c974b53 (Nodes 13-14)
+[18:50:49.827]   [DYNAMIC] Node text replaced: & $_dyn_5c974b53
+[18:50:49.830]   [ARGS] Arg[0]: 'Write-Host "Hello"' = "Write-Host "Hello""
+[18:50:49.830]   [SCOPE] Push: ScriptBlock '_dyn_5c974b53' (prefix=_sc_75d62ca7_, returnTo=7, endNode=14)
+[18:50:49.831]   [BLOCK] Entering ScriptBlock '_dyn_5c974b53' at Node 13
+[18:50:49.831]   Status: SKIP
+[18:50:49.832]   Action: CallScriptBlock
+[18:50:49.832]   Target: _dyn_5c974b53
+[18:50:49.833]   [JUMP] Jumping to Node 13
+[18:50:49.833] --- Node 13 [BlockStart] ---
+[18:50:49.834]   Code: DynamicBlock _dyn_5c974b53
+[18:50:49.834]   Status: SKIP
+[18:50:49.835] --- Node 15 [PipelineElement] ---
+[18:50:49.835]   Code: Write-Host "Hello"
+[18:50:49.837]   Status: OK
+[18:50:49.838] --- Node 14 [BlockEnd] ---
+[18:50:49.839]   Code: End DynamicBlock _dyn_5c974b53
+[18:50:49.840]   [SCOPE] Pop: ScriptBlock '_dyn_5c974b53' (returnTo=7)
+[18:50:49.840]   [RETURN] Returning from ScriptBlock '_dyn_5c974b53' to Node 7
+[18:50:49.841] --- Node 7 [PipelineElement] ---
+[18:50:49.841]   Code: IEX 'Write-Host "Hello"'
+[18:50:49.842]   [DYNAMIC] Dynamic invoke detected: IEX
+[18:50:49.844]   [DYNAMIC] Type: IEX
+[18:50:49.844]   [DYNAMIC] Code to execute: Write-Host "Hello"
+[18:50:49.849]   [DYNAMIC] Created subgraph: _dyn_c37bb4c9 (Nodes 16-17)
+[18:50:49.850]   [DYNAMIC] Node text replaced: & $_dyn_c37bb4c9
+[18:50:49.853]   [ARGS] Arg[0]: 'Write-Host "Hello"' = "Write-Host "Hello""
+[18:50:49.854]   [SCOPE] Push: ScriptBlock '_dyn_c37bb4c9' (prefix=_sc_8279775b_, returnTo=8, endNode=17)
+[18:50:49.855]   [BLOCK] Entering ScriptBlock '_dyn_c37bb4c9' at Node 16
+[18:50:49.856]   Status: SKIP
+[18:50:49.856]   Action: CallScriptBlock
+[18:50:49.857]   Target: _dyn_c37bb4c9
+[18:50:49.857]   [JUMP] Jumping to Node 16
+[18:50:49.858] --- Node 16 [BlockStart] ---
+[18:50:49.873]   Code: DynamicBlock _dyn_c37bb4c9
+[18:50:49.873]   Status: SKIP
+[18:50:49.874] --- Node 18 [PipelineElement] ---
+[18:50:49.875]   Code: Write-Host "Hello"
+[18:50:49.877]   Status: OK
+[18:50:49.878] --- Node 17 [BlockEnd] ---
+[18:50:49.879]   Code: End DynamicBlock _dyn_c37bb4c9
+[18:50:49.879]   [SCOPE] Pop: ScriptBlock '_dyn_c37bb4c9' (returnTo=8)
+[18:50:49.880]   [RETURN] Returning from ScriptBlock '_dyn_c37bb4c9' to Node 8
+[18:50:49.880] --- Node 8 [AssignmentStatementAst] ---
+[18:50:49.881]   Code: $t = 'Write-Host "Hello"'
+[18:50:49.888]   Status: OK
+[18:50:49.889]   VarsWritten:
+[18:50:49.891]     $t = "Write-Host "Hello""
+[18:50:49.892] --- Node 9 [PipelineElement] ---
+[18:50:49.892]   Code: iex $t
+[18:50:49.913]   [DYNAMIC] Dynamic invoke detected: iex
+[18:50:49.916]   [DYNAMIC] Type: IEX
+[18:50:49.916]   [DYNAMIC] Code to execute: Write-Host "Hello"
+[18:50:49.921]   [DYNAMIC] Created subgraph: _dyn_5e850a72 (Nodes 19-20)
+[18:50:49.922]   [DYNAMIC] Node text replaced: & $_dyn_5e850a72
+[18:50:49.925]   [ARGS] Arg[0]: $t = "Write-Host "Hello""
+[18:50:49.926]   [SCOPE] Push: ScriptBlock '_dyn_5e850a72' (prefix=_sc_082fa685_, returnTo=4, endNode=20)
+[18:50:49.927]   [BLOCK] Entering ScriptBlock '_dyn_5e850a72' at Node 19
+[18:50:49.927]   Status: SKIP
+[18:50:49.928]   Action: CallScriptBlock
+[18:50:49.928]   Target: _dyn_5e850a72
+[18:50:49.928]   [JUMP] Jumping to Node 19
+[18:50:49.929] --- Node 19 [BlockStart] ---
+[18:50:49.929]   Code: DynamicBlock _dyn_5e850a72
+[18:50:49.930]   Status: SKIP
+[18:50:49.931] --- Node 21 [PipelineElement] ---
+[18:50:49.931]   Code: Write-Host "Hello"
+[18:50:49.933]   Status: OK
+[18:50:49.934] --- Node 20 [BlockEnd] ---
+[18:50:49.935]   Code: End DynamicBlock _dyn_5e850a72
+[18:50:49.935]   [SCOPE] Pop: ScriptBlock '_dyn_5e850a72' (returnTo=4)
+[18:50:49.936]   [RETURN] Returning from ScriptBlock '_dyn_5e850a72' to Node 4
+[18:50:49.936] --- Node 4 [MainEnd] ---
+[18:50:49.937]   Code: End Main Script
+[18:50:49.937]   Status: SKIP
+[18:50:49.938] === 执行结束 ===
+[18:50:49.939] 
+[18:50:49.939] === 执行统计 ===
+[18:50:49.940] Total visits: 16
+[18:50:49.941] Unique nodes: 16
