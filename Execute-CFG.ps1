@@ -1593,303 +1593,301 @@ function Handle-DynamicInvoke {
     }
 }
 
-# 节点遍历（递归）
+# 节点遍历（迭代式）
 function Invoke-NodeTraverse {
     param(
         $Node,
         [hashtable]$Context
     )
 
-    # 终止条件
-    if ($null -eq $Node) { return }
+    $currentNode = $Node
 
-    if ($Node.Type -eq "End") {
-        Write-ExecutionLog -Context $Context -Message "=== 执行结束 ==="
-        return
-    }
+    while ($null -ne $currentNode) {
+        # 终止条件
+        if ($currentNode.Type -eq "End") {
+            Write-ExecutionLog -Context $Context -Message "=== 执行结束 ==="
+            break
+        }
 
-    # 处理 FuncEnd / BlockEnd - 收集返回值，返回到调用者
-    if ($Node.Type -eq "FuncEnd" -or $Node.Type -eq "BlockEnd") {
-        Write-ExecutionLog -Context $Context -Message "--- Node $($Node.Id) [$($Node.Type)] ---"
-        Write-ExecutionLog -Context $Context -Message "  Code: $($Node.Text)"
+        # 处理 FuncEnd / BlockEnd - 收集返回值，返回到调用者
+        if ($currentNode.Type -eq "FuncEnd" -or $currentNode.Type -eq "BlockEnd") {
+            Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
+            Write-ExecutionLog -Context $Context -Message "  Code: $($currentNode.Text)"
 
-        # 获取函数的最后执行结果作为返回值
-        $returnValue = $Context.LastSubgraphResult
+            # 获取函数的最后执行结果作为返回值
+            $returnValue = $Context.LastSubgraphResult
 
-        $scope = Pop-ExecutionScope -Context $Context
-        if ($scope) {
-            # 根据调用方式处理返回值
-            if ($scope.ReturnNodeId) {
-                # 正常调用（通过 Invoke-FunctionCall 跳转）：清空 LastSubgraphResult
-                $Context.LastSubgraphResult = $null
+            $scope = Pop-ExecutionScope -Context $Context
+            if ($scope) {
+                # 根据调用方式处理返回值
+                if ($scope.ReturnNodeId) {
+                    # 正常调用（通过 Invoke-FunctionCall 跳转）：清空 LastSubgraphResult
+                    $Context.LastSubgraphResult = $null
 
-                # 将返回值赋给调用者的目标变量
-                if ($scope.TargetVarName -and $null -ne $returnValue) {
-                    # 检查返回后是否还在某个作用域中（调用发生在另一个函数内部）
-                    $actualVarName = $scope.TargetVarName
-                    if ($Context.ScopeStack.Count -gt 0) {
-                        $outerScope = $Context.ScopeStack[-1]
-                        # 如果目标变量是外层作用域的局部变量，使用带前缀的名称
-                        if ($outerScope.LocalVars -and $scope.TargetVarName -in $outerScope.LocalVars) {
-                            $actualVarName = $outerScope.ScopePrefix + $scope.TargetVarName
+                    # 将返回值赋给调用者的目标变量
+                    if ($scope.TargetVarName -and $null -ne $returnValue) {
+                        # 检查返回后是否还在某个作用域中（调用发生在另一个函数内部）
+                        $actualVarName = $scope.TargetVarName
+                        if ($Context.ScopeStack.Count -gt 0) {
+                            $outerScope = $Context.ScopeStack[-1]
+                            # 如果目标变量是外层作用域的局部变量，使用带前缀的名称
+                            if ($outerScope.LocalVars -and $scope.TargetVarName -in $outerScope.LocalVars) {
+                                $actualVarName = $outerScope.ScopePrefix + $scope.TargetVarName
+                            }
                         }
+                        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $returnValue)
+                        Write-ExecutionLog -Context $Context -Message "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)"
                     }
-                    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $returnValue)
-                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)"
-                }
 
-                Write-ExecutionLog -Context $Context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
-                $returnNode = Get-NodeById -CFG $Context.CFG -Id $scope.ReturnNodeId
-                if ($returnNode) {
-                    Invoke-NodeTraverse -Node $returnNode -Context $Context
+                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
+                    $returnNode = Get-NodeById -CFG $Context.CFG -Id $scope.ReturnNodeId
+                    $currentNode = $returnNode
+                } else {
+                    # 内联调用（ReturnNodeId=0）：保留 LastSubgraphResult 供调用者获取
+                    $Context.LastSubgraphResult = $returnValue
+                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)"
+                    $currentNode = $null
                 }
             } else {
-                # 内联调用（ReturnNodeId=0）：保留 LastSubgraphResult 供调用者获取
-                $Context.LastSubgraphResult = $returnValue
-                Write-ExecutionLog -Context $Context -Message "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)"
+                $currentNode = $null
             }
+            continue  # 不继续遍历 FuncEnd/BlockEnd 的后继
         }
-        return  # 不继续遍历 FuncEnd/BlockEnd 的后继
-    }
 
-    # 处理 Return 节点 - 求值返回表达式，跳转到 FuncEnd
-    if ($Node.Type -eq "Return") {
-        Write-ExecutionLog -Context $Context -Message "--- Node $($Node.Id) [Return] ---"
-        Write-ExecutionLog -Context $Context -Message "  Code: $($Node.Text)"
+        # 处理 Return 节点 - 求值返回表达式，跳转到 FuncEnd
+        if ($currentNode.Type -eq "Return") {
+            Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [Return] ---"
+            Write-ExecutionLog -Context $Context -Message "  Code: $($currentNode.Text)"
 
-        $Context.VisitedNodes[$Node.Id] = ($Context.VisitedNodes[$Node.Id] ?? 0) + 1
-        $Context.TotalVisits++
+            $Context.VisitedNodes[$currentNode.Id] = ($Context.VisitedNodes[$currentNode.Id] ?? 0) + 1
+            $Context.TotalVisits++
 
-        # 如果在函数/脚本块作用域中
-        if ($Context.ScopeStack.Count -gt 0) {
-            $currentScope = $Context.ScopeStack[-1]
+            # 如果在函数/脚本块作用域中
+            if ($Context.ScopeStack.Count -gt 0) {
+                $currentScope = $Context.ScopeStack[-1]
 
-            # 求值 return 表达式（如果有的话）
-            $returnValue = $null
-            if ($Node.Ast -and $Node.Ast.Pipeline) {
-                $returnCode = $Node.Ast.Pipeline.Extent.Text
+                # 求值 return 表达式（如果有的话）
+                $returnValue = $null
+                if ($currentNode.Ast -and $currentNode.Ast.Pipeline) {
+                    $returnCode = $currentNode.Ast.Pipeline.Extent.Text
 
-                # 应用变量前缀转换
-                if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                    $returnCode = Convert-VariableNames -Code $returnCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                }
+                    # 应用变量前缀转换
+                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+                        $returnCode = Convert-VariableNames -Code $returnCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+                    }
 
-                $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $returnCode
-                if ($evalResult.Success -and $null -ne $evalResult.Result) {
-                    # 解包 PSObject Collection
-                    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                        if ($evalResult.Result.Count -eq 1) {
-                            $returnValue = $evalResult.Result[0]
-                        } elseif ($evalResult.Result.Count -gt 1) {
+                    $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $returnCode
+                    if ($evalResult.Success -and $null -ne $evalResult.Result) {
+                        # 解包 PSObject Collection
+                        if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                            if ($evalResult.Result.Count -eq 1) {
+                                $returnValue = $evalResult.Result[0]
+                            } elseif ($evalResult.Result.Count -gt 1) {
+                                $returnValue = $evalResult.Result
+                            }
+                        } else {
                             $returnValue = $evalResult.Result
                         }
-                    } else {
-                        $returnValue = $evalResult.Result
-                    }
-                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Expression value: $(Format-VariableValue $returnValue)"
-                }
-            }
-
-            # 设置返回值
-            $Context.LastSubgraphResult = $returnValue
-
-            # 跳转到 FuncEnd/BlockEnd 节点
-            if ($currentScope.EndNodeId) {
-                Write-ExecutionLog -Context $Context -Message "  [RETURN] Jumping to EndNode $($currentScope.EndNodeId)"
-                $endNode = Get-NodeById -CFG $Context.CFG -Id $currentScope.EndNodeId
-                if ($endNode) {
-                    Invoke-NodeTraverse -Node $endNode -Context $Context
-                }
-            }
-        } else {
-            # 不在函数/脚本块中的 return，跟随正常边
-            $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $Node -Context $Context
-            foreach ($next in $nextNodes) {
-                Invoke-NodeTraverse -Node $next -Context $Context
-            }
-        }
-        return  # Return 处理完毕，不继续遍历
-    }
-
-    if ($Context.TotalVisits -ge $Context.MaxTotalNodes) {
-        Write-ExecutionLog -Context $Context -Message "!!! 达到最大节点访问次数 ($($Context.MaxTotalNodes)) !!!"
-        return
-    }
-
-    # 循环检测
-    $nodeKey = $Node.Id
-    if (-not $Context.VisitedNodes.ContainsKey($nodeKey)) {
-        $Context.VisitedNodes[$nodeKey] = 0
-    }
-    if ($Context.VisitedNodes[$nodeKey] -ge $Context.MaxIterations) {
-        Write-ExecutionLog -Context $Context -Message "!!! 节点 $nodeKey 达到最大迭代次数 ($($Context.MaxIterations)) !!!"
-        return
-    }
-
-    $Context.VisitedNodes[$nodeKey]++
-    $Context.TotalVisits++
-
-    # 先输出节点头（在执行之前）
-    Write-ExecutionLog -Context $Context -Message "--- Node $($Node.Id) [$($Node.Type)] ---"
-    Write-ExecutionLog -Context $Context -Message "  Code: $($Node.Text)"
-
-    # 特殊处理 FuncParams / BlockParams 节点：绑定实参到形参
-    if ($Node.Type -in @('FuncParams', 'BlockParams') -and $Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) {
-            # 从 Node.Ast (ParamBlockAst) 获取形参名
-            if ($Node.Ast -and $Node.Ast.Parameters) {
-                $paramNames = @()
-                foreach ($param in $Node.Ast.Parameters) {
-                    $paramNames += $param.Name.VariablePath.UserPath
-                }
-
-                # 绑定实参到带前缀的形参
-                for ($i = 0; $i -lt [Math]::Min($paramNames.Count, $currentScope.Arguments.Count); $i++) {
-                    $paramName = $paramNames[$i]
-                    $argValue = $currentScope.Arguments[$i]
-                    $prefixedName = $currentScope.ScopePrefix + $paramName
-                    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
-                    Write-ExecutionLog -Context $Context -Message "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)"
-
-                    # 把参数也加入 LocalVars 以便变量转换
-                    if ($paramName -notin $currentScope.LocalVars) {
-                        $currentScope.LocalVars += $paramName
+                        Write-ExecutionLog -Context $Context -Message "  [RETURN] Expression value: $(Format-VariableValue $returnValue)"
                     }
                 }
-            }
-        }
-    }
 
-    # 记录执行前的变量值（读取的变量）
-    $varsBefore = @{}
-    foreach ($varInfo in $Node.VarsRead) {
-        # 获取实际变量名（考虑作用域前缀）
-        $actualVarName = $varInfo.Name
-        if ($Context.ScopeStack.Count -gt 0) {
+                # 设置返回值
+                $Context.LastSubgraphResult = $returnValue
+
+                # 跳转到 FuncEnd/BlockEnd 节点
+                if ($currentScope.EndNodeId) {
+                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Jumping to EndNode $($currentScope.EndNodeId)"
+                    $endNode = Get-NodeById -CFG $Context.CFG -Id $currentScope.EndNodeId
+                    $currentNode = $endNode
+                } else {
+                    $currentNode = $null
+                }
+            } else {
+                # 不在函数/脚本块中的 return，跟随正常边
+                $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context
+                $currentNode = if ($nextNodes.Count -gt 0) { $nextNodes[0] } else { $null }
+            }
+            continue  # Return 处理完毕，不继续遍历
+        }
+
+        if ($Context.TotalVisits -ge $Context.MaxTotalNodes) {
+            Write-ExecutionLog -Context $Context -Message "!!! 达到最大节点访问次数 ($($Context.MaxTotalNodes)) !!!"
+            break
+        }
+
+        # 循环检测
+        $nodeKey = $currentNode.Id
+        if (-not $Context.VisitedNodes.ContainsKey($nodeKey)) {
+            $Context.VisitedNodes[$nodeKey] = 0
+        }
+        if ($Context.VisitedNodes[$nodeKey] -ge $Context.MaxIterations) {
+            Write-ExecutionLog -Context $Context -Message "!!! 节点 $nodeKey 达到最大迭代次数 ($($Context.MaxIterations)) !!!"
+            break
+        }
+
+        $Context.VisitedNodes[$nodeKey]++
+        $Context.TotalVisits++
+
+        # 先输出节点头（在执行之前）
+        Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
+        Write-ExecutionLog -Context $Context -Message "  Code: $($currentNode.Text)"
+
+        # 特殊处理 FuncParams / BlockParams 节点：绑定实参到形参
+        if ($currentNode.Type -in @('FuncParams', 'BlockParams') -and $Context.ScopeStack.Count -gt 0) {
             $currentScope = $Context.ScopeStack[-1]
-            if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
-                $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
-            }
-        }
+            if ($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) {
+                # 从 Node.Ast (ParamBlockAst) 获取形参名
+                if ($currentNode.Ast -and $currentNode.Ast.Parameters) {
+                    $paramNames = @()
+                    foreach ($param in $currentNode.Ast.Parameters) {
+                        $paramNames += $param.Name.VariablePath.UserPath
+                    }
 
-        $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
-        $varsBefore[$varInfo.Name] = $value
+                    # 绑定实参到带前缀的形参
+                    for ($i = 0; $i -lt [Math]::Min($paramNames.Count, $currentScope.Arguments.Count); $i++) {
+                        $paramName = $paramNames[$i]
+                        $argValue = $currentScope.Arguments[$i]
+                        $prefixedName = $currentScope.ScopePrefix + $paramName
+                        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
+                        Write-ExecutionLog -Context $Context -Message "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)"
 
-        # 记录到 VariableReadResults（只记录有位置信息且是简单类型的变量）
-        # 生成的辅助变量（如 $__fe_xxx）没有位置信息，跳过
-        if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value)) {
-            $key = "$($Node.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
-            if (-not $Context.VariableReadResults.ContainsKey($key)) {
-                $Context.VariableReadResults[$key] = @{
-                    NodeId  = $Node.Id
-                    VarInfo = $varInfo
-                    Values  = @()
+                        # 把参数也加入 LocalVars 以便变量转换
+                        if ($paramName -notin $currentScope.LocalVars) {
+                            $currentScope.LocalVars += $paramName
+                        }
+                    }
                 }
             }
-            $Context.VariableReadResults[$key].Values += (Format-ResolvableValue $value)
-        }
-    }
-
-    # 执行节点
-    $execResult = Invoke-NodeSafe -Node $Node -Context $Context
-
-    # 记录执行后的变量值（写入的变量）
-    $varsAfter = @{}
-    foreach ($varInfo in $Node.VarsWritten) {
-        $varName = $varInfo.Name
-        $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varName
-        $varsAfter[$varName] = $value
-    }
-
-    # 写日志
-    $shortText = $Node.Text  # 显示完整代码
-    $status = if ($execResult.Action -eq "Blocked") {
-        "BLOCKED"
-    } elseif (-not $execResult.Executed) {
-        "SKIP"
-    } elseif ($execResult.Success) {
-        "OK"
-    } else {
-        "ERR"
-    }
-
-    # 输出执行状态（节点头已在执行前输出）
-    Write-ExecutionLog -Context $Context -Message "  Status: $status"
-
-    # 记录额外的执行动作信息
-    if ($execResult.Action -and $execResult.Action -notin @("Execute", "Skip")) {
-        Write-ExecutionLog -Context $Context -Message "  Action: $($execResult.Action)"
-        if ($execResult.Target) {
-            Write-ExecutionLog -Context $Context -Message "  Target: $($execResult.Target)"
-        }
-        if ($execResult.Reason) {
-            Write-ExecutionLog -Context $Context -Message "  Reason: $($execResult.Reason)"
-        }
-    }
-
-    if ($execResult.Executed) {
-        # 记录读取的变量
-        if ($varsBefore.Count -gt 0) {
-            Write-ExecutionLog -Context $Context -Message "  VarsRead:"
-            foreach ($kv in $varsBefore.GetEnumerator()) {
-                $formattedValue = Format-VariableValue $kv.Value
-                Write-ExecutionLog -Context $Context -Message "    `$$($kv.Key) = $formattedValue"
-            }
         }
 
-        # 记录写入的变量
-        if ($varsAfter.Count -gt 0) {
-            Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
-            foreach ($kv in $varsAfter.GetEnumerator()) {
-                $formattedValue = Format-VariableValue $kv.Value
-                Write-ExecutionLog -Context $Context -Message "    `$$($kv.Key) = $formattedValue"
-            }
-        }
-
-        # 记录执行结果
-        if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
-            $formattedResult = Format-VariableValue $execResult.Result
-            Write-ExecutionLog -Context $Context -Message "  Result: $formattedResult"
-
-            # 如果在函数/脚本块作用域中，更新 LastSubgraphResult 用于返回值
+        # 记录执行前的变量值（读取的变量）
+        $varsBefore = @{}
+        foreach ($varInfo in $currentNode.VarsRead) {
+            # 获取实际变量名（考虑作用域前缀）
+            $actualVarName = $varInfo.Name
             if ($Context.ScopeStack.Count -gt 0) {
-                # 解包 PSObject Collection
-                if ($execResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                    if ($execResult.Result.Count -eq 1) {
-                        $Context.LastSubgraphResult = $execResult.Result[0]
+                $currentScope = $Context.ScopeStack[-1]
+                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
+                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
+                }
+            }
+
+            $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
+            $varsBefore[$varInfo.Name] = $value
+
+            # 记录到 VariableReadResults（只记录有位置信息且是简单类型的变量）
+            # 生成的辅助变量（如 $__fe_xxx）没有位置信息，跳过
+            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value)) {
+                $key = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
+                if (-not $Context.VariableReadResults.ContainsKey($key)) {
+                    $Context.VariableReadResults[$key] = @{
+                        NodeId  = $currentNode.Id
+                        VarInfo = $varInfo
+                        Values  = @()
+                    }
+                }
+                $Context.VariableReadResults[$key].Values += (Format-ResolvableValue $value)
+            }
+        }
+
+        # 执行节点
+        $execResult = Invoke-NodeSafe -Node $currentNode -Context $Context
+
+        # 记录执行后的变量值（写入的变量）
+        $varsAfter = @{}
+        foreach ($varInfo in $currentNode.VarsWritten) {
+            $varName = $varInfo.Name
+            $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varName
+            $varsAfter[$varName] = $value
+        }
+
+        # 写日志
+        $shortText = $currentNode.Text  # 显示完整代码
+        $status = if ($execResult.Action -eq "Blocked") {
+            "BLOCKED"
+        } elseif (-not $execResult.Executed) {
+            "SKIP"
+        } elseif ($execResult.Success) {
+            "OK"
+        } else {
+            "ERR"
+        }
+
+        # 输出执行状态（节点头已在执行前输出）
+        Write-ExecutionLog -Context $Context -Message "  Status: $status"
+
+        # 记录额外的执行动作信息
+        if ($execResult.Action -and $execResult.Action -notin @("Execute", "Skip")) {
+            Write-ExecutionLog -Context $Context -Message "  Action: $($execResult.Action)"
+            if ($execResult.Target) {
+                Write-ExecutionLog -Context $Context -Message "  Target: $($execResult.Target)"
+            }
+            if ($execResult.Reason) {
+                Write-ExecutionLog -Context $Context -Message "  Reason: $($execResult.Reason)"
+            }
+        }
+
+        if ($execResult.Executed) {
+            # 记录读取的变量
+            if ($varsBefore.Count -gt 0) {
+                Write-ExecutionLog -Context $Context -Message "  VarsRead:"
+                foreach ($kv in $varsBefore.GetEnumerator()) {
+                    $formattedValue = Format-VariableValue $kv.Value
+                    Write-ExecutionLog -Context $Context -Message "    `$$($kv.Key) = $formattedValue"
+                }
+            }
+
+            # 记录写入的变量
+            if ($varsAfter.Count -gt 0) {
+                Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
+                foreach ($kv in $varsAfter.GetEnumerator()) {
+                    $formattedValue = Format-VariableValue $kv.Value
+                    Write-ExecutionLog -Context $Context -Message "    `$$($kv.Key) = $formattedValue"
+                }
+            }
+
+            # 记录执行结果
+            if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
+                $formattedResult = Format-VariableValue $execResult.Result
+                Write-ExecutionLog -Context $Context -Message "  Result: $formattedResult"
+
+                # 如果在函数/脚本块作用域中，更新 LastSubgraphResult 用于返回值
+                if ($Context.ScopeStack.Count -gt 0) {
+                    # 解包 PSObject Collection
+                    if ($execResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                        if ($execResult.Result.Count -eq 1) {
+                            $Context.LastSubgraphResult = $execResult.Result[0]
+                        } else {
+                            $Context.LastSubgraphResult = $execResult.Result
+                        }
                     } else {
                         $Context.LastSubgraphResult = $execResult.Result
                     }
-                } else {
-                    $Context.LastSubgraphResult = $execResult.Result
                 }
+            }
+
+            # 记录错误
+            if (-not $execResult.Success -and $execResult.Error) {
+                Write-ExecutionLog -Context $Context -Message "  Error: $($execResult.Error)"
+            }
+
+            # 记录条件结果
+            if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'SwitchCondition', 'CaseCondition')) {
+                Write-ExecutionLog -Context $Context -Message "  ConditionResult: $($Context.LastConditionResult)"
             }
         }
 
-        # 记录错误
-        if (-not $execResult.Success -and $execResult.Error) {
-            Write-ExecutionLog -Context $Context -Message "  Error: $($execResult.Error)"
+        # 处理函数/脚本块调用 - 跳转到子图
+        if ($execResult.Action -in @("CallFunction", "CallScriptBlock") -and $execResult.JumpToNode) {
+            Write-ExecutionLog -Context $Context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
+            $currentNode = $execResult.JumpToNode
+            continue  # 跳转后不继续遍历当前节点的后继
         }
 
-        # 记录条件结果
-        if ($Node.Type -in @('Condition', 'ForEachCondition', 'SwitchCondition', 'CaseCondition')) {
-            Write-ExecutionLog -Context $Context -Message "  ConditionResult: $($Context.LastConditionResult)"
-        }
-    }
-
-    # 处理函数/脚本块调用 - 跳转到子图
-    if ($execResult.Action -in @("CallFunction", "CallScriptBlock") -and $execResult.JumpToNode) {
-        Write-ExecutionLog -Context $Context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
-        Invoke-NodeTraverse -Node $execResult.JumpToNode -Context $Context
-        return  # 函数调用后不继续遍历当前节点的后继（返回时会跳转到正确位置）
-    }
-
-    # 如果命令被阻止，仍然继续遍历后继节点
-    # 获取后继节点并遍历
-    $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $Node -Context $Context
-    foreach ($next in $nextNodes) {
-        Invoke-NodeTraverse -Node $next -Context $Context
+        # 获取后继节点并继续遍历
+        $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context
+        $currentNode = if ($nextNodes.Count -gt 0) { $nextNodes[0] } else { $null }
     }
 }
 

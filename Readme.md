@@ -1,4 +1,4 @@
-# CLAUDE.md
+# Readme.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 这是一个 PowerShell 脚本反混淆分析工具，大致流程为：
 1.生成CFG，并查找其中的可还原表达式。
 2.维护一个变量栈和共享的执行上下文，遍历cfg，对每个节点使用invoke执行，同时记录每次执行时变量的值和可还原表达式的值。
-3.执行完成后，将脚本对应的片段替换为记录的值。若同一片段包括多层表达式，优先替换外层的结果。若同一片段被执行多次对应了多个值，则放弃替换。
+3.执行完成后，将脚本对应的片段替换为记录的值。若同一片段被执行多次对应了多个值，则放弃替换。
 
 ## 常用命令
 
@@ -56,17 +56,6 @@ dot -Tpng in/in.dot -o in/in.png
 ```
 PowerShell 脚本 → AST 解析 → 控制流图构建 → 变量追踪 → 别名识别 → 可还原表达式 → DOT/PNG 输出
 ```
-
-### CFG 节点结构
-
-每个节点包含：
-- `Text` - 节点代码文本
-- `Type` - 节点类型 (Entry/Exit/Statement 等)
-- `Variables` - 变量使用信息 (Read/Write/Both)
-- `Resolvables` - 可还原表达式列表
-- `AliasDefinitions` - 别名定义
-- `UsedAliases` - 使用的别名
-- `Invokes` - 调用信息
 
 ## 目录结构
 
