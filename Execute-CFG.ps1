@@ -263,6 +263,513 @@ function Write-ExecutionLog {
     # Write-Host $logLine
 }
 
+# 解析节点 Text（执行期仅以 Node.Text 为准）
+function Get-NodeTextParseInfo {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Context.TextParseCache) {
+        $Context.TextParseCache = @{}
+    }
+
+    $text = [string]$Node.Text
+    $cacheKey = "$($Node.Id):$text"
+    if ($Context.TextParseCache.ContainsKey($cacheKey)) {
+        return $Context.TextParseCache[$cacheKey]
+    }
+
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        $result = [PSCustomObject]@{
+            Success = $false
+            Ast     = $null
+            Tokens  = @()
+            Errors  = @()
+            Error   = "Node.Text is empty"
+        }
+        $Context.TextParseCache[$cacheKey] = $result
+        return $result
+    }
+
+    $errors = $null
+    $tokens = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors)
+
+    $parseErrors = @($errors)
+    $success = ($parseErrors.Count -eq 0)
+    $errorText = if ($success) { $null } else { ($parseErrors | ForEach-Object { $_.Message }) -join "; " }
+
+    $result = [PSCustomObject]@{
+        Success = $success
+        Ast     = $ast
+        Tokens  = @($tokens)
+        Errors  = $parseErrors
+        Error   = $errorText
+    }
+
+    $Context.TextParseCache[$cacheKey] = $result
+    return $result
+}
+
+function Convert-CodeForCurrentScope {
+    param(
+        [string]$Code,
+        [hashtable]$Context
+    )
+
+    if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
+        $currentScope = $Context.ScopeStack[-1]
+        if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
+            return Convert-VariableNames -Code $Code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+        }
+    }
+    return $Code
+}
+
+function Get-FirstStatementFromScriptAst {
+    param($ScriptAst)
+
+    if ($null -eq $ScriptAst) { return $null }
+
+    $blocks = @()
+    if ($ScriptAst.BeginBlock) { $blocks += $ScriptAst.BeginBlock }
+    if ($ScriptAst.ProcessBlock) { $blocks += $ScriptAst.ProcessBlock }
+    if ($ScriptAst.EndBlock) { $blocks += $ScriptAst.EndBlock }
+
+    foreach ($block in $blocks) {
+        if ($block.Statements -and $block.Statements.Count -gt 0) {
+            return $block.Statements[0]
+        }
+    }
+
+    return $null
+}
+
+function Get-PrimaryCommandAstFromScriptAst {
+    param($ScriptAst)
+
+    $statement = Get-FirstStatementFromScriptAst -ScriptAst $ScriptAst
+    if ($null -eq $statement) { return $null }
+
+    if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        $pipeline = $statement.Right
+        if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and
+            $pipeline.PipelineElements -and $pipeline.PipelineElements.Count -gt 0) {
+            $firstElem = $pipeline.PipelineElements[0]
+            if ($firstElem -is [System.Management.Automation.Language.CommandAst]) {
+                return $firstElem
+            }
+        }
+        return $null
+    }
+
+    if ($statement -is [System.Management.Automation.Language.PipelineAst] -and
+        $statement.PipelineElements -and $statement.PipelineElements.Count -gt 0) {
+        $firstElem = $statement.PipelineElements[0]
+        if ($firstElem -is [System.Management.Automation.Language.CommandAst]) {
+            return $firstElem
+        }
+        return $null
+    }
+
+    if ($statement -is [System.Management.Automation.Language.CommandAst]) {
+        return $statement
+    }
+
+    return $null
+}
+
+function Get-NodeTextExecutionInfo {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    if (-not $parseInfo.Success) {
+        return [PSCustomObject]@{
+            Success       = $false
+            Error         = $parseInfo.Error
+            ParseInfo     = $parseInfo
+            Statement     = $null
+            CommandAst    = $null
+            TargetVarName = $null
+        }
+    }
+
+    $statement = Get-FirstStatementFromScriptAst -ScriptAst $parseInfo.Ast
+    $targetVarName = $null
+    if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        $leftAst = $statement.Left
+        if ($leftAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $targetVarName = $leftAst.VariablePath.UserPath
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success       = $true
+        Error         = $null
+        ParseInfo     = $parseInfo
+        Statement     = $statement
+        CommandAst    = Get-PrimaryCommandAstFromScriptAst -ScriptAst $parseInfo.Ast
+        TargetVarName = $targetVarName
+    }
+}
+
+function Get-NodeTextScriptBlockArguments {
+    param(
+        $CallerNode,
+        [string]$BlockName,
+        [hashtable]$Context
+    )
+
+    $execInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
+    if (-not $execInfo.Success) {
+        return [PSCustomObject]@{
+            Success   = $false
+            Error     = $execInfo.Error
+            Arguments = @()
+        }
+    }
+
+    $arguments = @()
+    $scriptAst = $execInfo.ParseInfo.Ast
+
+    # 1) 优先处理 $sb.Invoke(...) 形式
+    $invokeAst = $scriptAst.Find({
+        param($n)
+        if (-not ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst])) { return $false }
+        if (-not ($n.Member -is [System.Management.Automation.Language.StringConstantExpressionAst])) { return $false }
+        return $n.Member.Value -eq "Invoke"
+    }, $true)
+
+    if ($invokeAst -and $invokeAst.Arguments) {
+        foreach ($argAst in $invokeAst.Arguments) {
+            $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
+            $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+            if ($argResult.Success) {
+                $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
+                    $argResult.Result[0]
+                } else {
+                    $argResult.Result
+                }
+                $arguments += $argValue
+            } else {
+                $arguments += $null
+            }
+        }
+
+        return [PSCustomObject]@{
+            Success   = $true
+            Error     = $null
+            Arguments = $arguments
+        }
+    }
+
+    # 2) CommandAst 形式
+    $cmdAst = $execInfo.CommandAst
+    if (-not $cmdAst) {
+        return [PSCustomObject]@{
+            Success   = $true
+            Error     = $null
+            Arguments = @()
+        }
+    }
+
+    $cmdName = $cmdAst.GetCommandName()
+    if ($cmdName -in @('Invoke-Command', 'icm')) {
+        $i = 1
+        while ($i -lt $cmdAst.CommandElements.Count) {
+            $elem = $cmdAst.CommandElements[$i]
+            if ($elem -is [System.Management.Automation.Language.CommandParameterAst] -and
+                $elem.ParameterName -in @('ArgumentList', 'Args')) {
+                $argListAst = $null
+                if ($elem.Argument) {
+                    $argListAst = $elem.Argument
+                } elseif ($i + 1 -lt $cmdAst.CommandElements.Count) {
+                    $i++
+                    $argListAst = $cmdAst.CommandElements[$i]
+                }
+                if ($argListAst) {
+                    $arguments = Get-ArgumentListValues -Ast $argListAst -Context $Context
+                    break
+                }
+            }
+            $i++
+        }
+
+        return [PSCustomObject]@{
+            Success   = $true
+            Error     = $null
+            Arguments = $arguments
+        }
+    }
+
+    # 3) & $block / . $block 形式
+    $startIndex = 1
+    for ($i = 0; $i -lt $cmdAst.CommandElements.Count; $i++) {
+        $elem = $cmdAst.CommandElements[$i]
+        if ($elem -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $varName = $elem.VariablePath.UserPath
+            if ($varName -eq $BlockName) {
+                $startIndex = $i + 1
+                break
+            }
+        }
+    }
+
+    for ($i = $startIndex; $i -lt $cmdAst.CommandElements.Count; $i++) {
+        $argAst = $cmdAst.CommandElements[$i]
+        if ($argAst -is [System.Management.Automation.Language.CommandParameterAst]) {
+            continue
+        }
+
+        $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
+        $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+        if ($argResult.Success) {
+            $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
+                $argResult.Result[0]
+            } else {
+                $argResult.Result
+            }
+            $arguments += $argValue
+        } else {
+            $arguments += $null
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success   = $true
+        Error     = $null
+        Arguments = $arguments
+    }
+}
+
+function Get-NodeTextReturnExpression {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    if (-not $parseInfo.Success) {
+        return [PSCustomObject]@{
+            Success = $false
+            Error   = $parseInfo.Error
+            Code    = $null
+        }
+    }
+
+    $returnAst = $parseInfo.Ast.Find({
+        param($n)
+        $n -is [System.Management.Automation.Language.ReturnStatementAst]
+    }, $true)
+
+    if ($returnAst -and $returnAst.Pipeline) {
+        return [PSCustomObject]@{
+            Success = $true
+            Error   = $null
+            Code    = $returnAst.Pipeline.Extent.Text
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Error   = $null
+        Code    = $null
+    }
+}
+
+function Get-DynamicArgumentCodeFromNodeText {
+    param(
+        $Node,
+        [hashtable]$Context,
+        [string]$DynamicType
+    )
+
+    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    if (-not $parseInfo.Success) {
+        return [PSCustomObject]@{
+            Success = $false
+            Error   = $parseInfo.Error
+            Code    = $null
+        }
+    }
+
+    $scriptAst = $parseInfo.Ast
+    $argCode = $null
+
+    if ($DynamicType -in @("ScriptBlockCreate", "NewScriptBlock")) {
+        $invokeAsts = @($scriptAst.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]
+        }, $true))
+
+        foreach ($invokeAst in $invokeAsts) {
+            $memberName = $invokeAst.Member
+            if ($memberName -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                $memberName = $memberName.Value
+            }
+
+            if ($DynamicType -eq "ScriptBlockCreate") {
+                if ($invokeAst.Static -and $memberName -eq "Create" -and $invokeAst.Arguments -and $invokeAst.Arguments.Count -gt 0) {
+                    $argCode = $invokeAst.Arguments[0].Extent.Text
+                    break
+                }
+            } elseif ($DynamicType -eq "NewScriptBlock") {
+                if (-not $invokeAst.Static -and $memberName -eq "NewScriptBlock" -and $invokeAst.Arguments -and $invokeAst.Arguments.Count -gt 0) {
+                    $argCode = $invokeAst.Arguments[0].Extent.Text
+                    break
+                }
+            }
+        }
+    }
+
+    if (-not $argCode) {
+        $cmdAst = Get-PrimaryCommandAstFromScriptAst -ScriptAst $scriptAst
+        if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
+            $cmdName = $cmdAst.GetCommandName()
+            $isIex = $cmdName -in @("Invoke-Expression", "iex")
+            $isScriptBlockCreateCommand = $cmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$'
+            if (($DynamicType -eq "IEX" -and $isIex) -or
+                ($DynamicType -eq "ScriptBlockCreate" -and $isScriptBlockCreateCommand)) {
+                $argCode = $cmdAst.CommandElements[1].Extent.Text
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Error   = $null
+        Code    = $argCode
+    }
+}
+
+function Get-NodeTextResolvables {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    if (-not $parseInfo.Success) {
+        return [PSCustomObject]@{
+            Success = $false
+            Error   = $parseInfo.Error
+            Items   = @()
+        }
+    }
+
+    $targetTypes = @(
+        [System.Management.Automation.Language.BinaryExpressionAst],
+        [System.Management.Automation.Language.UnaryExpressionAst],
+        [System.Management.Automation.Language.InvokeMemberExpressionAst],
+        [System.Management.Automation.Language.ConvertExpressionAst],
+        [System.Management.Automation.Language.ExpandableStringExpressionAst],
+        [System.Management.Automation.Language.IndexExpressionAst],
+        [System.Management.Automation.Language.SubExpressionAst],
+        [System.Management.Automation.Language.MemberExpressionAst],
+        [System.Management.Automation.Language.ParenExpressionAst],
+        [System.Management.Automation.Language.CommandAst]
+    )
+
+    $allExprs = @($parseInfo.Ast.FindAll({
+        param($n)
+        if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { return $false }
+        ($n -is [System.Management.Automation.Language.BinaryExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.UnaryExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.ConvertExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.IndexExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.SubExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.MemberExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.ParenExpressionAst]) -or
+        ($n -is [System.Management.Automation.Language.CommandAst])
+    }, $true))
+
+    $allExprs = @($allExprs | Where-Object {
+        $ancestor = $_.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $parseInfo.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                return $false
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return $true
+    })
+
+    $sortedExprs = @($allExprs | Sort-Object { $_.Extent.StartOffset })
+
+    $originalQueues = @{}
+    if ($Node.Resolvables) {
+        foreach ($orig in $Node.Resolvables) {
+            $qKey = "$($orig.Type)|$($orig.Text)"
+            if (-not $originalQueues.ContainsKey($qKey)) {
+                $originalQueues[$qKey] = [System.Collections.Generic.Queue[object]]::new()
+            }
+            $originalQueues[$qKey].Enqueue($orig)
+        }
+    }
+
+    $items = @()
+    foreach ($expr in $sortedExprs) {
+        $type = switch ($true) {
+            ($expr -is [System.Management.Automation.Language.BinaryExpressionAst])           { "Binary" }
+            ($expr -is [System.Management.Automation.Language.UnaryExpressionAst])            { "Unary" }
+            ($expr -is [System.Management.Automation.Language.InvokeMemberExpressionAst])     { "MemberInvoke" }
+            ($expr -is [System.Management.Automation.Language.ConvertExpressionAst])          { "Convert" }
+            ($expr -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) { "ExpandableString" }
+            ($expr -is [System.Management.Automation.Language.IndexExpressionAst])            { "Index" }
+            ($expr -is [System.Management.Automation.Language.SubExpressionAst])              { "SubExpression" }
+            ($expr -is [System.Management.Automation.Language.MemberExpressionAst])           { "Member" }
+            ($expr -is [System.Management.Automation.Language.ParenExpressionAst])            { "Paren" }
+            ($expr -is [System.Management.Automation.Language.CommandAst])                    { "Command" }
+            default { "Unknown" }
+        }
+
+        $depth = 0
+        $ancestor = $expr.Parent
+        while ($null -ne $ancestor -and $ancestor -ne $parseInfo.Ast) {
+            if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { break }
+            foreach ($t in $targetTypes) {
+                if ($ancestor -is $t) { $depth++; break }
+            }
+            $ancestor = $ancestor.Parent
+        }
+
+        $mapped = $false
+        $startOffset = $null
+        $endOffset = $null
+        $qKey = "$type|$($expr.Extent.Text)"
+        if ($originalQueues.ContainsKey($qKey) -and $originalQueues[$qKey].Count -gt 0) {
+            $orig = $originalQueues[$qKey].Dequeue()
+            $mapped = $true
+            $startOffset = $orig.StartOffset
+            $endOffset = $orig.EndOffset
+        }
+
+        $items += [PSCustomObject]@{
+            Type             = $type
+            Ast              = $expr
+            Text             = $expr.Extent.Text
+            LocalStartOffset = $expr.Extent.StartOffset
+            LocalEndOffset   = $expr.Extent.EndOffset
+            Depth            = $depth
+            Mapped           = $mapped
+            StartOffset      = $startOffset
+            EndOffset        = $endOffset
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Error   = $null
+        Items   = $items
+    }
+}
+
 # 根据节点 ID 获取节点
 function Get-NodeById {
     param(
@@ -485,32 +992,26 @@ function Evaluate-NodeResolvables {
         [hashtable]$Context
     )
 
-    # 跳过没有 Resolvables 的节点
-    if ($null -eq $Node.Resolvables -or $Node.Resolvables.Count -eq 0) {
-        return
-    }
-
     # 跳过求值的类型（有副作用或不适合求值）
     $skipEvalTypes = @('Command', 'Unary')  # Command 和 Unary（可能有副作用如 ++/--）
 
-    foreach ($resolvable in $Node.Resolvables) {
+    $resolved = Get-NodeTextResolvables -Node $Node -Context $Context
+    if (-not $resolved.Success) {
+        Write-ExecutionLog -Context $Context -Message "  [RESOLVE] Parse Node.Text failed at Node $($Node.Id): $($resolved.Error)"
+        return
+    }
+
+    foreach ($resolvable in $resolved.Items) {
         # 跳过 Command 类型
         if ($resolvable.Type -in $skipEvalTypes) {
             continue
         }
 
-        $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
-
         # 获取表达式代码
         $code = $resolvable.Text
 
         # 如果处于函数/脚本块作用域中，对局部变量应用前缀转换
-        if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
-            $currentScope = $Context.ScopeStack[-1]
-            if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                $code = Convert-VariableNames -Code $code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-            }
-        }
+        $code = Convert-CodeForCurrentScope -Code $code -Context $Context
 
         # 在当前 Runspace 上下文中求值
         $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
@@ -522,6 +1023,13 @@ function Evaluate-NodeResolvables {
             }
 
             $value = Format-ResolvableValue $evalResult.Result
+
+            # 无法映射回原偏移时，不写入替换结果（避免误替换）
+            if (-not $resolvable.Mapped -or $null -eq $resolvable.StartOffset -or $null -eq $resolvable.EndOffset) {
+                continue
+            }
+
+            $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
 
             # 记录到结果集
             if (-not $Context.ResolvableResults.ContainsKey($key)) {
@@ -564,38 +1072,35 @@ function Invoke-NodeDirect {
         }
     }
 
-    # CFG 合成节点（使用 Text 而非 AST）
-    $syntheticTypes = @(
-        'ForEachInit', 'ForEachCondition', 'ForEachBind', 'ForEachIter',
-        'ForInit', 'ForIter',
-        'SwitchInit', 'SwitchCondition', 'SwitchBind', 'SwitchIter',
-        'CaseCondition',
-        'PipelineElement'  # 管道元素也使用 Text（包含 $_pipe_ 变量）
-    )
-
-    # 获取要执行的代码
-    $code = if ($CodeOverride) {
-        $CodeOverride
-    } elseif ($Node.Type -in $syntheticTypes) {
-        $Node.Text
-    } elseif ($Node.Ast) {
-        $Node.Ast.Extent.Text
-    } else {
-        $Node.Text
+    # 执行期统一以 Node.Text 为准（CodeOverride 最高优先级）
+    $code = if ($CodeOverride) { $CodeOverride } else { $Node.Text }
+    if ([string]::IsNullOrWhiteSpace($code)) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $null
+            Error    = "Node.Text is empty"
+            Action   = "Execute"
+        }
     }
 
-    # 在变量前缀转换之前，先处理嵌入的用户函数调用
-    if ($Node.Ast -and $Context.FunctionSubgraphs.Count -gt 0) {
-        $code = Resolve-EmbeddedFunctionCalls -Code $code -Ast $Node.Ast -Context $Context -NodeId $Node.Id
+    # 在变量前缀转换之前，先处理嵌入的用户函数调用（AST 来自 Node.Text 解析）
+    if ($Context.FunctionSubgraphs.Count -gt 0) {
+        $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+        if (-not $parseInfo.Success) {
+            return @{
+                Success  = $false
+                Executed = $true
+                Result   = $null
+                Error    = "Parse Node.Text failed: $($parseInfo.Error)"
+                Action   = "Execute"
+            }
+        }
+        $code = Resolve-EmbeddedFunctionCalls -Code $code -Ast $parseInfo.Ast -Context $Context -NodeId $Node.Id
     }
 
     # 如果处于函数/脚本块作用域中，对局部变量应用前缀转换
-    if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-            $code = Convert-VariableNames -Code $code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-        }
-    }
+    $code = Convert-CodeForCurrentScope -Code $code -Context $Context
 
     # 执行代码
     $execResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
@@ -663,7 +1168,7 @@ function Invoke-NodeSafe {
         $callInfo = Get-ScriptBlockCallInfo -Node $Node -Context $Context
         if ($callInfo -and $callInfo.BlockName -and $Context.ScriptBlockSubgraphs.ContainsKey($callInfo.BlockName)) {
             Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $($callInfo.BlockName) (via $($callInfo.CallType) detection)"
-            return Invoke-ScriptBlockCall -BlockName $callInfo.BlockName -CallerNode $Node -Context $Context -PreParsedArguments $callInfo.Arguments
+            return Invoke-ScriptBlockCall -BlockName $callInfo.BlockName -CallerNode $Node -Context $Context
         }
     }
 
@@ -704,6 +1209,18 @@ function Invoke-NodeSafe {
                 Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dynamic invoke detected: $($dynInfo.Type)"
                 return Handle-DynamicInvoke -Node $Node -Context $Context -DynamicInfo $dynInfo
             }
+        }
+    }
+
+    # 3.5 执行前统一验证 Node.Text 可解析（严格 text-first，不回退 AST）
+    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    if (-not $parseInfo.Success) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $null
+            Error    = "Parse Node.Text failed: $($parseInfo.Error)"
+            Action   = "Execute"
         }
     }
 
@@ -826,10 +1343,11 @@ function Invoke-FunctionCall {
     if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
         Write-ExecutionLog -Context $Context -Message "  [ERROR] Max call depth ($($Context.MaxCallDepth)) exceeded"
         return @{
-            Success = $false
-            Error   = "Max call depth exceeded"
-            Action  = "CallFunction"
-            Target  = $FuncName
+            Success  = $false
+            Executed = $true
+            Error    = "Max call depth exceeded"
+            Action   = "CallFunction"
+            Target   = $FuncName
         }
     }
 
@@ -838,10 +1356,11 @@ function Invoke-FunctionCall {
     if (-not $funcStartId) {
         Write-ExecutionLog -Context $Context -Message "  [ERROR] Function not found: $FuncName"
         return @{
-            Success = $false
-            Error   = "Function not found: $FuncName"
-            Action  = "CallFunction"
-            Target  = $FuncName
+            Success  = $false
+            Executed = $true
+            Error    = "Function not found: $FuncName"
+            Action   = "CallFunction"
+            Target   = $FuncName
         }
     }
 
@@ -862,65 +1381,49 @@ function Invoke-FunctionCall {
     $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context
     $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
 
-    # 6. 提取调用者的实参并求值（在当前作用域中求值，需要应用变量前缀）
+    # 6. 提取调用者的实参并求值（执行期从 Node.Text 解析）
     $arguments = @()
-    if ($CallerNode.Ast) {
-        $cmdAst = $null
-        # 如果是赋值语句，取右侧的 Pipeline
-        if ($CallerNode.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
-            $pipeline = $CallerNode.Ast.Right
-            if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and $pipeline.PipelineElements.Count -gt 0) {
-                $cmdAst = $pipeline.PipelineElements[0]
-            }
-        } elseif ($CallerNode.Ast -is [System.Management.Automation.Language.CommandAst]) {
-            $cmdAst = $CallerNode.Ast
+    $callerInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
+    if (-not $callerInfo.Success) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Error    = "Parse caller Node.Text failed: $($callerInfo.Error)"
+            Action   = "CallFunction"
+            Target   = $FuncName
         }
+    }
 
-        if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
-            # 从第二个元素开始是参数
-            for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
-                $argAst = $cmdAst.CommandElements[$i]
-                $argCode = $argAst.Extent.Text
+    $cmdAst = $callerInfo.CommandAst
+    if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
+        for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+            $argAst = $cmdAst.CommandElements[$i]
+            $argCode = $argAst.Extent.Text
 
-                # 在求值参数前，检测参数中是否包含用户函数调用
-                if ($argAst -and $Context.FunctionSubgraphs.Count -gt 0) {
-                    $argCode = Resolve-EmbeddedFunctionCalls -Code $argCode -Ast $argAst -Context $Context -NodeId $CallerNode.Id
-                }
+            if ($argAst -and $Context.FunctionSubgraphs.Count -gt 0) {
+                $argCode = Resolve-EmbeddedFunctionCalls -Code $argCode -Ast $argAst -Context $Context -NodeId $CallerNode.Id
+            }
 
-                # 如果当前在函数/脚本块作用域中，对参数表达式应用变量前缀转换
-                if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
-                    $currentScope = $Context.ScopeStack[-1]
-                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                    }
-                }
+            $argCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
 
-                # 求值参数
-                $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-                if ($argResult.Success) {
-                    $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
-                        $argResult.Result[0]
-                    } else {
-                        $argResult.Result
-                    }
-                    $arguments += $argValue
-                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)"
+            $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+            if ($argResult.Success) {
+                $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
+                    $argResult.Result[0]
                 } else {
-                    $arguments += $null
-                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = (eval failed)"
+                    $argResult.Result
                 }
+                $arguments += $argValue
+                Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)"
+            } else {
+                $arguments += $null
+                Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = (eval failed)"
             }
         }
     }
 
     # 7. 获取调用者的目标变量（如果是赋值语句）
-    $targetVarName = $null
-    if ($CallerNode.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
-        $leftAst = $CallerNode.Ast.Left
-        if ($leftAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
-            $targetVarName = $leftAst.VariablePath.UserPath
-        }
-    }
+    $targetVarName = if ($callerInfo -and $callerInfo.Success) { $callerInfo.TargetVarName } else { $null }
 
     # 8. Push 作用域（包含参数和目标变量信息）
     Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName -ReturnNodeId $returnNodeId -EndNodeId $funcEndId
@@ -1124,10 +1627,11 @@ function Invoke-ScriptBlockCall {
     if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
         Write-ExecutionLog -Context $Context -Message "  [ERROR] Max call depth ($($Context.MaxCallDepth)) exceeded"
         return @{
-            Success = $false
-            Error   = "Max call depth exceeded"
-            Action  = "CallScriptBlock"
-            Target  = $BlockName
+            Success  = $false
+            Executed = $true
+            Error    = "Max call depth exceeded"
+            Action   = "CallScriptBlock"
+            Target   = $BlockName
         }
     }
 
@@ -1136,10 +1640,11 @@ function Invoke-ScriptBlockCall {
     if (-not $blockStartId) {
         Write-ExecutionLog -Context $Context -Message "  [ERROR] ScriptBlock not found: $BlockName"
         return @{
-            Success = $false
-            Error   = "ScriptBlock not found: $BlockName"
-            Action  = "CallScriptBlock"
-            Target  = $BlockName
+            Success  = $false
+            Executed = $true
+            Error    = "ScriptBlock not found: $BlockName"
+            Action   = "CallScriptBlock"
+            Target   = $BlockName
         }
     }
 
@@ -1162,6 +1667,16 @@ function Invoke-ScriptBlockCall {
 
     # 6. 提取调用者的实参并求值
     $arguments = @()
+    $callerInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
+    if (-not $callerInfo.Success) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Error    = "Parse caller Node.Text failed: $($callerInfo.Error)"
+            Action   = "CallScriptBlock"
+            Target   = $BlockName
+        }
+    }
 
     # 优先使用预解析的参数（来自 Get-ScriptBlockCallInfo，用于 Invoke-Command 等形式）
     if ($null -ne $PreParsedArguments) {
@@ -1170,81 +1685,27 @@ function Invoke-ScriptBlockCall {
             Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: (pre-parsed) = $(Format-VariableValue $arguments[$i])"
         }
     }
-    # 否则从 AST 解析参数
-    elseif ($CallerNode.Ast) {
-        $cmdAst = $null
-        # 如果是赋值语句，取右侧的 Pipeline
-        if ($CallerNode.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
-            $pipeline = $CallerNode.Ast.Right
-            if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and $pipeline.PipelineElements.Count -gt 0) {
-                $cmdAst = $pipeline.PipelineElements[0]
+    # 否则从 Node.Text 解析参数
+    else {
+        $argInfo = Get-NodeTextScriptBlockArguments -CallerNode $CallerNode -BlockName $BlockName -Context $Context
+        if (-not $argInfo.Success) {
+            return @{
+                Success  = $false
+                Executed = $true
+                Error    = "Parse arguments from Node.Text failed: $($argInfo.Error)"
+                Action   = "CallScriptBlock"
+                Target   = $BlockName
             }
-        } elseif ($CallerNode.Ast -is [System.Management.Automation.Language.CommandAst]) {
-            $cmdAst = $CallerNode.Ast
-        }
-
-        # 对于脚本块调用 `& $_block_xxx -param value`
-        # CommandElements[0] = & (调用操作符，可能不存在于 CommandElements)
-        # CommandElements[0] 或 [1] = $_block_xxx
-        # 后续元素 = 参数
-        if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
-            # 找到脚本块变量之后的参数
-            $startIndex = 1
-            for ($i = 0; $i -lt $cmdAst.CommandElements.Count; $i++) {
-                $elem = $cmdAst.CommandElements[$i]
-                if ($elem -is [System.Management.Automation.Language.VariableExpressionAst]) {
-                    $varName = $elem.VariablePath.UserPath
-                    if ($varName -eq $BlockName) {
-                        $startIndex = $i + 1
-                        break
-                    }
-                }
-            }
-
-            # 从脚本块变量之后开始提取参数
-            for ($i = $startIndex; $i -lt $cmdAst.CommandElements.Count; $i++) {
-                $argAst = $cmdAst.CommandElements[$i]
-                $argCode = $argAst.Extent.Text
-
-                # 跳过参数名（如 -name）
-                if ($argAst -is [System.Management.Automation.Language.CommandParameterAst]) {
-                    continue
-                }
-
-                # 如果当前在函数/脚本块作用域中，对参数表达式应用变量前缀转换
-                if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
-                    $currentScope = $Context.ScopeStack[-1]
-                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                    }
-                }
-
-                # 求值参数
-                $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-                if ($argResult.Success) {
-                    $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
-                        $argResult.Result[0]
-                    } else {
-                        $argResult.Result
-                    }
-                    $arguments += $argValue
-                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$($arguments.Count - 1)]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)"
-                } else {
-                    $arguments += $null
-                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$($arguments.Count)]: $($argAst.Extent.Text) = (eval failed)"
-                }
+        } else {
+            $arguments = @($argInfo.Arguments)
+            for ($i = 0; $i -lt $arguments.Count; $i++) {
+                Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: (text-parsed) = $(Format-VariableValue $arguments[$i])"
             }
         }
     }
 
     # 7. 获取调用者的目标变量（如果是赋值语句）
-    $targetVarName = $null
-    if ($CallerNode.Ast -is [System.Management.Automation.Language.AssignmentStatementAst]) {
-        $leftAst = $CallerNode.Ast.Left
-        if ($leftAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
-            $targetVarName = $leftAst.VariablePath.UserPath
-        }
-    }
+    $targetVarName = if ($callerInfo -and $callerInfo.Success) { $callerInfo.TargetVarName } else { $null }
 
     # 8. Push 作用域
     Push-ExecutionScope -Context $Context -ScopeType "ScriptBlock" -ScopeName $BlockName -ReturnNodeId $returnNodeId -EndNodeId $blockEndId
@@ -1281,90 +1742,43 @@ function Handle-DynamicInvoke {
 
     # 1. 根据类型提取参数值
     $argumentValue = $null
+    $argCode = $null
     $dynType = $null
     $isScriptBlockCreateFromCommand = $false  # 标记是否为命令名形式的 ScriptBlockCreate
 
-    # 判断类型：DynamicInfo AST 类型 > 命令名类型 > IEX
+    # 判断类型：DynamicInfo 类型 > 命令名类型 > IEX
     if ($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock")) {
-        # ScriptBlockCreate / NewScriptBlock：参数从 DynamicInfo.ArgAst 提取
         $dynType = $DynamicInfo.Type
-
-        if ($DynamicInfo.ArgAst) {
-            $argCode = $DynamicInfo.ArgAst.Extent.Text
-
-            # 应用变量前缀转换
-            if ($Context.ScopeStack.Count -gt 0) {
-                $currentScope = $Context.ScopeStack[-1]
-                if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                    $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                }
-            }
-
-            $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-            if ($evalResult.Success -and $null -ne $evalResult.Result) {
-                if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                    if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
-                } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
-                    $argumentValue = $evalResult.Result[0]
-                } else {
-                    $argumentValue = $evalResult.Result
-                }
-            }
-        }
     } elseif ($DynamicTypeFromCommand -eq "ScriptBlockCreate") {
-        # 命令名形式的 [ScriptBlock]::Create($arg)：参数从 CommandElements[1] 提取
         $dynType = "ScriptBlockCreate"
         $isScriptBlockCreateFromCommand = $true
-
-        if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 1) {
-            $argElement = $CommandInfo.Ast.CommandElements[1]
-            if ($argElement) {
-                $argCode = $argElement.Extent.Text
-
-                if ($Context.ScopeStack.Count -gt 0) {
-                    $currentScope = $Context.ScopeStack[-1]
-                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                    }
-                }
-
-                $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-                if ($evalResult.Success -and $null -ne $evalResult.Result) {
-                    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                        if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
-                    } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
-                        $argumentValue = $evalResult.Result[0]
-                    } else {
-                        $argumentValue = $evalResult.Result
-                    }
-                }
-            }
-        }
     } else {
-        # IEX：参数从 CommandInfo.Ast.CommandElements[1] 提取
         $dynType = "IEX"
-        if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 1) {
-            $argElement = $CommandInfo.Ast.CommandElements[1]
-            if ($argElement) {
-                $argCode = $argElement.Extent.Text
+    }
 
-                if ($Context.ScopeStack.Count -gt 0) {
-                    $currentScope = $Context.ScopeStack[-1]
-                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                        $argCode = Convert-VariableNames -Code $argCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                    }
-                }
+    $argCodeInfo = Get-DynamicArgumentCodeFromNodeText -Node $Node -Context $Context -DynamicType $dynType
+    if (-not $argCodeInfo.Success) {
+        return @{
+            Success       = $false
+            Executed      = $true
+            Result        = $null
+            Error         = "Parse Node.Text failed: $($argCodeInfo.Error)"
+            Action        = "DynamicInvoke"
+            DynamicRecord = $null
+        }
+    }
+    $argCode = $argCodeInfo.Code
 
-                $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-                if ($evalResult.Success -and $null -ne $evalResult.Result) {
-                    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                        if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
-                    } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
-                        $argumentValue = $evalResult.Result[0]
-                    } else {
-                        $argumentValue = $evalResult.Result
-                    }
-                }
+    if ($argCode) {
+        $evalCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $evalCode
+        if ($evalResult.Success -and $null -ne $evalResult.Result) {
+            if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
+            } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
+                $argumentValue = $evalResult.Result[0]
+            } else {
+                $argumentValue = $evalResult.Result
             }
         }
     }
@@ -1373,7 +1787,7 @@ function Handle-DynamicInvoke {
     $dynamicRecord = @{
         NodeId        = $Node.Id
         Command       = $dynType
-        ArgumentCode  = if ($DynamicInfo -and $DynamicInfo.ArgAst) { $DynamicInfo.ArgAst.Extent.Text } elseif ($CommandInfo -and $CommandInfo.Ast -and $CommandInfo.Ast.CommandElements.Count -gt 1) { $CommandInfo.Ast.CommandElements[1].Extent.Text } else { $null }
+        ArgumentCode  = $argCode
         ArgumentValue = $argumentValue
         Timestamp     = Get-Date
     }
@@ -1666,16 +2080,13 @@ function Invoke-NodeTraverse {
             if ($Context.ScopeStack.Count -gt 0) {
                 $currentScope = $Context.ScopeStack[-1]
 
-                # 求值 return 表达式（如果有的话）
+                # 求值 return 表达式（执行期从 Node.Text 解析）
                 $returnValue = $null
-                if ($currentNode.Ast -and $currentNode.Ast.Pipeline) {
-                    $returnCode = $currentNode.Ast.Pipeline.Extent.Text
-
-                    # 应用变量前缀转换
-                    if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                        $returnCode = Convert-VariableNames -Code $returnCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-                    }
-
+                $retInfo = Get-NodeTextReturnExpression -Node $currentNode -Context $Context
+                if (-not $retInfo.Success) {
+                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Parse Node.Text failed: $($retInfo.Error)"
+                } elseif ($retInfo.Code) {
+                    $returnCode = Convert-CodeForCurrentScope -Code $retInfo.Code -Context $Context
                     $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $returnCode
                     if ($evalResult.Success -and $null -ne $evalResult.Result) {
                         # 解包 PSObject Collection
@@ -2105,71 +2516,93 @@ function Get-ResolvedCommandInfo {
         [hashtable]$ResolvedValues   # 已还原的表达式值
     )
 
-    # 从 Resolvables 中找 Command 类型
-    $commandResolvables = @()
-    if ($Node.Resolvables) {
-        $commandResolvables = @($Node.Resolvables | Where-Object { $_.Type -eq "Command" })
-    }
-
-    if ($commandResolvables.Count -eq 0) {
+    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    if (-not $execInfo.Success) {
         return @{ HasCommand = $false }
     }
 
-    foreach ($cmdRes in $commandResolvables) {
-        $cmdAst = $cmdRes.Ast
-        $cmdName = $null
+    $cmdAst = $execInfo.CommandAst
+    if (-not $cmdAst) {
+        return @{ HasCommand = $false }
+    }
 
-        # 尝试获取静态命令名
-        if ($cmdAst -and $cmdAst.GetCommandName) {
-            $cmdName = $cmdAst.GetCommandName()
+    $cmdName = $null
+
+    # 优先尝试静态命令名
+    if ($cmdAst.GetCommandName) {
+        $cmdName = $cmdAst.GetCommandName()
+    }
+
+    # 动态命令名：优先使用本轮解析出的表达式值（local 偏移）
+    if (-not $cmdName -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 0) {
+        $firstElement = $cmdAst.CommandElements[0]
+        $localKey = "local:$($Node.Id):$($firstElement.Extent.StartOffset):$($firstElement.Extent.EndOffset)"
+        if ($ResolvedValues -and $ResolvedValues.ContainsKey($localKey)) {
+            $cmdName = $ResolvedValues[$localKey]
         }
 
-        # 如果命令名是变量/表达式，尝试从已还原的值中获取
-        if (-not $cmdName -and $cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 0) {
-            $firstElement = $cmdAst.CommandElements[0]
-            if ($firstElement.Extent) {
-                $key = "$($Node.Id):$($firstElement.Extent.StartOffset):$($firstElement.Extent.EndOffset)"
-                if ($ResolvedValues -and $ResolvedValues.ContainsKey($key)) {
-                    $cmdName = $ResolvedValues[$key]
+        # 兜底：直接在当前上下文求值首元素
+        if (-not $cmdName) {
+            $nameCode = Convert-CodeForCurrentScope -Code $firstElement.Extent.Text -Context $Context
+            $nameEval = Invoke-InContext -ExecContext $Context.ExecContext -Code $nameCode
+            if ($nameEval.Success) {
+                $nameValue = $nameEval.Result
+                if ($nameValue -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                    if ($nameValue.Count -gt 0) { $nameValue = $nameValue[0] } else { $nameValue = $null }
+                } elseif ($nameValue -is [array] -and $nameValue.Count -eq 1) {
+                    $nameValue = $nameValue[0]
+                }
+                if ($null -ne $nameValue) {
+                    $cmdName = [string]$nameValue
                 }
             }
         }
+    }
 
-        # 如果还是没有命令名，尝试从 Text 中提取
-        if (-not $cmdName -and $cmdRes.Text) {
-            # 简单提取第一个 token
-            if ($cmdRes.Text -match '^\s*([^\s\(]+)') {
-                $cmdName = $Matches[1]
-            }
-        }
+    # 最后从文本提取 token（不依赖 AST 原文）
+    if (-not $cmdName -and $cmdAst.Extent -and $cmdAst.Extent.Text -match '^\s*([^\s\(]+)') {
+        $cmdName = $Matches[1]
+    }
+    if (-not $cmdName -and $Node.Text -match '^\s*([^\s\(]+)') {
+        $cmdName = $Matches[1]
+    }
 
-        if (-not $cmdName) { continue }
+    if (-not $cmdName) {
+        return @{ HasCommand = $false }
+    }
 
-        # 检查别名
-        $realName = $cmdName
-        if ($Context.CFG.DefinedAliases -and $Context.CFG.DefinedAliases.ContainsKey($cmdName)) {
-            $realName = $Context.CFG.DefinedAliases[$cmdName]
-            return @{
-                HasCommand   = $true
-                OriginalName = $cmdName
-                ResolvedName = $realName
-                IsAlias      = $true
-                Ast          = $cmdAst
-                Resolvable   = $cmdRes
-            }
-        }
+    $cmdName = [string]$cmdName
 
+    # 尝试定位原始 Command Resolvable（用于偏移兼容记录）
+    $matchedResolvable = $null
+    if ($Node.Resolvables) {
+        $matchedResolvable = $Node.Resolvables |
+            Where-Object { $_.Type -eq "Command" -and $_.Text -eq $cmdAst.Extent.Text } |
+            Select-Object -First 1
+    }
+
+    # 检查别名
+    $realName = $cmdName
+    if ($Context.CFG.DefinedAliases -and $Context.CFG.DefinedAliases.ContainsKey($cmdName)) {
+        $realName = $Context.CFG.DefinedAliases[$cmdName]
         return @{
             HasCommand   = $true
             OriginalName = $cmdName
-            ResolvedName = $cmdName
-            IsAlias      = $false
+            ResolvedName = $realName
+            IsAlias      = $true
             Ast          = $cmdAst
-            Resolvable   = $cmdRes
+            Resolvable   = $matchedResolvable
         }
     }
 
-    return @{ HasCommand = $false }
+    return @{
+        HasCommand   = $true
+        OriginalName = $cmdName
+        ResolvedName = $cmdName
+        IsAlias      = $false
+        Ast          = $cmdAst
+        Resolvable   = $matchedResolvable
+    }
 }
 
 # 检查命令安全性并确定执行动作
@@ -2255,31 +2688,25 @@ function Resolve-NonCommandExpressions {
 
     $resolvedValues = @{}
 
-    # 跳过没有 Resolvables 的节点
-    if ($null -eq $Node.Resolvables -or $Node.Resolvables.Count -eq 0) {
-        return $resolvedValues
-    }
-
     # 跳过求值的类型（有副作用或需要特殊处理）
     $skipEvalTypes = @('Command', 'Unary')
 
-    foreach ($resolvable in $Node.Resolvables) {
+    $resolved = Get-NodeTextResolvables -Node $Node -Context $Context
+    if (-not $resolved.Success) {
+        Write-ExecutionLog -Context $Context -Message "  [RESOLVE] Parse Node.Text failed at Node $($Node.Id): $($resolved.Error)"
+        return $resolvedValues
+    }
+
+    foreach ($resolvable in $resolved.Items) {
         if ($resolvable.Type -in $skipEvalTypes) {
             continue
         }
-
-        $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
 
         # 获取表达式代码
         $code = $resolvable.Text
 
         # 如果处于函数/脚本块作用域中，对局部变量应用前缀转换
-        if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
-            $currentScope = $Context.ScopeStack[-1]
-            if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                $code = Convert-VariableNames -Code $code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-            }
-        }
+        $code = Convert-CodeForCurrentScope -Code $code -Context $Context
 
         # 在当前 Runspace 上下文中求值
         $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
@@ -2292,18 +2719,23 @@ function Resolve-NonCommandExpressions {
 
             $value = Format-ResolvableValue $evalResult.Result
 
-            # 记录到结果集
-            if (-not $Context.ResolvableResults.ContainsKey($key)) {
-                $Context.ResolvableResults[$key] = @{
-                    NodeId     = $Node.Id
-                    Resolvable = $resolvable
-                    Values     = @()
-                }
-            }
-            $Context.ResolvableResults[$key].Values += $value
+            # 本地偏移键（给当前调用链使用）
+            $localKey = "local:$($Node.Id):$($resolvable.LocalStartOffset):$($resolvable.LocalEndOffset)"
+            $resolvedValues[$localKey] = $value
 
-            # 同时记录到本次返回的字典中
-            $resolvedValues[$key] = $value
+            # 原偏移可映射时再写回结果集（用于替换）
+            if ($resolvable.Mapped -and $null -ne $resolvable.StartOffset -and $null -ne $resolvable.EndOffset) {
+                $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+                if (-not $Context.ResolvableResults.ContainsKey($key)) {
+                    $Context.ResolvableResults[$key] = @{
+                        NodeId     = $Node.Id
+                        Resolvable = $resolvable
+                        Values     = @()
+                    }
+                }
+                $Context.ResolvableResults[$key].Values += $value
+                $resolvedValues[$key] = $value
+            }
         }
     }
 
@@ -2401,18 +2833,9 @@ function Get-InvokeMemberCallInfo {
         return $null
     }
 
-    # 提取 .Invoke() 的参数
-    $arguments = @()
-    if ($InvokeAst.Arguments) {
-        foreach ($arg in $InvokeAst.Arguments) {
-            $argValue = Get-AstValue -Ast $arg -Context $Context
-            $arguments += $argValue
-        }
-    }
-
     return @{
         BlockName = $blockName
-        Arguments = $arguments
+        Arguments = $null
         CallType  = "InvokeMethod"
     }
 }
@@ -2426,7 +2849,7 @@ function Get-InvokeCommandCallInfo {
     )
 
     $blockName = $null
-    $arguments = @()
+    $arguments = $null
 
     # 遍历命令元素，查找 -ScriptBlock 和 -ArgumentList 参数
     $i = 1  # 跳过命令名
@@ -2446,15 +2869,8 @@ function Get-InvokeCommandCallInfo {
                     $blockName = Get-ScriptBlockNameFromAst -Ast $CmdAst.CommandElements[$i] -Context $Context -KnownBlockNames $KnownBlockNames
                 }
             }
-            # -ArgumentList 参数
-            elseif ($paramName -in @('ArgumentList', 'Args')) {
-                if ($elem.Argument) {
-                    $arguments = Get-ArgumentListValues -Ast $elem.Argument -Context $Context
-                } elseif ($i + 1 -lt $CmdAst.CommandElements.Count) {
-                    $i++
-                    $arguments = Get-ArgumentListValues -Ast $CmdAst.CommandElements[$i] -Context $Context
-                }
-            }
+            # -ArgumentList 参数（执行期由 Node.Text 统一解析，这里不求值）
+            elseif ($paramName -in @('ArgumentList', 'Args')) { }
         }
         $i++
     }
@@ -2490,20 +2906,6 @@ function Get-AmpersandDotCallInfo {
         return $null
     }
 
-    # 提取参数（从第二个元素开始，跳过参数名）
-    $arguments = @()
-    for ($i = 1; $i -lt $CmdAst.CommandElements.Count; $i++) {
-        $argAst = $CmdAst.CommandElements[$i]
-
-        # 跳过参数名（如 -name）
-        if ($argAst -is [System.Management.Automation.Language.CommandParameterAst]) {
-            continue
-        }
-
-        $argValue = Get-AstValue -Ast $argAst -Context $Context
-        $arguments += $argValue
-    }
-
     $callType = if ($CmdAst.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot) {
         "Dot"
     } else {
@@ -2512,7 +2914,7 @@ function Get-AmpersandDotCallInfo {
 
     return @{
         BlockName = $blockName
-        Arguments = $arguments
+        Arguments = $null
         CallType  = $callType
     }
 }
@@ -2673,22 +3075,23 @@ function Record-AliasResolution {
         $CommandInfo
     )
 
-    # 获取命令名元素的位置信息
-    $cmdNameElement = $null
-    if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 0) {
-        $cmdNameElement = $CommandInfo.Ast.CommandElements[0]
-    }
+    # 优先使用生成期的原偏移信息（兼容替换逻辑）
+    if ($CommandInfo.Resolvable -and $null -ne $CommandInfo.Resolvable.StartOffset -and $null -ne $CommandInfo.Resolvable.EndOffset) {
+        $startOffset = $CommandInfo.Resolvable.StartOffset
+        $endOffset = $CommandInfo.Resolvable.EndOffset
+        $cmdNameElement = $null
+    } else {
+        # 获取命令名元素的位置信息（Text 解析 AST 的本地偏移）
+        $cmdNameElement = $null
+        if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 0) {
+            $cmdNameElement = $CommandInfo.Ast.CommandElements[0]
+        }
 
-    if (-not $cmdNameElement -or -not $cmdNameElement.Extent) {
-        # 如果没有位置信息，尝试从 Resolvable 获取
-        if ($CommandInfo.Resolvable) {
-            $startOffset = $CommandInfo.Resolvable.StartOffset
-            $endOffset = $CommandInfo.Resolvable.EndOffset
-        } else {
+        if (-not $cmdNameElement -or -not $cmdNameElement.Extent) {
             Write-ExecutionLog -Context $Context -Message "  [ALIAS] Cannot record alias resolution: no position info"
             return
         }
-    } else {
+
         $startOffset = $cmdNameElement.Extent.StartOffset
         $endOffset = $cmdNameElement.Extent.EndOffset
     }
@@ -2802,6 +3205,8 @@ function Invoke-CFGTraversal {
         MaxCallDepth          = 100          # 最大调用深度
         DynamicInvokeResults  = @()          # 动态执行记录 [{ NodeId; Command; ArgumentValue }]
         LastSubgraphResult    = $null        # 子图（函数/脚本块）的最后执行结果，用于返回值传递
+        TextParseCache        = @{}          # Node.Text 解析缓存（执行期 text-first）
+        TextParseErrors       = @()          # 解析错误记录（非阻塞）
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
