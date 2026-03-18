@@ -1,125 +1,52 @@
-[19:26:18.393] === CFG 执行开始 ===
-[19:26:18.393] MaxIterations: 1000, MaxTotalNodes: 50000
-[19:26:18.394] 
-[19:26:18.394] === 初始化子图映射 ===
-[19:26:18.394]   [INIT] Total functions: 0, ScriptBlocks: 0
-[19:26:18.395] 
-[19:26:18.395] --- Node 1 [Start] ---
-[19:26:18.396]   Code: Script Start
-[19:26:18.396]   Status: SKIP
-[19:26:18.397] --- Node 3 [MainStart] ---
-[19:26:18.397]   Code: Main Script
-[19:26:18.397]   Status: SKIP
-[19:26:18.398] --- Node 5 [SwitchStart] ---
-[19:26:18.398]   Code: switch (1, 2, 3, 4, 5)
-[19:26:18.399]   Status: SKIP
-[19:26:18.399] --- Node 6 [SwitchInit] ---
-[19:26:18.400]   Code: $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5); $__sw_ae5f91e6c73c_idx = 0
-[19:26:18.415]   Status: OK
-[19:26:18.416]   VarsWritten:
-[19:26:18.417]     $__sw_ae5f91e6c73c_idx = 0
-[19:26:18.419]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
-[19:26:18.420] --- Node 7 [SwitchCondition] ---
-[19:26:18.420]   Code: [bool]($__sw_ae5f91e6c73c_idx -lt $__sw_ae5f91e6c73c.Count)
-[19:26:18.479]   Status: OK
-[19:26:18.480]   VarsRead:
-[19:26:18.480]     $__sw_ae5f91e6c73c_idx = 0
-[19:26:18.481]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
-[19:26:18.481]   Result: @(True)
-[19:26:18.481]   ConditionResult: True
-[19:26:18.483] --- Node 9 [SwitchBind] ---
-[19:26:18.483]   Code: $__sw_ae5f91e6c73c_current = $__sw_ae5f91e6c73c[$__sw_ae5f91e6c73c_idx]
-[19:26:18.511]   Status: OK
-[19:26:18.511]   VarsRead:
-[19:26:18.512]     $__sw_ae5f91e6c73c_idx = 0
-[19:26:18.512]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
-[19:26:18.512]   VarsWritten:
-[19:26:18.513]     $__sw_ae5f91e6c73c_current = 1
-[19:26:18.514] --- Node 11 [CaseCondition] ---
-[19:26:18.514]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 1)
-[19:26:18.552]   Status: OK
-[19:26:18.553]   VarsRead:
-[19:26:18.553]     $__sw_ae5f91e6c73c_current = 1
-[19:26:18.554]   Result: @(True)
-[19:26:18.554]   ConditionResult: True
-[19:26:18.556] --- Node 12 [PipelineElement] ---
-[19:26:18.557]   Code: "one"
-[19:26:18.560]   Status: OK
-[19:26:18.561]   Result: @("one")
-[19:26:18.561] --- Node 13 [CaseCondition] ---
-[19:26:18.562]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 2)
-[19:26:18.594]   Status: OK
-[19:26:18.594]   VarsRead:
-[19:26:18.595]     $__sw_ae5f91e6c73c_current = 1
-[19:26:18.595]   Result: @(False)
-[19:26:18.596]   ConditionResult: False
-[19:26:18.597] --- Node 16 [CaseCondition] ---
-[19:26:18.597]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 3)
-[19:26:18.647]   Status: OK
-[19:26:18.647]   VarsRead:
-[19:26:18.648]     $__sw_ae5f91e6c73c_current = 1
-[19:26:18.648]   Result: @(False)
-[19:26:18.648]   ConditionResult: False
-[19:26:18.649] --- Node 19 [CaseCondition] ---
-[19:26:18.650]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 4)
-[19:26:18.689]   Status: OK
-[19:26:18.689]   VarsRead:
-[19:26:18.690]     $__sw_ae5f91e6c73c_current = 1
-[19:26:18.691]   Result: @(False)
-[19:26:18.691]   ConditionResult: False
-[19:26:18.692] --- Node 21 [CaseCondition] ---
-[19:26:18.692]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 5)
-[19:26:18.732]   Status: OK
-[19:26:18.732]   VarsRead:
-[19:26:18.733]     $__sw_ae5f91e6c73c_current = 1
-[19:26:18.733]   Result: @(False)
-[19:26:18.734]   ConditionResult: False
-[19:26:18.742] --- Node 10 [SwitchIter] ---
-[19:26:18.743]   Code: $__sw_ae5f91e6c73c_idx++
-[19:26:18.759]   Status: OK
-[19:26:18.773]   VarsRead:
-[19:26:18.773]     $__sw_ae5f91e6c73c_idx = 0
-[19:26:18.774]   VarsWritten:
-[19:26:18.774]     $__sw_ae5f91e6c73c_idx = 1
-[19:26:18.788] --- Node 7 [SwitchCondition] ---
-[19:26:18.788]   Code: [bool]($__sw_ae5f91e6c73c_idx -lt $__sw_ae5f91e6c73c.Count)
-[19:26:18.810]   Status: OK
-[19:26:18.810]   VarsRead:
-[19:26:18.811]     $__sw_ae5f91e6c73c_idx = 1
-[19:26:18.811]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
-[19:26:18.811]   Result: @(True)
-[19:26:18.812]   ConditionResult: True
-[19:26:18.812] --- Node 9 [SwitchBind] ---
-[19:26:18.813]   Code: $__sw_ae5f91e6c73c_current = $__sw_ae5f91e6c73c[$__sw_ae5f91e6c73c_idx]
-[19:26:18.817]   Status: OK
-[19:26:18.817]   VarsRead:
-[19:26:18.817]     $__sw_ae5f91e6c73c_idx = 1
-[19:26:18.818]     $__sw_ae5f91e6c73c = @(1, 2, 3, 4, 5)
-[19:26:18.818]   VarsWritten:
-[19:26:18.819]     $__sw_ae5f91e6c73c_current = 2
-[19:26:18.819] --- Node 11 [CaseCondition] ---
-[19:26:18.819]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 1)
-[19:26:18.827]   Status: OK
-[19:26:18.828]   VarsRead:
-[19:26:18.828]     $__sw_ae5f91e6c73c_current = 2
-[19:26:18.828]   Result: @(False)
-[19:26:18.829]   ConditionResult: False
-[19:26:18.829] --- Node 13 [CaseCondition] ---
-[19:26:18.830]   Code: [bool]($__sw_ae5f91e6c73c_current -eq 2)
-[19:26:18.837]   Status: OK
-[19:26:18.838]   VarsRead:
-[19:26:18.838]     $__sw_ae5f91e6c73c_current = 2
-[19:26:18.839]   Result: @(True)
-[19:26:18.839]   ConditionResult: True
-[19:26:18.840] --- Node 14 [PipelineElement] ---
-[19:26:18.840]   Code: "two"
-[19:26:18.843]   Status: OK
-[19:26:18.843]   Result: @("two")
-[19:26:18.844] --- Node 15 [Exit] ---
-[19:26:18.844]   Code: exit
-[19:26:18.847]   Status: OK
-[19:26:18.848] === 执行结束 ===
-[19:26:18.849] 
-[19:26:18.849] === 执行统计 ===
-[19:26:18.849] Total visits: 19
-[19:26:18.850] Unique nodes: 15
+[18:59:41.476] === CFG 执行开始 ===
+[18:59:41.476] MaxIterations: 1000, MaxTotalNodes: 50000
+[18:59:41.477] 
+[18:59:41.477] === 初始化子图映射 ===
+[18:59:41.478]   [INIT] Total functions: 0, ScriptBlocks: 0
+[18:59:41.478] 
+[18:59:41.478] --- Node 1 [Start] ---
+[18:59:41.479]   Code: Script Start
+[18:59:41.479]   Status: SKIP
+[18:59:41.480] --- Node 3 [MainStart] ---
+[18:59:41.480]   Code: Main Script
+[18:59:41.480]   Status: SKIP
+[18:59:41.481] --- Node 5 [AssignmentStatementAst] ---
+[18:59:41.481]   Code: $obj1 = [pscustomobject]@{ A = 1; B = 2; Arr = @(1, 2); Str = 'ab'; Mixed = @($null, 1) }
+[18:59:41.489]   Status: OK
+[18:59:41.490]   VarsRead:
+[18:59:41.491]     $null = $null
+[18:59:41.491]   VarsWritten:
+[18:59:41.492]     $obj1 = [PSCustomObject]
+[18:59:41.493] --- Node 6 [AssignmentStatementAst] ---
+[18:59:41.493]   Code: $obj2 = [pscustomobject]@{ A = 3; B = 4; Arr = @(3); Str = 'cd'; Mixed = @() }
+[18:59:41.498]   Status: OK
+[18:59:41.498]   VarsWritten:
+[18:59:41.498]     $obj2 = [PSCustomObject]
+[18:59:41.499] --- Node 7 [PipelineElement] ---
+[18:59:41.499]   Code: @($obj1, $obj2)
+[18:59:41.501]   Status: OK
+[18:59:41.502]   VarsRead:
+[18:59:41.502]     $obj2 = [PSCustomObject]
+[18:59:41.502]     $obj1 = [PSCustomObject]
+[18:59:41.503]   VarsWritten:
+[18:59:41.503]     $_pipe_f7851e3c = @([PSCustomObject], [PSCustomObject])
+[18:59:41.503]   Result: @([PSCustomObject], [PSCustomObject])
+[18:59:41.504] --- Node 8 [PipelineElement] ---
+[18:59:41.504]   Code: $r13 = $_pipe_f7851e3c | Select-Object A, B
+[18:59:41.541]   Status: OK
+[18:59:41.542]   Action: SelectObject
+[18:59:41.543]   VarsRead:
+[18:59:41.544]     $obj2 = [PSCustomObject]
+[18:59:41.544]     $obj1 = [PSCustomObject]
+[18:59:41.544]     $_pipe_f7851e3c = @([PSCustomObject], [PSCustomObject])
+[18:59:41.545]   VarsWritten:
+[18:59:41.545]     $r13 = @([PSCustomObject], [PSCustomObject])
+[18:59:41.545]   Result: @([PSCustomObject], [PSCustomObject])
+[18:59:41.546] --- Node 4 [MainEnd] ---
+[18:59:41.546]   Code: End Main Script
+[18:59:41.547]   Status: SKIP
+[18:59:41.547] === 执行结束 ===
+[18:59:41.547] 
+[18:59:41.548] === 执行统计 ===
+[18:59:41.548] Total visits: 7
+[18:59:41.548] Unique nodes: 7

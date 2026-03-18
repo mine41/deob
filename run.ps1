@@ -142,4 +142,8 @@ if ($nodeIds.Count -eq 0) {
     }
 }
 
-Start-Process 'in/in.png'
+try {
+    Start-Process 'in/in.png' -ErrorAction Stop
+} catch {
+    # 某些环境下没有文件关联（或无 GUI），忽略即可
+}

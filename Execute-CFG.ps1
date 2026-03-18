@@ -176,7 +176,18 @@ function Get-VariableFromContext {
         [hashtable]$ExecContext,
         [string]$Name
     )
-    return $ExecContext.Runspace.SessionStateProxy.GetVariable($Name)
+    $psVar = $ExecContext.Runspace.SessionStateProxy.PSVariable.Get($Name)
+    if ($null -eq $psVar) {
+        return $null
+    }
+
+    $value = $psVar.Value
+    # 关键：函数输出会枚举数组，空数组会丢失为 $null；这里强制不枚举数组值。
+    if ($value -is [array]) {
+        Write-Output -NoEnumerate $value
+        return
+    }
+    return $value
 }
 
 # 获取节点读写变量的当前值
@@ -356,9 +367,10 @@ function Get-PrimaryCommandAstFromScriptAst {
         $pipeline = $statement.Right
         if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and
             $pipeline.PipelineElements -and $pipeline.PipelineElements.Count -gt 0) {
-            $firstElem = $pipeline.PipelineElements[0]
-            if ($firstElem -is [System.Management.Automation.Language.CommandAst]) {
-                return $firstElem
+            foreach ($elem in $pipeline.PipelineElements) {
+                if ($elem -is [System.Management.Automation.Language.CommandAst]) {
+                    return $elem
+                }
             }
         }
         return $null
@@ -366,9 +378,10 @@ function Get-PrimaryCommandAstFromScriptAst {
 
     if ($statement -is [System.Management.Automation.Language.PipelineAst] -and
         $statement.PipelineElements -and $statement.PipelineElements.Count -gt 0) {
-        $firstElem = $statement.PipelineElements[0]
-        if ($firstElem -is [System.Management.Automation.Language.CommandAst]) {
-            return $firstElem
+        foreach ($elem in $statement.PipelineElements) {
+            if ($elem -is [System.Management.Automation.Language.CommandAst]) {
+                return $elem
+            }
         }
         return $null
     }
@@ -808,8 +821,17 @@ function Get-NextNodes {
             return @()
         }
 
-        # ForEach 条件节点
+        # ForEach/Process 条件节点
         "ForEachCondition" {
+            if ($Context.LastConditionResult) {
+                $edge = $edges | Where-Object { $_.Label -eq "Has next" } | Select-Object -First 1
+            } else {
+                $edge = $edges | Where-Object { $_.Label -eq "No more items" } | Select-Object -First 1
+            }
+            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
+            return @()
+        }
+        "ProcessCondition" {
             if ($Context.LastConditionResult) {
                 $edge = $edges | Where-Object { $_.Label -eq "Has next" } | Select-Object -First 1
             } else {
@@ -1057,7 +1079,8 @@ function Invoke-NodeDirect {
         'Start', 'End', 'MainStart', 'MainEnd',
         'FuncStart', 'FuncEnd', 'BlockStart', 'BlockEnd',
         'FuncParams', 'BlockParams',
-        'LoopStart', 'LoopEnd', 'SwitchStart', 'SwitchEnd',
+        'LoopStart', 'LoopEnd', 'ProcessEnd', 'SwitchStart', 'SwitchEnd',
+        'Break', 'Continue', 'Exit',
         'If Condition', 'Else', 'Merge', 'Default',
         'Try', 'Catch', 'Finally', 'FunctionDef'
     )
@@ -1117,7 +1140,7 @@ function Invoke-NodeDirect {
     }
 
     # 条件节点记录结果
-    $conditionTypes = @('Condition', 'ForEachCondition', 'SwitchCondition', 'CaseCondition')
+    $conditionTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
     if ($Node.Type -in $conditionTypes) {
         if ($execResult.Success -and $null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
             $Context.LastConditionResult = [bool]$execResult.Result[0]
@@ -1147,7 +1170,7 @@ function Invoke-NodeSafe {
         'Start', 'End', 'MainStart', 'MainEnd',
         'FuncStart', 'FuncEnd', 'BlockStart', 'BlockEnd',
         'FuncParams', 'BlockParams',
-        'LoopStart', 'LoopEnd', 'SwitchStart', 'SwitchEnd',
+        'LoopStart', 'LoopEnd', 'ProcessEnd', 'SwitchStart', 'SwitchEnd',
         'If Condition', 'Else', 'Merge', 'Default',
         'Try', 'Catch', 'Finally', 'FunctionDef'
     )
@@ -1194,9 +1217,61 @@ function Invoke-NodeSafe {
             }
 
             if (-not $isDefinitionNode) {
-                Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $blockName (via Invokes.ScriptBlocks fallback)"
-                return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+                # 只有在“真正调用脚本块”的形态下才跳转
+                # 避免误把 ForEach-Object/Where-Object 等 cmdlet 的脚本块参数当成调用。
+                $isCallForm = $false
+
+                if ($Node.Ast -is [System.Management.Automation.Language.CommandAst]) {
+                    if ($Node.Ast.InvocationOperator -in @(
+                            [System.Management.Automation.Language.TokenKind]::Ampersand,
+                            [System.Management.Automation.Language.TokenKind]::Dot)) {
+                        $isCallForm = $true
+                    }
+
+                    $cmdName = $Node.Ast.GetCommandName()
+                    if ($cmdName -and $cmdName -ieq $blockName) {
+                        $isCallForm = $true
+                    }
+                }
+                elseif ($Node.Text -match '^\s*[&\.]') {
+                    $isCallForm = $true
+                }
+
+                if ($isCallForm) {
+                    Write-ExecutionLog -Context $Context -Message "  [CALL] ScriptBlock: $blockName (via Invokes.ScriptBlocks fallback)"
+                    return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+                }
             }
+        }
+    }
+
+    # 2.8. 函数调用兜底：处理形如 "$_pipe_xxx | FuncName" 的 PipelineElement
+    # 这类节点的主命令不一定是函数名，可能绕过常规命令解析。
+    if ($Node.Type -eq 'PipelineElement' -and $Node.Invokes -and $Node.Invokes.Functions -and $Node.Invokes.Functions.Count -gt 0) {
+        $funcNameFromTopLevel = $null
+        $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+        if ($parseInfo.Success) {
+            $statement = Get-FirstStatementFromScriptAst -ScriptAst $parseInfo.Ast
+            if ($statement -is [System.Management.Automation.Language.PipelineAst]) {
+                foreach ($elem in $statement.PipelineElements) {
+                    if ($elem -is [System.Management.Automation.Language.CommandAst]) {
+                        $name = $elem.GetCommandName()
+                        if ($name -and $Context.FunctionSubgraphs.ContainsKey($name)) {
+                            $funcNameFromTopLevel = $name
+                        }
+                    }
+                }
+            } elseif ($statement -is [System.Management.Automation.Language.CommandAst]) {
+                $name = $statement.GetCommandName()
+                if ($name -and $Context.FunctionSubgraphs.ContainsKey($name)) {
+                    $funcNameFromTopLevel = $name
+                }
+            }
+        }
+
+        if ($funcNameFromTopLevel) {
+            Write-ExecutionLog -Context $Context -Message "  [CALL] Function: $funcNameFromTopLevel (pipeline fallback)"
+            return Invoke-FunctionCall -FuncName $funcNameFromTopLevel -CallerNode $Node -Context $Context
         }
     }
 
@@ -1279,6 +1354,15 @@ function Invoke-NodeSafe {
 
             return $result
         }
+        "ForEachObject" {
+            return Invoke-ForEachObjectCmdlet -Node $Node -Context $Context
+        }
+        "WhereObject" {
+            return Invoke-WhereObjectCmdlet -Node $Node -Context $Context
+        }
+        "SelectObject" {
+            return Invoke-SelectObjectCmdlet -Node $Node -Context $Context
+        }
         "CallFunction" {
             Write-ExecutionLog -Context $Context -Message "  [CALL] Function: $($checkResult.Target)"
             return Invoke-FunctionCall -FuncName $checkResult.Target -CallerNode $Node -Context $Context
@@ -1329,6 +1413,1357 @@ function Get-SubgraphEndNode {
     }
 
     return $null
+}
+
+# 从调用节点提取上游管道输入（_pipe_xxx）
+function Get-CallerPipelineInput {
+    param(
+        $CallerNode,
+        [hashtable]$Context
+    )
+
+    $pipeVarNames = @()
+
+    if ($CallerNode -and $CallerNode.VarsRead) {
+        foreach ($varInfo in $CallerNode.VarsRead) {
+            if ($varInfo.Name -match '^_pipe_[a-f0-9]+$' -and $varInfo.Name -notin $pipeVarNames) {
+                $pipeVarNames += $varInfo.Name
+            }
+        }
+    }
+
+    # 兜底：部分节点可能只在 VarsWritten 中记录了管道中间变量
+    if ($pipeVarNames.Count -eq 0 -and $CallerNode -and $CallerNode.VarsWritten) {
+        foreach ($varInfo in $CallerNode.VarsWritten) {
+            if ($varInfo.Name -match '^_pipe_[a-f0-9]+$' -and $varInfo.Name -notin $pipeVarNames) {
+                $pipeVarNames += $varInfo.Name
+            }
+        }
+    }
+
+    if ($pipeVarNames.Count -eq 0) {
+        return @{
+            PipeVar = $null
+            Items   = @()
+        }
+    }
+
+    $pipeVar = $pipeVarNames[0]
+    $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $pipeVar
+    $items = if ($null -eq $value) { @() } else { @($value) }
+
+    return @{
+        PipeVar = $pipeVar
+        Items   = $items
+    }
+}
+
+# 将 process 输入注入当前作用域（使用带前缀变量名）
+function Initialize-ProcessInputForCurrentScope {
+    param(
+        [hashtable]$Context,
+        [array]$InputItems,
+        [string]$SourcePipeVar = $null,
+        [string]$InputVarName = "__proc_input"
+    )
+
+    if ($Context.ScopeStack.Count -eq 0) { return }
+
+    $scope = $Context.ScopeStack[-1]
+    if (-not $scope.LocalVars) {
+        $scope.LocalVars = @()
+    }
+    if ($InputVarName -notin $scope.LocalVars) {
+        $scope.LocalVars += $InputVarName
+    }
+
+    $actualVarName = $scope.ScopePrefix + $InputVarName
+    $valueToSet = if ($null -eq $InputItems) { @() } else { @($InputItems) }
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $valueToSet)
+
+    $sourceText = if ($SourcePipeVar) { "`$$SourcePipeVar" } else { "(empty)" }
+    Write-ExecutionLog -Context $Context -Message "  [PROCESS] Set `$$actualVarName from $sourceText (Count=$($valueToSet.Count))"
+}
+
+# ========== 管道 foreach-object 支持 ==========
+
+# Push/Pop 当前管道项（$_ / $PSItem），支持嵌套 ForEach-Object
+function Push-PipelineCurrent {
+    param(
+        [hashtable]$Context,
+        $Value
+    )
+
+    if (-not $Context.PipelineCurrentStack) {
+        $Context.PipelineCurrentStack = @()
+    }
+
+    $frame = @{
+        Underscore = Get-VariableFromContext -ExecContext $Context.ExecContext -Name "_"
+        PSItem     = Get-VariableFromContext -ExecContext $Context.ExecContext -Name "PSItem"
+    }
+
+    $Context.PipelineCurrentStack = @($Context.PipelineCurrentStack) + @($frame)
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable("_", $Value)
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable("PSItem", $Value)
+}
+
+function Pop-PipelineCurrent {
+    param([hashtable]$Context)
+
+    if (-not $Context.PipelineCurrentStack -or $Context.PipelineCurrentStack.Count -eq 0) {
+        return
+    }
+
+    $frame = $Context.PipelineCurrentStack[-1]
+    if ($Context.PipelineCurrentStack.Count -eq 1) {
+        $Context.PipelineCurrentStack = @()
+    } else {
+        $Context.PipelineCurrentStack = @($Context.PipelineCurrentStack[0..($Context.PipelineCurrentStack.Count - 2)])
+    }
+
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable("_", $frame.Underscore)
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable("PSItem", $frame.PSItem)
+}
+
+# 输出捕获栈：用于 ForEach-Object 的逐项执行收集输出流
+function Push-OutputCapture {
+    param([hashtable]$Context)
+    if (-not $Context.OutputCaptureStack) {
+        $Context.OutputCaptureStack = @()
+    }
+    $Context.OutputCaptureStack = @($Context.OutputCaptureStack) + @(@{ Outputs = @() })
+}
+
+function Pop-OutputCapture {
+    param([hashtable]$Context)
+
+    if (-not $Context.OutputCaptureStack -or $Context.OutputCaptureStack.Count -eq 0) {
+        return @{ Outputs = @() }
+    }
+
+    $frame = $Context.OutputCaptureStack[-1]
+    if ($Context.OutputCaptureStack.Count -eq 1) {
+        $Context.OutputCaptureStack = @()
+    } else {
+        $Context.OutputCaptureStack = @($Context.OutputCaptureStack[0..($Context.OutputCaptureStack.Count - 2)])
+    }
+
+    return $frame
+}
+
+# 将节点执行产生的输出追加到当前输出捕获帧（用于 ForEach-Object 等）
+# 注意：只追加到栈顶帧，支持嵌套捕获。
+function Add-OutputsToCurrentCapture {
+    param(
+        [hashtable]$Context,
+        $Result
+    )
+
+    if (-not $Context.OutputCaptureStack -or $Context.OutputCaptureStack.Count -eq 0) {
+        return
+    }
+
+    if ($null -eq $Result) { return }
+
+    $frame = $Context.OutputCaptureStack[-1]
+    if (-not $frame.ContainsKey('Outputs') -or $null -eq $frame.Outputs) {
+        $frame.Outputs = @()
+    }
+
+    # Invoke-InContext 返回 Collection[PSObject]；也兼容数组/标量
+    if ($Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+        foreach ($item in $Result) {
+            if ($null -ne $item) { $frame.Outputs += $item }
+        }
+    }
+    elseif ($Result -is [array]) {
+        foreach ($item in $Result) {
+            if ($null -ne $item) { $frame.Outputs += $item }
+        }
+    }
+    else {
+        $frame.Outputs += $Result
+    }
+}
+
+# 统一的“管道脚本块”单次执行：
+# - 绑定当前项到 $_ / $PSItem
+# - 捕获脚本块子图的可见输出流（用于 ForEach-Object / Where-Object 等）
+function Invoke-PipelineScriptBlockOnce {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BlockName,
+        $CurrentValue,
+        [array]$ProcessInputItems = @(),
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BlockName)) { return @() }
+
+    Push-PipelineCurrent -Context $Context -Value $CurrentValue
+    Push-OutputCapture -Context $Context
+
+    try {
+        $null = Invoke-ScriptBlockInline -BlockName $BlockName -Context $Context -Arguments @() -ProcessInputItems $ProcessInputItems
+    }
+    finally {
+        $cap = Pop-OutputCapture -Context $Context
+        Pop-PipelineCurrent -Context $Context
+    }
+
+    return @($cap.Outputs)
+}
+
+# 如果 Node.Text 是赋值语句，则把 ValueToAssign 作为 RHS 结果写入 LHS。
+# 用临时变量承载 RHS，避免破坏原表达式结构（与 ForEach-Object 赋值处理一致）。
+function Apply-AssignmentIfPresentFromValue {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $ValueToAssign,
+        [string]$TempVarPrefix = "_pipe_cmdlet_out_",
+        [string]$ActionNameForErrors = "PipelineCmdlet"
+    )
+
+    $nodeExecInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    if (-not $nodeExecInfo.Success) {
+        return @{
+            Applied = $false
+            Success = $true
+            Error   = $null
+        }
+    }
+
+    if (-not ($nodeExecInfo.Statement -is [System.Management.Automation.Language.AssignmentStatementAst])) {
+        return @{
+            Applied = $false
+            Success = $true
+            Error   = $null
+        }
+    }
+
+    $assignAst = $nodeExecInfo.Statement
+    $leftText = $assignAst.Left.Extent.Text
+    $opText = switch ($assignAst.Operator) {
+        "Equals"           { "=" }
+        "PlusEquals"       { "+=" }
+        "MinusEquals"      { "-=" }
+        "MultiplyEquals"   { "*=" }
+        "DivideEquals"     { "/=" }
+        "RemainderEquals"  { "%=" }
+        default            { "=" }
+    }
+
+    $tempVar = $TempVarPrefix + [guid]::NewGuid().ToString("N").Substring(0, 8)
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($tempVar, $ValueToAssign)
+
+    $assignCode = "$leftText $opText `$$tempVar"
+    $assignCode = Convert-CodeForCurrentScope -Code $assignCode -Context $Context
+    $assignResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $assignCode
+
+    try { $Context.ExecContext.Runspace.SessionStateProxy.PSVariable.Remove($tempVar) } catch { }
+
+    if (-not $assignResult.Success) {
+        return @{
+            Applied = $true
+            Success = $false
+            Error   = "$ActionNameForErrors assignment failed: $($assignResult.Error)"
+        }
+    }
+
+    return @{
+        Applied = $true
+        Success = $true
+        Error   = $null
+    }
+}
+
+# 获取子图参数变量（仅 param(...) 中声明的变量），用于 ForEach-Object 语义：参数隔离，其余变量影响外层作用域
+function Get-SubgraphParamVars {
+    param(
+        [hashtable]$CFG,
+        [int]$StartNodeId,
+        [int]$EndNodeId
+    )
+
+    if (-not $CFG -or -not $CFG.Nodes -or -not $CFG.Edges) { return @() }
+
+    $paramNames = @()
+    $visited = @{}
+    $queue = [System.Collections.Generic.Queue[int]]::new()
+    $queue.Enqueue($StartNodeId)
+
+    while ($queue.Count -gt 0) {
+        $nodeId = $queue.Dequeue()
+        if ($visited.ContainsKey($nodeId)) { continue }
+        $visited[$nodeId] = $true
+
+        if ($nodeId -eq $EndNodeId) { continue }
+
+        $node = $CFG.Nodes | Where-Object { $_.Id -eq $nodeId } | Select-Object -First 1
+        if (-not $node) { continue }
+
+        if ($node.Type -in @('FuncParams', 'BlockParams') -and $node.Ast -and $node.Ast.Parameters) {
+            foreach ($p in $node.Ast.Parameters) {
+                $name = $p.Name.VariablePath.UserPath
+                if (-not [string]::IsNullOrWhiteSpace($name)) {
+                    $paramNames += $name
+                }
+            }
+            break
+        }
+
+        $edges = $CFG.Edges | Where-Object { $_.From -eq $nodeId }
+        foreach ($edge in $edges) {
+            if (-not $visited.ContainsKey($edge.To)) {
+                $queue.Enqueue($edge.To)
+            }
+        }
+    }
+
+    return @($paramNames | Select-Object -Unique)
+}
+
+# 内联执行脚本块子图：不通过 CallerNode 跳转，直接同步遍历子图并返回
+function Invoke-ScriptBlockInline {
+    param(
+        [string]$BlockName,
+        [hashtable]$Context,
+        [array]$Arguments = @(),
+        [array]$ProcessInputItems = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BlockName)) { return $null }
+    if (-not $Context.ScriptBlockSubgraphs.ContainsKey($BlockName)) {
+        Write-ExecutionLog -Context $Context -Message "  [FOREACH] ScriptBlock subgraph not found: $BlockName"
+        return $null
+    }
+
+    $blockStartId = $Context.ScriptBlockSubgraphs[$BlockName]
+    $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+    if (-not $blockStartNode) {
+        Write-ExecutionLog -Context $Context -Message "  [FOREACH] ScriptBlock start node not found: $BlockName ($blockStartId)"
+        return $null
+    }
+
+    $blockEndNode = Get-SubgraphEndNode -CFG $Context.CFG -StartType "BlockStart" -Name $BlockName
+    if (-not $blockEndNode) {
+        Write-ExecutionLog -Context $Context -Message "  [FOREACH] ScriptBlock end node not found: $BlockName"
+        return $null
+    }
+    $blockEndId = $blockEndNode.Id
+
+    $paramVars = Get-SubgraphParamVars -CFG $Context.CFG -StartNodeId $blockStartId -EndNodeId $blockEndId
+
+    Push-ExecutionScope -Context $Context -ScopeType "ScriptBlock" -ScopeName $BlockName -ReturnNodeId 0 -EndNodeId $blockEndId
+    $scope = $Context.ScopeStack[-1]
+    $scope.LocalVars = $paramVars
+    $scope.Arguments = $Arguments
+    $scope.TargetVarName = $null
+
+    # 如果脚本块内部有显式 process 块（生成期已转换为 ProcessInit/ProcessCondition/...），需要注入 $__proc_input
+    $hasProcessBlock = ($blockStartNode.PSObject.Properties['HasProcessBlock'] -and [bool]$blockStartNode.HasProcessBlock)
+    $processInputVarName = if ($blockStartNode.PSObject.Properties['ProcessInputVar']) {
+        [string]$blockStartNode.ProcessInputVar
+    } else {
+        "__proc_input"
+    }
+    if ($hasProcessBlock) {
+        $itemsToSet = if ($null -eq $ProcessInputItems) { @() } else { @($ProcessInputItems) }
+        Initialize-ProcessInputForCurrentScope -Context $Context -InputItems $itemsToSet -SourcePipeVar $null -InputVarName $processInputVarName
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [INLINE] Entering ScriptBlock '$BlockName'"
+    Invoke-NodeTraverse -Node $blockStartNode -Context $Context
+
+    $result = $Context.LastSubgraphResult
+    $Context.LastSubgraphResult = $null
+    Write-ExecutionLog -Context $Context -Message "  [INLINE] Exited ScriptBlock '$BlockName' with result: $(Format-VariableValue $result)"
+    return $result
+}
+
+# 从节点中提取 ForEach-Object 调用信息（Begin/Process/End 脚本块）
+function Get-ForEachObjectInvocationInfo {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    if (-not $execInfo.Success) {
+        return @{
+            Success = $false
+            Error   = $execInfo.Error
+        }
+    }
+
+    $cmdAst = $execInfo.CommandAst
+    if (-not $cmdAst) {
+        return @{
+            Success = $false
+            Error   = "No CommandAst in Node.Text"
+        }
+    }
+
+    $cmdName = $cmdAst.GetCommandName()
+    if ($cmdName -notin @('ForEach-Object', 'ForEach', '%')) {
+        return @{
+            Success = $false
+            Error   = "Not a ForEach-Object command: $cmdName"
+        }
+    }
+
+    $beginAst = $null
+    $processAst = $null
+    $endAst = $null
+    $positional = @()
+
+    for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+        $elem = $cmdAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $pname = $elem.ParameterName
+            if ($pname -in @('Begin', 'Process', 'End')) {
+                $argAst = $elem.Argument
+                if (-not $argAst -and ($i + 1 -lt $cmdAst.CommandElements.Count)) {
+                    $i++
+                    $argAst = $cmdAst.CommandElements[$i]
+                }
+
+                switch ($pname) {
+                    'Begin'   { $beginAst = $argAst }
+                    'Process' { $processAst = $argAst }
+                    'End'     { $endAst = $argAst }
+                }
+            }
+            continue
+        }
+
+        $positional += $elem
+    }
+
+    # 兼容位置参数：1 个=Process；2 个=Begin+Process；3 个=Begin+Process+End
+    if (-not $beginAst -and -not $processAst -and -not $endAst) {
+        $blocks = @()
+        foreach ($e in $positional) {
+            if ($e -is [System.Management.Automation.Language.VariableExpressionAst] -or
+                $e -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                $blocks += $e
+            }
+        }
+
+        if ($blocks.Count -eq 1) {
+            $processAst = $blocks[0]
+        } elseif ($blocks.Count -eq 2) {
+            $beginAst = $blocks[0]
+            $processAst = $blocks[1]
+        } elseif ($blocks.Count -ge 3) {
+            $beginAst = $blocks[0]
+            $processAst = $blocks[1]
+            $endAst = $blocks[2]
+        }
+    }
+
+    $beginName = if ($beginAst) { Get-ScriptBlockNameFromAst -Ast $beginAst -Context $Context } else { $null }
+    $processName = if ($processAst) { Get-ScriptBlockNameFromAst -Ast $processAst -Context $Context } else { $null }
+    $endName = if ($endAst) { Get-ScriptBlockNameFromAst -Ast $endAst -Context $Context } else { $null }
+
+    if (-not $processName) {
+        return @{
+            Success = $false
+            Error   = "Cannot resolve Process scriptblock for ForEach-Object"
+        }
+    }
+
+    return @{
+        Success          = $true
+        Error            = $null
+        CommandName      = $cmdName
+        BeginBlockName   = $beginName
+        ProcessBlockName = $processName
+        EndBlockName     = $endName
+    }
+}
+
+# 执行 ForEach-Object（逐项执行脚本块子图，并将输出写回 _pipe_ 变量）
+function Invoke-ForEachObjectCmdlet {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $info = Get-ForEachObjectInvocationInfo -Node $Node -Context $Context
+    if (-not $info.Success) {
+        Write-ExecutionLog -Context $Context -Message "  [FOREACH] Parse failed, fallback to direct execute: $($info.Error)"
+        return Invoke-NodeDirect -Node $Node -Context $Context
+    }
+
+    $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
+    $items = @($pipelineInput.Items)
+    $pipeVar = $pipelineInput.PipeVar
+
+    $allOutputs = @()
+    $stopAll = $false
+
+    # Begin
+    if ($info.BeginBlockName) {
+        $Context.LastPipelineFlowControl = $null
+        $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.BeginBlockName -CurrentValue $null -ProcessInputItems @() -Context $Context
+        if ($Context.LastPipelineFlowControl -eq "Break") {
+            $stopAll = $true
+        }
+    }
+
+    # Process per item
+    if (-not $stopAll) {
+        foreach ($item in $items) {
+            $Context.LastPipelineFlowControl = $null
+            $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.ProcessBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+            if ($Context.LastPipelineFlowControl -eq "Break") {
+                $stopAll = $true
+                break
+            }
+        }
+    }
+
+    # End（若 break，则 End 不执行）
+    if (-not $stopAll -and $info.EndBlockName) {
+        $Context.LastPipelineFlowControl = $null
+        $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.EndBlockName -CurrentValue $null -ProcessInputItems @() -Context $Context
+    }
+
+    # 将输出写回 _pipe_xxx（仅当该节点需要产生管道输出）
+    $writesPipeVar = $false
+    if ($pipeVar -and $Node.VarsWritten) {
+        foreach ($varInfo in $Node.VarsWritten) {
+            if ($varInfo.Name -eq $pipeVar) {
+                $writesPipeVar = $true
+                break
+            }
+        }
+    }
+
+    # 输出统一保持为 Collection[PSObject]，与 Invoke-InContext 返回类型一致：
+    # - Count=0 表示无输出
+    # - Count=1 且元素为数组对象时，语义上仍是“单个对象”，不会被误扁平化
+    $valueToStore = [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]::new()
+    foreach ($o in $allOutputs) {
+        if ($null -ne $o) {
+            # 允许占位符等非 PSObject 类型，统一包一层 PSObject
+            [void]$valueToStore.Add([System.Management.Automation.PSObject]$o)
+        }
+    }
+
+    if ($writesPipeVar) {
+        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($pipeVar, $valueToStore)
+        Write-ExecutionLog -Context $Context -Message "  [FOREACH] Set `$$pipeVar (Count=$($valueToStore.Count))"
+    }
+
+    # 如果该节点是赋值语句：执行赋值（避免直接执行 Node.Text 触发真正的 ForEach-Object）
+    $assignApply = Apply-AssignmentIfPresentFromValue -Node $Node -Context $Context -ValueToAssign $valueToStore -TempVarPrefix "_foreach_out_" -ActionNameForErrors "ForEach-Object"
+    if ($assignApply.Applied -and -not $assignApply.Success) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $valueToStore
+            Error    = $assignApply.Error
+            Action   = "ForEachObject"
+        }
+    }
+
+    return @{
+        Success  = $true
+        Executed = $true
+        Result   = $valueToStore
+        Error    = $null
+        Action   = "ForEachObject"
+    }
+}
+
+# 从节点中提取 Where-Object 调用信息（FilterScript 脚本块）
+function Get-WhereObjectInvocationInfo {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    if (-not $execInfo.Success) {
+        return @{
+            Success = $false
+            Error   = $execInfo.Error
+        }
+    }
+
+    $cmdAst = $execInfo.CommandAst
+    if (-not $cmdAst) {
+        return @{
+            Success = $false
+            Error   = "No CommandAst in Node.Text"
+        }
+    }
+
+    $cmdName = $cmdAst.GetCommandName()
+    if ($cmdName -notin @('Where-Object', 'Where', '?')) {
+        return @{
+            Success = $false
+            Error   = "Not a Where-Object command: $cmdName"
+        }
+    }
+
+    $filterAst = $null
+    $positional = @()
+
+    for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+        $elem = $cmdAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $pname = $elem.ParameterName
+            if ($pname -in @('FilterScript', 'Filter')) {
+                $argAst = $elem.Argument
+                if (-not $argAst -and ($i + 1 -lt $cmdAst.CommandElements.Count)) {
+                    $i++
+                    $argAst = $cmdAst.CommandElements[$i]
+                }
+                $filterAst = $argAst
+            }
+            continue
+        }
+
+        $positional += $elem
+    }
+
+    # 兼容位置参数：Where-Object { ... }
+    if (-not $filterAst) {
+        foreach ($e in $positional) {
+            if ($e -is [System.Management.Automation.Language.VariableExpressionAst] -or
+                $e -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                $filterAst = $e
+                break
+            }
+        }
+    }
+
+    $knownBlockNames = @()
+    if ($Node.Invokes -and $Node.Invokes.ScriptBlocks) {
+        $knownBlockNames = @($Node.Invokes.ScriptBlocks)
+    }
+
+    $filterName = if ($filterAst) { Get-ScriptBlockNameFromAst -Ast $filterAst -Context $Context -KnownBlockNames $knownBlockNames } else { $null }
+    if (-not $filterName) {
+        return @{
+            Success = $false
+            Error   = "Cannot resolve FilterScript scriptblock for Where-Object"
+        }
+    }
+
+    return @{
+        Success         = $true
+        Error           = $null
+        CommandName     = $cmdName
+        FilterBlockName = $filterName
+    }
+}
+
+# 执行 Where-Object：逐项执行 FilterScript 子图，并将符合条件的原始输入写回 _pipe_ 变量
+function Invoke-WhereObjectCmdlet {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $info = Get-WhereObjectInvocationInfo -Node $Node -Context $Context
+    if (-not $info.Success) {
+        Write-ExecutionLog -Context $Context -Message "  [WHERE] Parse failed, fallback to direct execute: $($info.Error)"
+        return Invoke-NodeDirect -Node $Node -Context $Context
+    }
+
+    $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
+    $items = @($pipelineInput.Items)
+    $pipeVar = $pipelineInput.PipeVar
+
+    $kept = @()
+    $stopAll = $false
+
+    foreach ($item in $items) {
+        $Context.LastPipelineFlowControl = $null
+        $filterOutputs = Invoke-PipelineScriptBlockOnce -BlockName $info.FilterBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+
+        # PowerShell 语义：Where-Object 的真假判断基于 FilterScript 的输出流 truthiness
+        # - 单个 $false -> False
+        # - 多个 $false -> True（非空数组）
+        $match = [bool]@($filterOutputs)
+        if ($match) {
+            $kept += $item
+        }
+
+        if ($Context.LastPipelineFlowControl -eq "Break") {
+            $stopAll = $true
+            break
+        }
+    }
+
+    # 输出保持为 Collection[PSObject]，与 Invoke-InContext 返回类型一致
+    $valueToStore = [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]::new()
+    foreach ($o in $kept) {
+        if ($null -ne $o) {
+            [void]$valueToStore.Add([System.Management.Automation.PSObject]$o)
+        }
+    }
+
+    # 将输出写回 _pipe_xxx（仅当该节点需要产生管道输出）
+    $writesPipeVar = $false
+    if ($pipeVar -and $Node.VarsWritten) {
+        foreach ($varInfo in $Node.VarsWritten) {
+            if ($varInfo.Name -eq $pipeVar) {
+                $writesPipeVar = $true
+                break
+            }
+        }
+    }
+
+    if ($writesPipeVar) {
+        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($pipeVar, $valueToStore)
+        Write-ExecutionLog -Context $Context -Message "  [WHERE] Set `$$pipeVar (Count=$($valueToStore.Count))"
+    }
+
+    # 赋值语句：执行赋值（避免直接执行 Node.Text 触发真正的 Where-Object）
+    $assignApply = Apply-AssignmentIfPresentFromValue -Node $Node -Context $Context -ValueToAssign $valueToStore -TempVarPrefix "_where_out_" -ActionNameForErrors "Where-Object"
+    if ($assignApply.Applied -and -not $assignApply.Success) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $valueToStore
+            Error    = $assignApply.Error
+            Action   = "WhereObject"
+        }
+    }
+
+    return @{
+        Success  = $true
+        Executed = $true
+        Result   = $valueToStore
+        Error    = $null
+        Action   = "WhereObject"
+    }
+}
+
+# ========== 管道 select-object 支持 ==========
+
+function Get-HashtableKeyString {
+    param($KeyAst)
+    if ($null -eq $KeyAst) { return $null }
+    if ($KeyAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return $KeyAst.Value
+    }
+    return [string]$KeyAst.Extent.Text
+}
+
+function Get-HashtableValueExpressionAst {
+    param($StatementAst)
+
+    if ($null -eq $StatementAst) { return $null }
+
+    if ($StatementAst -is [System.Management.Automation.Language.PipelineAst] -and
+        $StatementAst.PipelineElements -and
+        $StatementAst.PipelineElements.Count -eq 1) {
+        $pe = $StatementAst.PipelineElements[0]
+        if ($pe -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            return $pe.Expression
+        }
+    }
+
+    return $null
+}
+
+function Get-SelectObjectCalculatedPropertySpecFromHashtableAst {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.HashtableAst]$HashtableAst,
+        [hashtable]$Context,
+        [array]$KnownBlockNames = @()
+    )
+
+    $name = $null
+    $exprAst = $null
+
+    foreach ($kv in $HashtableAst.KeyValuePairs) {
+        $keyAst = $kv.Item1
+        $valStmt = $kv.Item2
+
+        $keyText = (Get-HashtableKeyString -KeyAst $keyAst)
+        if ([string]::IsNullOrWhiteSpace($keyText)) { continue }
+        # Trim 单引号/双引号（用 `"` 方式在双引号字符串中表示字面双引号）
+        $keyNorm = $keyText.Trim("'`"").ToLowerInvariant()
+
+        $valExpr = Get-HashtableValueExpressionAst -StatementAst $valStmt
+
+        if ($keyNorm -in @('n', 'name', 'label', 'l')) {
+            if ($valExpr -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                $name = $valExpr.Value
+            } elseif ($null -ne $valExpr) {
+                $nameVal = Get-AstValue -Ast $valExpr -Context $Context
+                if ($null -ne $nameVal) {
+                    $name = [string]$nameVal
+                }
+            }
+        }
+        elseif ($keyNorm -in @('e', 'expression')) {
+            if ($null -ne $valExpr) {
+                $exprAst = $valExpr
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($name) -or $null -eq $exprAst) {
+        return $null
+    }
+
+    $blockName = Get-ScriptBlockNameFromAst -Ast $exprAst -Context $Context -KnownBlockNames $KnownBlockNames
+    if ([string]::IsNullOrWhiteSpace($blockName)) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        Type      = "Calculated"
+        Name      = $name
+        BlockName = $blockName
+        Text      = $HashtableAst.Extent.Text
+    }
+}
+
+function Get-SelectObjectInvocationInfo {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    if (-not $execInfo.Success) {
+        return @{
+            Success = $false
+            Error   = $execInfo.Error
+        }
+    }
+
+    $cmdAst = $execInfo.CommandAst
+    if (-not $cmdAst) {
+        return @{
+            Success = $false
+            Error   = "No CommandAst in Node.Text"
+        }
+    }
+
+    $cmdName = $cmdAst.GetCommandName()
+    if ($cmdName -notin @('Select-Object', 'Select')) {
+        return @{
+            Success = $false
+            Error   = "Not a Select-Object command: $cmdName"
+        }
+    }
+
+    $propertyArgAsts = @()
+    $excludeArgAsts = @()
+    $expandArgAst = $null
+    $firstAst = $null
+    $lastAst = $null
+    $skipAst = $null
+    $skipLastAst = $null
+    $indexAst = $null
+    $unique = $false
+    $positional = @()
+
+    for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+        $elem = $cmdAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $pname = $elem.ParameterName
+
+            # Switch 参数
+            if ($pname -in @('Unique')) {
+                $unique = $true
+                continue
+            }
+
+            $argAst = $elem.Argument
+            if (-not $argAst -and ($i + 1 -lt $cmdAst.CommandElements.Count)) {
+                $i++
+                $argAst = $cmdAst.CommandElements[$i]
+            }
+
+            switch ($pname) {
+                'Property'        { if ($argAst) { $propertyArgAsts += $argAst } }
+                'ExcludeProperty' { if ($argAst) { $excludeArgAsts += $argAst } }
+                'ExpandProperty'  { if (-not $expandArgAst -and $argAst) { $expandArgAst = $argAst } }
+                'First'           { if (-not $firstAst -and $argAst) { $firstAst = $argAst } }
+                'Last'            { if (-not $lastAst -and $argAst) { $lastAst = $argAst } }
+                'Skip'            { if (-not $skipAst -and $argAst) { $skipAst = $argAst } }
+                'SkipLast'        { if (-not $skipLastAst -and $argAst) { $skipLastAst = $argAst } }
+                'Index'           { if (-not $indexAst -and $argAst) { $indexAst = $argAst } }
+                default { }
+            }
+
+            continue
+        }
+
+        $positional += $elem
+    }
+
+    # 兼容位置参数：Select-Object Name, Status
+    if ($propertyArgAsts.Count -eq 0 -and $positional.Count -gt 0) {
+        $propertyArgAsts = @($positional)
+    }
+
+    $knownBlockNames = @()
+    if ($Node.Invokes -and $Node.Invokes.ScriptBlocks) {
+        $knownBlockNames = @($Node.Invokes.ScriptBlocks)
+    }
+
+    function Add-PropertySpecAstsFromArg {
+        param([ref]$List, $ArgAst)
+        if ($null -eq $ArgAst) { return }
+
+        if ($ArgAst -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+            foreach ($e in $ArgAst.Elements) {
+                $List.Value += $e
+            }
+        } else {
+            $List.Value += $ArgAst
+        }
+    }
+
+    function Add-StringValuesFromArg {
+        param([ref]$List, $ArgAst)
+        if ($null -eq $ArgAst) { return }
+
+        $work = @()
+        if ($ArgAst -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+            $work = @($ArgAst.Elements)
+        } else {
+            $work = @($ArgAst)
+        }
+
+        foreach ($a in $work) {
+            if ($a -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                $List.Value += $a.Value
+            } else {
+                $v = Get-AstValue -Ast $a -Context $Context
+                if ($null -eq $v) { continue }
+                if ($v -is [array]) {
+                    foreach ($vv in $v) {
+                        if ($null -ne $vv) { $List.Value += [string]$vv }
+                    }
+                } else {
+                    $List.Value += [string]$v
+                }
+            }
+        }
+    }
+
+    # 解析 Property 规格
+    $propertySpecAsts = @()
+    foreach ($a in $propertyArgAsts) {
+        Add-PropertySpecAstsFromArg -List ([ref]$propertySpecAsts) -ArgAst $a
+    }
+
+    $propertySpecs = @()
+    foreach ($specAst in $propertySpecAsts) {
+        if ($specAst -is [System.Management.Automation.Language.HashtableAst]) {
+            $calc = Get-SelectObjectCalculatedPropertySpecFromHashtableAst -HashtableAst $specAst -Context $Context -KnownBlockNames $knownBlockNames
+            if (-not $calc) {
+                return @{
+                    Success = $false
+                    Error   = "Unsupported calculated property: $($specAst.Extent.Text)"
+                }
+            }
+            $propertySpecs += $calc
+            continue
+        }
+
+        if ($specAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $propertySpecs += [PSCustomObject]@{
+                Type    = "Name"
+                Pattern = $specAst.Value
+                Text    = $specAst.Extent.Text
+            }
+            continue
+        }
+
+        $v = Get-AstValue -Ast $specAst -Context $Context
+        if ($null -eq $v) {
+            return @{
+                Success = $false
+                Error   = "Cannot evaluate property spec: $($specAst.Extent.Text)"
+            }
+        }
+
+        if ($v -is [array]) {
+            foreach ($vv in $v) {
+                if ($null -ne $vv) {
+                    $propertySpecs += [PSCustomObject]@{
+                        Type    = "Name"
+                        Pattern = [string]$vv
+                        Text    = $specAst.Extent.Text
+                    }
+                }
+            }
+        } else {
+            $propertySpecs += [PSCustomObject]@{
+                Type    = "Name"
+                Pattern = [string]$v
+                Text    = $specAst.Extent.Text
+            }
+        }
+    }
+
+    # ExcludeProperty
+    $excludePatterns = @()
+    foreach ($a in $excludeArgAsts) {
+        Add-StringValuesFromArg -List ([ref]$excludePatterns) -ArgAst $a
+    }
+
+    # ExpandProperty
+    $expandPropName = $null
+    if ($expandArgAst) {
+        if ($expandArgAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $expandPropName = $expandArgAst.Value
+        } else {
+            $v = Get-AstValue -Ast $expandArgAst -Context $Context
+            if ($null -ne $v) { $expandPropName = [string]$v }
+        }
+    }
+
+    # 数字参数
+    function Get-IntArgOrNull {
+        param($Ast)
+        if ($null -eq $Ast) { return $null }
+        $v = Get-AstValue -Ast $Ast -Context $Context
+        if ($null -eq $v) { return $null }
+        try { return [int]$v } catch { return $null }
+    }
+
+    function Get-IntListOrNull {
+        param($Ast)
+        if ($null -eq $Ast) { return $null }
+
+        $list = @()
+        if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+            foreach ($e in $Ast.Elements) {
+                $iv = Get-IntArgOrNull -Ast $e
+                if ($null -ne $iv) { $list += $iv }
+            }
+        } else {
+            $iv = Get-IntArgOrNull -Ast $Ast
+            if ($null -ne $iv) { $list += $iv }
+        }
+
+        if ($list.Count -eq 0) { return $null }
+        return $list
+    }
+
+    $first = Get-IntArgOrNull -Ast $firstAst
+    $last = Get-IntArgOrNull -Ast $lastAst
+    $skip = Get-IntArgOrNull -Ast $skipAst
+    $skipLast = Get-IntArgOrNull -Ast $skipLastAst
+    $indexList = Get-IntListOrNull -Ast $indexAst
+
+    return @{
+        Success         = $true
+        Error           = $null
+        CommandName     = $cmdName
+        PropertySpecs   = @($propertySpecs)
+        ExcludePatterns = @($excludePatterns)
+        ExpandProperty  = $expandPropName
+        First           = $first
+        Last            = $last
+        Skip            = $skip
+        SkipLast        = $skipLast
+        Index           = $indexList
+        Unique          = [bool]$unique
+    }
+}
+
+function Invoke-SelectObjectCmdlet {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    $info = Get-SelectObjectInvocationInfo -Node $Node -Context $Context
+    if (-not $info.Success) {
+        Write-ExecutionLog -Context $Context -Message "  [SELECT] Parse failed, fallback to direct execute: $($info.Error)"
+        return Invoke-NodeDirect -Node $Node -Context $Context
+    }
+
+    $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
+    $items = @($pipelineInput.Items)
+    $pipeVar = $pipelineInput.PipeVar
+
+    # 1) 对象级裁剪（Index / First / Last / Skip / SkipLast）
+    $baseItems = @($items)
+
+    if ($null -ne $info.SkipLast) {
+        if ($info.SkipLast -lt 0) {
+            return @{
+                Success  = $false
+                Executed = $true
+                Result   = $null
+                Error    = "Select-Object: SkipLast must be non-negative"
+                Action   = "SelectObject"
+            }
+        }
+
+        if ($info.SkipLast -ge $baseItems.Count) {
+            $baseItems = @()
+        } else {
+            $baseItems = @($baseItems[0..($baseItems.Count - $info.SkipLast - 1)])
+        }
+    }
+
+    $count = $baseItems.Count
+    $indices = @()
+
+    $skip = if ($null -ne $info.Skip) { [int]$info.Skip } else { 0 }
+    $first = $info.First
+    $last = $info.Last
+
+    if ($skip -lt 0) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $null
+            Error    = "Select-Object: Skip must be non-negative"
+            Action   = "SelectObject"
+        }
+    }
+    if ($null -ne $first -and $first -lt 0) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $null
+            Error    = "Select-Object: First must be non-negative"
+            Action   = "SelectObject"
+        }
+    }
+    if ($null -ne $last -and $last -lt 0) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $null
+            Error    = "Select-Object: Last must be non-negative"
+            Action   = "SelectObject"
+        }
+    }
+
+    if ($info.Index -and $info.Index.Count -gt 0) {
+        foreach ($idx in $info.Index) {
+            if ($idx -lt 0) {
+                return @{
+                    Success  = $false
+                    Executed = $true
+                    Result   = $null
+                    Error    = "Select-Object: Index must be non-negative"
+                    Action   = "SelectObject"
+                }
+            }
+            if ($idx -lt $count) {
+                $indices += $idx
+            }
+        }
+    }
+    else {
+        if ($null -ne $first -and $null -ne $last) {
+            # First/Last 并存：按索引并集（保持原始顺序），Skip 仅作用于 First 侧
+            $start = [Math]::Min($skip, $count)
+            $endFirst = [Math]::Min($count, ($start + $first))
+            for ($i = $start; $i -lt $endFirst; $i++) { $indices += $i }
+
+            $startLast = [Math]::Max(0, ($count - $last))
+            for ($i = $startLast; $i -lt $count; $i++) { $indices += $i }
+
+            $indices = @($indices | Sort-Object -Unique)
+        }
+        elseif ($null -ne $first) {
+            $start = [Math]::Min($skip, $count)
+            $endFirst = [Math]::Min($count, ($start + $first))
+            for ($i = $start; $i -lt $endFirst; $i++) { $indices += $i }
+        }
+        elseif ($null -ne $last) {
+            # Last 模式：Skip 语义为“从末尾跳过”，窗口为 [count - skip - last, count - skip)
+            $skipFromEnd = $skip
+            $endExclusive = [Math]::Max(0, ($count - $skipFromEnd))
+            $start = [Math]::Max(0, ($endExclusive - $last))
+            for ($i = $start; $i -lt $endExclusive; $i++) { $indices += $i }
+        }
+        else {
+            $start = [Math]::Min($skip, $count)
+            for ($i = $start; $i -lt $count; $i++) { $indices += $i }
+        }
+    }
+
+    $selectedItems = @()
+    foreach ($i in $indices) {
+        if ($i -ge 0 -and $i -lt $count) {
+            $selectedItems += $baseItems[$i]
+        }
+    }
+
+    function Test-NameMatchesAnyPattern {
+        param(
+            [string]$Name,
+            [string[]]$Patterns
+        )
+        if ([string]::IsNullOrWhiteSpace($Name) -or -not $Patterns -or $Patterns.Count -eq 0) { return $false }
+        foreach ($p in $Patterns) {
+            if ([string]::IsNullOrWhiteSpace($p)) { continue }
+            if ($Name -like $p) { return $true }
+        }
+        return $false
+    }
+
+    $outputs = @()
+    $stopAll = $false
+
+    # 2) ExpandProperty
+    if (-not [string]::IsNullOrWhiteSpace($info.ExpandProperty)) {
+        $propName = [string]$info.ExpandProperty
+
+        foreach ($item in $selectedItems) {
+            if ($null -eq $item) { continue }
+
+            $prop = $item.PSObject.Properties[$propName]
+            $v = if ($prop) { $prop.Value } else { $null }
+            if ($null -eq $v) { continue }
+
+            if ($v -is [string]) {
+                $outputs += $v
+                continue
+            }
+
+            if ($v -is [System.Collections.IEnumerable]) {
+                foreach ($e in $v) {
+                    if ($null -ne $e) { $outputs += $e }
+                }
+                continue
+            }
+
+            $outputs += $v
+        }
+    }
+    # 3) Property 投影（含计算属性）
+    elseif ($info.PropertySpecs -and $info.PropertySpecs.Count -gt 0) {
+        foreach ($item in $selectedItems) {
+            if ($null -eq $item) { continue }
+
+            $outObj = New-Object PSObject
+
+            foreach ($spec in $info.PropertySpecs) {
+                if ($spec.Type -eq "Name") {
+                    $pattern = [string]$spec.Pattern
+                    if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
+
+                    $propNames = @($item.PSObject.Properties.Name)
+                    $matched = @($propNames | Where-Object { $_ -like $pattern })
+
+                    if ($matched.Count -gt 0) {
+                        foreach ($pn in $matched) {
+                            if (Test-NameMatchesAnyPattern -Name $pn -Patterns $info.ExcludePatterns) {
+                                continue
+                            }
+                            $p = $item.PSObject.Properties[$pn]
+                            $val = if ($p) { $p.Value } else { $null }
+                            $outObj | Add-Member -NotePropertyName $pn -NotePropertyValue $val -Force
+                        }
+                    } else {
+                        # 无匹配 → 按字面属性名输出 $null（包括 "*" 的情况）
+                        if (-not (Test-NameMatchesAnyPattern -Name $pattern -Patterns $info.ExcludePatterns)) {
+                            $outObj | Add-Member -NotePropertyName $pattern -NotePropertyValue $null -Force
+                        }
+                    }
+                }
+                elseif ($spec.Type -eq "Calculated") {
+                    $propName = [string]$spec.Name
+                    $blockName = [string]$spec.BlockName
+
+                    $Context.LastPipelineFlowControl = $null
+                    $exprOutputs = Invoke-PipelineScriptBlockOnce -BlockName $blockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+
+                    $value = $null
+                    if ($exprOutputs.Count -eq 1) {
+                        $value = $exprOutputs[0]
+                    } elseif ($exprOutputs.Count -gt 1) {
+                        $value = @($exprOutputs)
+                    }
+
+                    if (-not (Test-NameMatchesAnyPattern -Name $propName -Patterns $info.ExcludePatterns)) {
+                        $outObj | Add-Member -NotePropertyName $propName -NotePropertyValue $value -Force
+                    }
+
+                    if ($Context.LastPipelineFlowControl -eq "Break") {
+                        $stopAll = $true
+                        break
+                    }
+                }
+            }
+
+            $outputs += $outObj
+
+            if ($stopAll) { break }
+        }
+    }
+    # 4) 无 Property：identity
+    else {
+        $outputs = @($selectedItems)
+    }
+
+    if ($info.Unique) {
+        $outputs = @($outputs | Select-Object -Unique)
+    }
+
+    # 输出保持为 Collection[PSObject]，与 Invoke-InContext 返回类型一致
+    $valueToStore = [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]::new()
+    foreach ($o in $outputs) {
+        if ($null -ne $o) {
+            [void]$valueToStore.Add([System.Management.Automation.PSObject]$o)
+        }
+    }
+
+    # 将输出写回 _pipe_xxx（仅当该节点需要产生管道输出）
+    $writesPipeVar = $false
+    if ($pipeVar -and $Node.VarsWritten) {
+        foreach ($varInfo in $Node.VarsWritten) {
+            if ($varInfo.Name -eq $pipeVar) {
+                $writesPipeVar = $true
+                break
+            }
+        }
+    }
+
+    if ($writesPipeVar) {
+        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($pipeVar, $valueToStore)
+        Write-ExecutionLog -Context $Context -Message "  [SELECT] Set `$$pipeVar (Count=$($valueToStore.Count))"
+    }
+
+    # 赋值语句：执行赋值（避免直接执行 Node.Text 触发真正的 Select-Object）
+    $assignApply = Apply-AssignmentIfPresentFromValue -Node $Node -Context $Context -ValueToAssign $valueToStore -TempVarPrefix "_select_out_" -ActionNameForErrors "Select-Object"
+    if ($assignApply.Applied -and -not $assignApply.Success) {
+        return @{
+            Success  = $false
+            Executed = $true
+            Result   = $valueToStore
+            Error    = $assignApply.Error
+            Action   = "SelectObject"
+        }
+    }
+
+    return @{
+        Success  = $true
+        Executed = $true
+        Result   = $valueToStore
+        Error    = $null
+        Action   = "SelectObject"
+    }
 }
 
 # 执行函数调用
@@ -1393,6 +2828,23 @@ function Invoke-FunctionCall {
             Target   = $FuncName
         }
     }
+    $funcStartNode = Get-NodeById -CFG $Context.CFG -Id $funcStartId
+    if (-not $funcStartNode) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] Function start node not found: $FuncName ($funcStartId)"
+        return @{
+            Success  = $false
+            Executed = $true
+            Error    = "Function start node not found: $FuncName ($funcStartId)"
+            Action   = "CallFunction"
+            Target   = $FuncName
+        }
+    }
+    $hasProcessBlock = ($funcStartNode.PSObject.Properties['HasProcessBlock'] -and [bool]$funcStartNode.HasProcessBlock)
+    $processInputVarName = if ($funcStartNode.PSObject.Properties['ProcessInputVar']) {
+        [string]$funcStartNode.ProcessInputVar
+    } else {
+        "__proc_input"
+    }
 
     $cmdAst = $callerInfo.CommandAst
     if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
@@ -1431,10 +2883,14 @@ function Invoke-FunctionCall {
         $Context.ScopeStack[-1].LocalVars = $localVars
         $Context.ScopeStack[-1].Arguments = $arguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
+
+        if ($hasProcessBlock) {
+            $pipelineInput = Get-CallerPipelineInput -CallerNode $CallerNode -Context $Context
+            Initialize-ProcessInputForCurrentScope -Context $Context -InputItems $pipelineInput.Items -SourcePipeVar $pipelineInput.PipeVar -InputVarName $processInputVarName
+        }
     }
 
     # 9. 跳转执行函数子图
-    $funcStartNode = Get-NodeById -CFG $Context.CFG -Id $funcStartId
 
     # 记录函数调用
     Write-ExecutionLog -Context $Context -Message "  [FUNC] Entering function '$FuncName' at Node $funcStartId"
@@ -1470,6 +2926,17 @@ function Invoke-FunctionInline {
         Write-ExecutionLog -Context $Context -Message "  [INLINE] Function not found: $FuncName"
         return $null
     }
+    $funcStartNode = Get-NodeById -CFG $Context.CFG -Id $funcStartId
+    if (-not $funcStartNode) {
+        Write-ExecutionLog -Context $Context -Message "  [INLINE] Function start node not found: $FuncName ($funcStartId)"
+        return $null
+    }
+    $hasProcessBlock = ($funcStartNode.PSObject.Properties['HasProcessBlock'] -and [bool]$funcStartNode.HasProcessBlock)
+    $processInputVarName = if ($funcStartNode.PSObject.Properties['ProcessInputVar']) {
+        [string]$funcStartNode.ProcessInputVar
+    } else {
+        "__proc_input"
+    }
 
     $funcEndNode = Get-SubgraphEndNode -CFG $Context.CFG -StartType "FuncStart" -Name $FuncName
     $funcEndId = if ($funcEndNode) { $funcEndNode.Id } else { $null }
@@ -1487,10 +2954,13 @@ function Invoke-FunctionInline {
     $scope.LocalVars = $localVars
     $scope.Arguments = $Arguments
     $scope.TargetVarName = $null    # 内联调用无目标变量
+    if ($hasProcessBlock) {
+        # 内联调用没有独立调用节点，默认注入空输入
+        Initialize-ProcessInputForCurrentScope -Context $Context -InputItems @() -SourcePipeVar $null -InputVarName $processInputVarName
+    }
 
     # 5. 遍历函数子图
     Write-ExecutionLog -Context $Context -Message "  [INLINE] Entering function '$FuncName'"
-    $funcStartNode = Get-NodeById -CFG $Context.CFG -Id $funcStartId
     Invoke-NodeTraverse -Node $funcStartNode -Context $Context
 
     # 6. 获取返回值（FuncEnd 处理中会保留 LastSubgraphResult）
@@ -1677,6 +3147,23 @@ function Invoke-ScriptBlockCall {
             Target   = $BlockName
         }
     }
+    $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+    if (-not $blockStartNode) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] ScriptBlock start node not found: $BlockName ($blockStartId)"
+        return @{
+            Success  = $false
+            Executed = $true
+            Error    = "ScriptBlock start node not found: $BlockName ($blockStartId)"
+            Action   = "CallScriptBlock"
+            Target   = $BlockName
+        }
+    }
+    $hasProcessBlock = ($blockStartNode.PSObject.Properties['HasProcessBlock'] -and [bool]$blockStartNode.HasProcessBlock)
+    $processInputVarName = if ($blockStartNode.PSObject.Properties['ProcessInputVar']) {
+        [string]$blockStartNode.ProcessInputVar
+    } else {
+        "__proc_input"
+    }
 
     # 优先使用预解析的参数（来自 Get-ScriptBlockCallInfo，用于 Invoke-Command 等形式）
     if ($null -ne $PreParsedArguments) {
@@ -1713,11 +3200,14 @@ function Invoke-ScriptBlockCall {
         $Context.ScopeStack[-1].LocalVars = $localVars
         $Context.ScopeStack[-1].Arguments = $arguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
+
+        if ($hasProcessBlock) {
+            $pipelineInput = Get-CallerPipelineInput -CallerNode $CallerNode -Context $Context
+            Initialize-ProcessInputForCurrentScope -Context $Context -InputItems $pipelineInput.Items -SourcePipeVar $pipelineInput.PipeVar -InputVarName $processInputVarName
+        }
     }
 
     # 9. 跳转执行脚本块子图
-    $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
-
     Write-ExecutionLog -Context $Context -Message "  [BLOCK] Entering ScriptBlock '$BlockName' at Node $blockStartId"
 
     return @{
@@ -2089,6 +3579,11 @@ function Invoke-NodeTraverse {
                     $returnCode = Convert-CodeForCurrentScope -Code $retInfo.Code -Context $Context
                     $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $returnCode
                     if ($evalResult.Success -and $null -ne $evalResult.Result) {
+                        # Return 语句的表达式同样会写入输出流（对 ForEach-Object 等捕获场景很重要）
+                        if ($Context.OutputCaptureStack -and $Context.OutputCaptureStack.Count -gt 0) {
+                            Add-OutputsToCurrentCapture -Context $Context -Result $evalResult.Result
+                        }
+
                         # 解包 PSObject Collection
                         if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
                             if ($evalResult.Result.Count -eq 1) {
@@ -2205,12 +3700,57 @@ function Invoke-NodeTraverse {
         # 执行节点
         $execResult = Invoke-NodeSafe -Node $currentNode -Context $Context
 
+        # 输出捕获：用于 ForEach-Object 脚本块逐项执行，将“可见输出”收集到捕获帧
+        if ($Context.OutputCaptureStack -and $Context.OutputCaptureStack.Count -gt 0) {
+            $captureThis = $true
+
+            # 条件/控制节点的求值结果不属于脚本输出流
+            $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
+            if ($currentNode.Type -in $nonOutputTypes) {
+                $captureThis = $false
+            }
+
+            # PipelineElement：仅捕获末端元素的输出；写 _pipe_ 的节点为中间步骤（只用于传递）
+            if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNode.VarsWritten) {
+                foreach ($v in $currentNode.VarsWritten) {
+                    if ($v.Name -match '^_pipe_[a-f0-9]+$') {
+                        $captureThis = $false
+                        break
+                    }
+                }
+            }
+
+            if ($captureThis) {
+                Add-OutputsToCurrentCapture -Context $Context -Result $execResult.Result
+            }
+        }
+
+        # 管道控制流：Break/Continue 在 ForEach-Object 脚本块中用于控制枚举
+        if ($Context.OutputCaptureStack -and $Context.OutputCaptureStack.Count -gt 0 -and $currentNode.Type -in @('Break', 'Continue')) {
+            $label = $currentNode.Type
+            $edge = $Context.CFG.Edges | Where-Object { $_.From -eq $currentNode.Id -and $_.Label -eq $label } | Select-Object -First 1
+            if ($edge) {
+                $targetNode = Get-NodeById -CFG $Context.CFG -Id $edge.To
+                if ($targetNode -and $targetNode.Type -in @('BlockEnd', 'FuncEnd', 'ProcessEnd', 'End', 'MainEnd')) {
+                    $Context.LastPipelineFlowControl = $label
+                }
+            }
+        }
+
         # 记录执行后的变量值（写入的变量）
         $varsAfter = @{}
         foreach ($varInfo in $currentNode.VarsWritten) {
-            $varName = $varInfo.Name
-            $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varName
-            $varsAfter[$varName] = $value
+            # 获取实际变量名（考虑作用域前缀）
+            $actualVarName = $varInfo.Name
+            if ($Context.ScopeStack.Count -gt 0) {
+                $currentScope = $Context.ScopeStack[-1]
+                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
+                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
+                }
+            }
+
+            $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
+            $varsAfter[$varInfo.Name] = $value
         }
 
         # 写日志
@@ -2284,7 +3824,7 @@ function Invoke-NodeTraverse {
             }
 
             # 记录条件结果
-            if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'SwitchCondition', 'CaseCondition')) {
+            if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')) {
                 Write-ExecutionLog -Context $Context -Message "  ConditionResult: $($Context.LastConditionResult)"
             }
         }
@@ -2652,6 +4192,33 @@ function Test-CommandSafety {
     if ($Context.FunctionSubgraphs.ContainsKey($cmdName)) {
         return @{
             Action      = "CallFunction"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 3.5 ForEach-Object（管道迭代器）：需要按输入逐项执行脚本块子图
+    if ($cmdName -in @('ForEach-Object', 'ForEach', '%')) {
+        return @{
+            Action      = "ForEachObject"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 3.6 Where-Object（管道过滤器）：需要按输入逐项执行 FilterScript 子图
+    if ($cmdName -in @('Where-Object', 'Where', '?')) {
+        return @{
+            Action      = "WhereObject"
+            IsForbidden = $false
+            Target      = $cmdName
+        }
+    }
+
+    # 3.7 Select-Object（管道投影/展开）：需要按输入逐项执行计算属性脚本块子图
+    if ($cmdName -in @('Select-Object', 'Select')) {
+        return @{
+            Action      = "SelectObject"
             IsForbidden = $false
             Target      = $cmdName
         }
@@ -3205,6 +4772,9 @@ function Invoke-CFGTraversal {
         MaxCallDepth          = 100          # 最大调用深度
         DynamicInvokeResults  = @()          # 动态执行记录 [{ NodeId; Command; ArgumentValue }]
         LastSubgraphResult    = $null        # 子图（函数/脚本块）的最后执行结果，用于返回值传递
+        PipelineCurrentStack  = @()          # $_ / $PSItem 绑定栈（用于 ForEach-Object 等嵌套管道上下文）
+        OutputCaptureStack    = @()          # 输出捕获栈（用于 ForEach-Object 等逐项执行）
+        LastPipelineFlowControl = $null      # "Break" 等（仅用于管道 cmdlet 控制流）
         TextParseCache        = @{}          # Node.Text 解析缓存（执行期 text-first）
         TextParseErrors       = @()          # 解析错误记录（非阻塞）
     }

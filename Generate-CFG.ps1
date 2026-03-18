@@ -984,7 +984,145 @@ function Get-ScriptBlockExecutionType {
     return "Deferred"
 }
 
-# 通用函数：处理 ScriptBlock 的内部结构（ParamBlock + EndBlock）
+# 将 ScriptBlock 的 process 块转换为可遍历的迭代结构
+# 语义对齐 foreach：先初始化输入数组，再逐项绑定当前值执行主体
+function Convert-ProcessBlock {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.ScriptBlockAst]$scriptBlockAst,
+        [ref]$prevNodeRef,
+        [ref]$endNodeRef,
+        [bool]$UseProcessInputVar = $true,
+        $switchContext = $null
+    )
+
+    if ($null -eq $scriptBlockAst -or
+        $null -eq $scriptBlockAst.ProcessBlock -or
+        $scriptBlockAst.ProcessBlock.Statements.Count -eq 0) {
+        return
+    }
+
+    $processAst = $scriptBlockAst.ProcessBlock
+
+    # 生成唯一变量名，避免与用户变量冲突
+    $guid = [guid]::NewGuid().ToString("N").Substring(0, 12)
+    $collectionVar = "__prc_$guid"
+    $indexVar = "__prc_${guid}_idx"
+    $currentVar = "__prc_${guid}_current"
+
+    $collectionVarEntry = [PSCustomObject]@{ Name = $collectionVar; Scope = [VarScope]::Unspecified }
+    $indexVarEntry = [PSCustomObject]@{ Name = $indexVar; Scope = [VarScope]::Unspecified }
+    $currentVarEntry = [PSCustomObject]@{ Name = $currentVar; Scope = [VarScope]::Unspecified }
+    $processInputEntry = [PSCustomObject]@{ Name = "__proc_input"; Scope = [VarScope]::Unspecified }
+
+    $inputExpr = if ($UseProcessInputVar) { '$__proc_input' } else { '@()' }
+
+    # 1) 初始化输入与索引
+    $initText = "`$$collectionVar = $inputExpr; `$$indexVar = 0"
+    $initNode = Add-Node -cfg $cfg -type "ProcessInit" -text $initText -line $processAst.Extent.StartLineNumber -ast $null -ownerAst $processAst
+    $initNode.VarsRead = @()
+    $initNode.VarsWritten = @()
+    if ($UseProcessInputVar) {
+        Add-VarToNode -node $initNode -varEntry $processInputEntry -accessType "Read"
+    }
+    Add-VarToNode -node $initNode -varEntry $collectionVarEntry -accessType "Write"
+    Add-VarToNode -node $initNode -varEntry $indexVarEntry -accessType "Write"
+    if ($null -ne $prevNodeRef.Value) {
+        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $initNode.Id
+    }
+
+    # 2) 条件判断
+    $condText = "[bool](`$$indexVar -lt `$$collectionVar.Count)"
+    $conditionNode = Add-Node -cfg $cfg -type "ProcessCondition" -text $condText -line $processAst.Extent.StartLineNumber -ast $null -ownerAst $processAst
+    $conditionNode.VarsRead = @($indexVarEntry, $collectionVarEntry)
+    $conditionNode.VarsWritten = @()
+    Add-Edge -cfg $cfg -from $initNode.Id -to $conditionNode.Id
+
+    # 3) 无更多输入时结束
+    $loopEnd = Add-Node -cfg $cfg -type "ProcessEnd" -text "End Process" -line $processAst.Extent.EndLineNumber -ast $null -ownerAst $processAst
+    Add-Edge -cfg $cfg -from $conditionNode.Id -to $loopEnd.Id -label "No more items"
+
+    # 4) 绑定当前项
+    $bindText = "`$$currentVar = `$$collectionVar[`$$indexVar]"
+    $bindNode = Add-Node -cfg $cfg -type "ProcessBind" -text $bindText -line $processAst.Extent.StartLineNumber -ast $null -ownerAst $processAst
+    $bindNode.VarsRead = @($collectionVarEntry, $indexVarEntry)
+    $bindNode.VarsWritten = @($currentVarEntry)
+    Add-Edge -cfg $cfg -from $conditionNode.Id -to $bindNode.Id -label "Has next"
+
+    # 5) 迭代索引
+    $iterText = "`$$indexVar++"
+    $iterNode = Add-Node -cfg $cfg -type "ProcessIter" -text $iterText -line $processAst.Extent.StartLineNumber -ast $null -ownerAst $processAst
+    $iterNode.VarsRead = @($indexVarEntry)
+    $iterNode.VarsWritten = @($indexVarEntry)
+    Add-Edge -cfg $cfg -from $iterNode.Id -to $conditionNode.Id
+
+    $processLoopContext = [PSCustomObject]@{
+        LoopEnd      = $loopEnd
+        LoopContinue = $iterNode
+    }
+
+    # 6) 处理 process 主体语句
+    $currentNode = $bindNode
+    $bodyNodeCountBefore = $cfg.Nodes.Count
+    foreach ($statement in $processAst.Statements) {
+        $hasReturn = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef ([ref]$currentNode) -endNodeRef $endNodeRef -loopContext $processLoopContext -switchContext $switchContext
+        if ($hasReturn) { break }
+    }
+
+    # 将 process 主体中的 $_/$PSItem 替换为当前项变量
+    Replace-PipelineCurrentInNodes -cfg $cfg -nodes $cfg.Nodes -startIndex $bodyNodeCountBefore -currentVar $currentVar -IncludePSItem
+
+    # 7) 主体结束后进入下一轮
+    if ($null -ne $currentNode) {
+        $lastType = $currentNode.Type
+        if ($lastType -notin @("Break", "Continue", "Return", "Exit", "Throw")) {
+            Add-Edge -cfg $cfg -from $currentNode.Id -to $iterNode.Id
+        }
+    }
+
+    $prevNodeRef.Value = $loopEnd
+}
+
+# 为 PipelineElement 节点标记特殊管道 cmdlet（仅用于可视化/后续分析，不改变 CFG 结构）
+function Mark-PipelineCmdletNode {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Node,
+        $ElementAst
+    )
+
+    if (-not $Node) { return }
+    if ($Node.Type -ne "PipelineElement") { return }
+    if ($null -eq $ElementAst) { return }
+
+    if ($ElementAst -is [System.Management.Automation.Language.CommandAst]) {
+        $cmdName = $ElementAst.GetCommandName()
+        if ([string]::IsNullOrWhiteSpace($cmdName)) { return }
+
+        # ForEach-Object（以及常见别名）
+        if ($cmdName -in @('ForEach-Object', 'ForEach', '%')) {
+            $Node | Add-Member -NotePropertyName "PipeCmdlet" -NotePropertyValue "ForEachObject" -Force
+            $Node | Add-Member -NotePropertyName "PipeCmdletName" -NotePropertyValue $cmdName -Force
+            return
+        }
+
+        # Where-Object（以及常见别名）
+        if ($cmdName -in @('Where-Object', 'Where', '?')) {
+            $Node | Add-Member -NotePropertyName "PipeCmdlet" -NotePropertyValue "WhereObject" -Force
+            $Node | Add-Member -NotePropertyName "PipeCmdletName" -NotePropertyValue $cmdName -Force
+            return
+        }
+
+        # Select-Object（以及常见别名）
+        if ($cmdName -in @('Select-Object', 'Select')) {
+            $Node | Add-Member -NotePropertyName "PipeCmdlet" -NotePropertyValue "SelectObject" -Force
+            $Node | Add-Member -NotePropertyName "PipeCmdletName" -NotePropertyValue $cmdName -Force
+            return
+        }
+    }
+}
+
+# 通用函数：处理 ScriptBlock 的内部结构（ParamBlock + Begin/Process/End）
 # 此函数统一处理脚本顶层、函数体、延迟执行 ScriptBlock、立即执行 ScriptBlock 的内部结构
 # 调用者负责创建入口/出口节点，此函数只处理内部内容
 function Convert-ScriptBlockBody {
@@ -995,7 +1133,8 @@ function Convert-ScriptBlockBody {
         [ref]$endNodeRef,
         [string]$paramNodeType = "BlockParams",  # ScriptParams | FuncParams | BlockParams
         $loopContext = $null,
-        $switchContext = $null
+        $switchContext = $null,
+        [bool]$IsTopLevelScript = $false
     )
 
     if ($null -eq $scriptBlockAst) {
@@ -1049,15 +1188,11 @@ function Convert-ScriptBlockBody {
         }
     }
 
-    # 3. 处理 ProcessBlock（如果存在）- 用于管道处理
+    # 3. 处理 ProcessBlock（如果存在）- 转换为类 foreach 的迭代结构
     if ($null -ne $scriptBlockAst.ProcessBlock -and $scriptBlockAst.ProcessBlock.Statements.Count -gt 0) {
-        foreach ($statement in $scriptBlockAst.ProcessBlock.Statements) {
-            $stmtHasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
-            if ($stmtHasTerminator) {
-                $hasTerminator = $true
-                break
-            }
-        }
+        # 顶层脚本 process 固定空输入；函数/脚本块 process 使用调用时注入的 $__proc_input
+        $useProcessInputVar = -not $IsTopLevelScript
+        Convert-ProcessBlock -cfg $cfg -scriptBlockAst $scriptBlockAst -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -UseProcessInputVar:$useProcessInputVar -switchContext $switchContext
     }
 
     # 4. 处理 EndBlock（主体代码）
@@ -1099,6 +1234,9 @@ function Convert-ScriptBlockDefinition {
     $blockStart = Add-Node -cfg $cfg -type "BlockStart" -text "ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.StartLineNumber -ast $null
     # 存储脚本块内容文本，用于运行时匹配（不使用 AST 属性，避免被 Populate-NodeResolvables 处理）
     $blockStart | Add-Member -NotePropertyName "ScriptBlockText" -NotePropertyValue $scriptBlockExprAst.Extent.Text -Force
+    $hasProcessBlock = ($null -ne $scriptBlock.ProcessBlock -and $scriptBlock.ProcessBlock.Statements.Count -gt 0)
+    $blockStart | Add-Member -NotePropertyName "HasProcessBlock" -NotePropertyValue $hasProcessBlock -Force
+    $blockStart | Add-Member -NotePropertyName "ProcessInputVar" -NotePropertyValue "__proc_input" -Force
     $blockEnd = Add-Node -cfg $cfg -type "BlockEnd" -text "End ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.EndLineNumber -ast $null
 
     $prevNode = $blockStart
@@ -1373,6 +1511,7 @@ function Expand-NestedScriptBlocks {
 
                 # 【修改】直接创建 PipelineElement 节点（调用节点），无 BlockDef
                 $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $modifiedCmdText -line $cmdAst.Extent.StartLineNumber -ast $cmdAst
+                Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $cmdAst
                 Add-VarToNode -node $pipeNode -varEntry $blockVarEntry -accessType "Read"
                 if ($null -ne $prevNodeRef.Value) {
                     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
@@ -1652,6 +1791,7 @@ function Expand-NestedPipelines {
             }
 
             $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+            Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
 
             # 添加 ScriptBlock 变量到 VarsRead
             foreach ($varEntry in $elementVarEntries) {
@@ -1955,42 +2095,177 @@ function Convert-IfAstNode {
     return $false  # 返回 false 表示不是所有分支都有 return
 }
 
-# 替换文本中的 $_ 变量引用为指定的中间变量
-function Replace-UnderscoreVariable {
-    param([string]$text, [string]$replacementVar)
+# 替换文本中的管道当前项变量引用（$_ / $PSItem）
+function Replace-PipelineCurrentVariable {
+    param(
+        [string]$text,
+        [string]$replacementVar,
+        [switch]$IncludePSItem
+    )
+
+    if ($null -eq $text) { return $text }
+
     # 注意：-replace 替换字符串中 $ 需要用 $$ 转义（.NET 正则替换语法）
-    return $text -replace '\$_(?![a-zA-Z0-9_])', ('$$' + $replacementVar)
+    $result = $text -replace '\$_(?![a-zA-Z0-9_])', ('$$' + $replacementVar)
+    if ($IncludePSItem) {
+        $result = $result -replace '\$PSItem(?![a-zA-Z0-9_])', ('$$' + $replacementVar)
+    }
+
+    return $result
 }
 
-# 将指定范围内的 CFG 节点中的 $_ 引用替换为 $currentVar
-# 同时更新变量追踪信息（VarsRead/VarsWritten 中的 $_ → $currentVar）
+# 将指定范围内的 CFG 节点中的当前项变量引用替换为 $currentVar
+# 同时更新变量追踪信息（VarsRead/VarsWritten 中 _ / PSItem -> $currentVar）
+function Replace-PipelineCurrentInNodes {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$cfg,
+        [array]$nodes,
+        [int]$startIndex,
+        [string]$currentVar,
+        [switch]$IncludePSItem
+    )
+
+    $currentVarEntry = [PSCustomObject]@{ Name = $currentVar; Scope = [VarScope]::Unspecified }
+    $pipelineVarNames = @("_")
+    if ($IncludePSItem) {
+        $pipelineVarNames += @("PSItem")
+    }
+
+    # 预构建索引：用于快速判断“属于嵌套子图的节点”
+    # 背景：FuncEnd/BlockEnd 节点会先于子图主体创建（Start/End 连续），导致“按节点数组区间跳过子图”失效。
+    # 这里改为：在遇到 FuncStart/BlockStart 时，根据 CFG Edges 计算其可达节点集合，并在替换期跳过这些节点。
+    $nodeById = @{}
+    foreach ($n in $nodes) {
+        if ($null -ne $n -and $null -ne $n.Id) {
+            $nodeById[[int]$n.Id] = $n
+        }
+    }
+
+    $adj = @{}
+    if ($cfg.Edges) {
+        foreach ($e in $cfg.Edges) {
+            if ($null -eq $e) { continue }
+            $from = [int]$e.From
+            if (-not $adj.ContainsKey($from)) {
+                $adj[$from] = [System.Collections.Generic.List[int]]::new()
+            }
+            $adj[$from].Add([int]$e.To)
+        }
+    }
+
+    # nodeId -> $true
+    $skipNodeIds = @{}
+
+    function Add-SubgraphSkipIds {
+        param([int]$StartId)
+
+        $q = [System.Collections.Generic.Queue[int]]::new()
+        $visited = @{}
+        $q.Enqueue($StartId)
+
+        while ($q.Count -gt 0) {
+            $id = $q.Dequeue()
+            if ($visited.ContainsKey($id)) { continue }
+            $visited[$id] = $true
+            $skipNodeIds[$id] = $true
+
+            $n = $nodeById[$id]
+            if ($n -and $n.Type -in @("FuncEnd", "BlockEnd", "End", "MainEnd")) {
+                continue
+            }
+
+            if ($adj.ContainsKey($id)) {
+                foreach ($to in $adj[$id]) {
+                    if (-not $visited.ContainsKey($to)) {
+                        $q.Enqueue($to)
+                    }
+                }
+            }
+        }
+    }
+
+    for ($i = $startIndex; $i -lt $nodes.Count; $i++) {
+        $node = $nodes[$i]
+
+        # 跳过函数/脚本块子图，避免将外层 $_ 替换污染到嵌套输入上下文
+        # 典型场景：process 块内部引用新的 ScriptBlock（如 ForEach-Object 的参数脚本块）
+        if ($node.Type -in @("FuncStart", "BlockStart")) {
+            Add-SubgraphSkipIds -StartId ([int]$node.Id)
+        }
+
+        if ($skipNodeIds.ContainsKey([int]$node.Id)) {
+            continue
+        }
+
+        # 替换 Text 中的变量引用
+        $newText = Replace-PipelineCurrentVariable -text $node.Text -replacementVar $currentVar -IncludePSItem:$IncludePSItem
+        if ($newText -ne $node.Text) {
+            $node.Text = $newText
+        }
+
+        # 替换 VarsRead 中的 _ / PSItem
+        $hasPipelineRead = $false
+        foreach ($name in $pipelineVarNames) {
+            if ($node.VarsRead | Where-Object { $_.Name -ieq $name }) {
+                $hasPipelineRead = $true
+                break
+            }
+        }
+        if ($hasPipelineRead) {
+            $node.VarsRead = @($node.VarsRead | Where-Object {
+                $keep = $true
+                foreach ($name in $pipelineVarNames) {
+                    if ($_.Name -ieq $name) {
+                        $keep = $false
+                        break
+                    }
+                }
+                $keep
+            })
+            Add-VarToNode -node $node -varEntry $currentVarEntry -accessType "Read"
+        }
+
+        # 替换 VarsWritten 中的 _ / PSItem
+        $hasPipelineWrite = $false
+        foreach ($name in $pipelineVarNames) {
+            if ($node.VarsWritten | Where-Object { $_.Name -ieq $name }) {
+                $hasPipelineWrite = $true
+                break
+            }
+        }
+        if ($hasPipelineWrite) {
+            $node.VarsWritten = @($node.VarsWritten | Where-Object {
+                $keep = $true
+                foreach ($name in $pipelineVarNames) {
+                    if ($_.Name -ieq $name) {
+                        $keep = $false
+                        break
+                    }
+                }
+                $keep
+            })
+            Add-VarToNode -node $node -varEntry $currentVarEntry -accessType "Write"
+        }
+    }
+}
+
+# 兼容旧命名：仅替换 $_，但同步支持 $PSItem
+function Replace-UnderscoreVariable {
+    param([string]$text, [string]$replacementVar)
+    return Replace-PipelineCurrentVariable -text $text -replacementVar $replacementVar -IncludePSItem
+}
+
+# 兼容旧命名：将节点中的 $_/$PSItem 替换为指定变量
 function Replace-UnderscoreInNodes {
     param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$cfg,
         [array]$nodes,
         [int]$startIndex,
         [string]$currentVar
     )
-    $currentVarEntry = [PSCustomObject]@{ Name = $currentVar; Scope = [VarScope]::Unspecified }
-    for ($i = $startIndex; $i -lt $nodes.Count; $i++) {
-        $node = $nodes[$i]
-        # 替换 Text 中的 $_
-        $newText = Replace-UnderscoreVariable -text $node.Text -replacementVar $currentVar
-        if ($newText -ne $node.Text) {
-            $node.Text = $newText
-        }
-        # 替换 VarsRead 中的 $_
-        $hasUnderscoreRead = $node.VarsRead | Where-Object { $_.Name -eq "_" }
-        if ($hasUnderscoreRead) {
-            $node.VarsRead = @($node.VarsRead | Where-Object { $_.Name -ne "_" })
-            Add-VarToNode -node $node -varEntry $currentVarEntry -accessType "Read"
-        }
-        # 替换 VarsWritten 中的 $_
-        $hasUnderscoreWrite = $node.VarsWritten | Where-Object { $_.Name -eq "_" }
-        if ($hasUnderscoreWrite) {
-            $node.VarsWritten = @($node.VarsWritten | Where-Object { $_.Name -ne "_" })
-            Add-VarToNode -node $node -varEntry $currentVarEntry -accessType "Write"
-        }
-    }
+    Replace-PipelineCurrentInNodes -cfg $cfg -nodes $nodes -startIndex $startIndex -currentVar $currentVar -IncludePSItem
 }
 
 # 生成 switch case 的可执行比较表达式
@@ -2214,7 +2489,7 @@ function Convert-SwitchAstNode {
         }
 
         # 10.3.1 将 CaseBody 中所有新生成节点的 $_ 替换为 $currentVar
-        Replace-UnderscoreInNodes -nodes $cfg.Nodes -startIndex $bodyNodeCountBefore -currentVar $currentVar
+        Replace-UnderscoreInNodes -cfg $cfg -nodes $cfg.Nodes -startIndex $bodyNodeCountBefore -currentVar $currentVar
 
         # 10.4 如果分支体为空，需要特殊处理
         # （空分支意味着 CaseCondition 的 True 边直接连到下一个 CaseCondition）
@@ -2266,7 +2541,7 @@ function Convert-SwitchAstNode {
         }
 
         # 将 Default body 中所有新生成节点的 $_ 替换为 $currentVar
-        Replace-UnderscoreInNodes -nodes $cfg.Nodes -startIndex $defaultNodeCountBefore -currentVar $currentVar
+        Replace-UnderscoreInNodes -cfg $cfg -nodes $cfg.Nodes -startIndex $defaultNodeCountBefore -currentVar $currentVar
 
         # Default 出口连接到 SwitchIter
         if (-not $defaultHasTerminator -and $null -ne $branchPrev) {
@@ -2311,6 +2586,9 @@ function Convert-FunctionDefinitionAst {
     # FuncStart/FuncEnd 都是装饰节点，ast = null
     $funcName = $funcAst.Name
     $funcStart = Add-Node -cfg $cfg -type "FuncStart" -text "function $funcName" -line $funcAst.Extent.StartLineNumber -ast $null
+    $hasProcessBlock = ($null -ne $funcAst.Body -and $null -ne $funcAst.Body.ProcessBlock -and $funcAst.Body.ProcessBlock.Statements.Count -gt 0)
+    $funcStart | Add-Member -NotePropertyName "HasProcessBlock" -NotePropertyValue $hasProcessBlock -Force
+    $funcStart | Add-Member -NotePropertyName "ProcessInputVar" -NotePropertyValue "__proc_input" -Force
     $funcEnd   = Add-Node -cfg $cfg -type "FuncEnd"   -text "End function $funcName"        -line $funcAst.Extent.EndLineNumber   -ast $null
 
     $prevNode = $funcStart
@@ -3190,17 +3468,60 @@ function Convert-AssignmentAstNode {
 
         for ($i = 0; $i -lt $elements.Count; $i++) {
             $element = $elements[$i]
+            $baseText = $element.Extent.Text
+            $hasPipelineExpansion = $false
+            $allVarEntries = @()
+
+            # 1) 展开元素内的嵌套 Pipeline（会创建前置 PipelineElement 节点）
+            # Expand-NestedPipelines 内部也会处理其内部的 ScriptBlock
+            $pipelineExpansion = Expand-NestedPipelines -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
+            if ($null -ne $pipelineExpansion) {
+                $baseText = $pipelineExpansion.ModifiedText
+                $allVarEntries += $pipelineExpansion.PipeVarEntries
+                if ($null -ne $pipelineExpansion.ScriptBlockVarEntries) {
+                    $allVarEntries += $pipelineExpansion.ScriptBlockVarEntries
+                }
+                $hasPipelineExpansion = $true
+            }
+
+            # 2) 展开元素内的 ScriptBlock（非嵌套 Pipeline 场景）
+            if (-not $hasPipelineExpansion) {
+                $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
+                if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
+                    $baseText = $sbExpansion.ModifiedText
+                    if ($null -ne $sbExpansion.ScriptBlockVarEntries) {
+                        $allVarEntries += $sbExpansion.ScriptBlockVarEntries
+                    }
+                }
+            }
+            else {
+                # 已展开 Pipeline，兜底：替换 Pipeline 外残留的 ScriptBlock（理论上 Expand-NestedPipelines 已覆盖）
+                $remainingSBs = Get-AllNestedScriptBlocks -ast $element
+                foreach ($sb in $remainingSBs) {
+                    if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
+                        $varName = $cfg.ProcessedScriptBlocks[$sb]
+                        $baseText = $baseText.Replace($sb.Extent.Text, "`$$varName")
+                        $allVarEntries += [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+                    }
+                }
+            }
 
             if ($i -eq 0) {
-                $nodeText = $element.Extent.Text
+                $nodeText = $baseText
             } elseif ($i -eq $lastIndex) {
-                $nodeText = "$leftText $operatorText `$$pipeVarName | " + $element.Extent.Text
+                $nodeText = "$leftText $operatorText `$$pipeVarName | " + $baseText
             } else {
-                $nodeText = "`$$pipeVarName | " + $element.Extent.Text
+                $nodeText = "`$$pipeVarName | " + $baseText
             }
 
             $nodeAst = if ($i -eq $lastIndex) { $assignAst } else { $element }
             $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $nodeAst
+            Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
+
+            # 将展开产生的变量加入 VarsRead（ScriptBlock 变量 / 内层 PipeVar）
+            foreach ($varEntry in $allVarEntries) {
+                Add-VarToNode -node $pipeNode -varEntry $varEntry -accessType "Read"
+            }
 
             if ($i -eq 0) {
                 Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
@@ -3211,7 +3532,7 @@ function Convert-AssignmentAstNode {
             }
 
             if ($null -ne $prevNodeRef.Value) {
-                if ($i -gt 0) {
+                if ($hasPipelineExpansion -or $i -gt 0) {
                     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
                 } else {
                     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
@@ -3416,6 +3737,7 @@ function Convert-PipelineAstNode {
         # 构建节点文本：使用唯一的 $_pipe_xxxx 变量
         $nodeText = if ($i -gt 0) { "`$$pipeVarName | " + $baseText } else { $baseText }
         $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+        Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
 
         # 添加展开的变量到 VarsRead
         foreach ($varEntry in $allVarEntries) {
@@ -3751,7 +4073,7 @@ function Convert-AstNode {
         $mainEndRef = [ref]$mainEnd
 
         # 使用通用函数处理脚本的 ScriptBlock
-        $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $node -prevNodeRef $prevNodeRef -endNodeRef $mainEndRef -paramNodeType "ScriptParams"
+        $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $node -prevNodeRef $prevNodeRef -endNodeRef $mainEndRef -paramNodeType "ScriptParams" -IsTopLevelScript $true
 
         # 连接最后一个节点到 MainEnd 节点（如果还没有被终止语句连接）
         if ($null -ne $prevNodeRef.Value -and $prevNodeRef.Value.Id -ne $mainEnd.Id) {
@@ -3906,6 +4228,7 @@ function Convert-AstNode {
                     }
 
                     $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
+                    Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
 
                     # 添加 ScriptBlock 变量到 VarsRead
                     foreach ($varEntry in $elementVarEntries) {
@@ -4205,12 +4528,12 @@ function Export-CfgToDot {
         }
     }
 
-    # 1. 生成节点定义（使用foreach语句替代ForEach-Object）
+    # 1. 生成节点定义（可视化标记特殊管道 cmdlet，例如 ForEach-Object）
     $nodeDefinitions = @()
     foreach ($node in $finalCFG.Nodes) {
         $shape = switch ($node.Type) {
             {$_ -in "Start", "End", "FuncStart", "FuncEnd"}   { "oval" }
-            {$_ -in "Condition", "If", "ForEachCondition"}    { "diamond" }
+            {$_ -in "Condition", "If", "ForEachCondition", "ProcessCondition"}    { "diamond" }
             {$_ -in "Merge"}                                  { "point" }
             default                                           { "box" }
         }
@@ -4268,6 +4591,20 @@ function Export-CfgToDot {
             # 如果没有其他样式，使用黄色样式
             if ($style -eq "") {
                 $style = ", style=filled, fillcolor=`"#fff3cc`", color=`"#cc9900`", penwidth=2"
+            }
+        }
+
+        # 管道 cmdlet 标记（例如 ForEach-Object）
+        if ($node.PSObject.Properties.Match('PipeCmdlet').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($node.PipeCmdlet)) {
+            $cmdletName = $node.PipeCmdlet
+            if ($node.PSObject.Properties.Match('PipeCmdletName').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($node.PipeCmdletName)) {
+                $cmdletName = $node.PipeCmdletName
+            }
+            $label += "\l[PIPE CMDLET: $(Format-DotLabel $cmdletName)]"
+
+            # 如果没有其他样式，使用橙色样式
+            if ($style -eq "") {
+                $style = ", style=filled, fillcolor=`"#ffe6cc`", color=`"#cc6600`", penwidth=2"
             }
         }
 
@@ -4372,6 +4709,9 @@ function New-RuntimeSubgraph {
     $blockStart = Add-Node -cfg $cfg -type "BlockStart" -text "DynamicBlock $blockName" -line 0 -ast $null
     # 存储脚本块内容文本，用于运行时匹配
     $blockStart | Add-Member -NotePropertyName "ScriptBlockText" -NotePropertyValue "{$Code}" -Force
+    $hasProcessBlock = ($null -ne $ast.ProcessBlock -and $ast.ProcessBlock.Statements.Count -gt 0)
+    $blockStart | Add-Member -NotePropertyName "HasProcessBlock" -NotePropertyValue $hasProcessBlock -Force
+    $blockStart | Add-Member -NotePropertyName "ProcessInputVar" -NotePropertyValue "__proc_input" -Force
     $blockEnd = Add-Node -cfg $cfg -type "BlockEnd" -text "End DynamicBlock $blockName" -line 0 -ast $null
 
     $prevNode = $blockStart
