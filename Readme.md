@@ -71,3 +71,24 @@ PowerShell 脚本 → AST 解析 → 控制流图构建 → 变量追踪 → 别
 - 所有代码和注释使用中文
 - 测试用例放在 `in/finished/` 目录
 - 分析目标脚本放在 `in/in.ps1`
+
+## 用法（必须用 pwsh）
+
+  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
+
+  常用参数：
+
+  # 迭代最多 10 轮，内层优先（更细粒度）
+  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -MaxRounds 10 -OverlapStrategy Inner
+
+  # 指定工作目录（每轮的 in/out/log/report 都在这里）
+  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -WorkDir .\out\work
+
+  ## 输出约定
+
+  - 默认输出脚本：与输入同目录，命名为 原名.rebuilt.ps1
+  - 默认工作目录：<OutPath>.work
+  - 每轮会生成：
+      - round01.in.ps1 / round01.out.ps1
+      - round01.execution.log
+      - round01.report.json（含 applied/skipped 统计与明细）

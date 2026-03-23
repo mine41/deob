@@ -15,17 +15,11 @@ digraph G {
     2 [label="Id 2\lEnd\lScript End", shape=oval];
     3 [label="Id 3\lMainStart\lMain Script", shape=box];
     4 [label="Id 4\lMainEnd\lEnd Main Script", shape=box];
-    5 [label="Id 5\lAssignmentStatementAst\l$obj1 = [pscustomobject]@{ A = 1; B = 2; Arr =...\l[RESOLVABLE: 1]", shape=box, style=filled, fillcolor="#fff3cc", color="#cc9900", penwidth=2];
-    6 [label="Id 6\lAssignmentStatementAst\l$obj2 = [pscustomobject]@{ A = 3; B = 4; Arr =...\l[RESOLVABLE: 1]", shape=box, style=filled, fillcolor="#fff3cc", color="#cc9900", penwidth=2];
-    7 [label="Id 7\lPipelineElement\l@($obj1, $obj2)\l[PIPE OUT: $_pipe_f7851e3c]", shape=box, style=filled, fillcolor="#ccffcc", color="#009900", penwidth=2];
-    8 [label="Id 8\lPipelineElement\l$r13 = $_pipe_f7851e3c | Select-Object A, B\l[RESOLVABLE: 1]\l[PIPE CMDLET: Select-Object]", shape=box, style=filled, fillcolor="#fff3cc", color="#cc9900", penwidth=2];
+    5 [label="Id 5\lThrow\lthrow \"This is a terminating exception.\"", shape=box];
 
     // Edges
     1 -> 3;
     3 -> 5;
-    5 -> 6;
-    6 -> 7;
-    7 -> 8 [label="Pipeline"];
-    8 -> 4;
+    5 -> 4 [label="Uncaught Exception"];
     4 -> 2;
 }
