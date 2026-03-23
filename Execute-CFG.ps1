@@ -264,6 +264,11 @@ function Write-ExecutionLog {
         [string]$Message
     )
 
+    # 允许禁用日志（用于高性能模式）
+    if ($null -eq $Context -or [string]::IsNullOrWhiteSpace($Context.LogPath)) {
+        return
+    }
+
     $timestamp = Get-Date -Format "HH:mm:ss.fff"
     $logLine = "[$timestamp] $Message"
 
@@ -363,34 +368,63 @@ function Get-PrimaryCommandAstFromScriptAst {
     $statement = Get-FirstStatementFromScriptAst -ScriptAst $ScriptAst
     if ($null -eq $statement) { return $null }
 
-    if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst]) {
-        $pipeline = $statement.Right
-        if ($pipeline -is [System.Management.Automation.Language.PipelineAst] -and
-            $pipeline.PipelineElements -and $pipeline.PipelineElements.Count -gt 0) {
-            foreach ($elem in $pipeline.PipelineElements) {
-                if ($elem -is [System.Management.Automation.Language.CommandAst]) {
-                    return $elem
+    # 在指定 AST 子树中查找“最靠前”的 CommandAst（按 Extent.StartOffset），并排除 ScriptBlockExpressionAst 内部命令
+    function Find-FirstCommandAst {
+        param($AstRoot)
+
+        if ($null -eq $AstRoot) { return $null }
+
+        $cmds = @($AstRoot.FindAll({
+            param($n)
+            if (-not ($n -is [System.Management.Automation.Language.CommandAst])) { return $false }
+
+            # 排除 ScriptBlockExpressionAst 内部的命令：这些命令不在当前语句立即执行（由管道/脚本块调用逻辑单独处理）
+            $ancestor = $n.Parent
+            while ($null -ne $ancestor -and $ancestor -ne $AstRoot) {
+                if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                    return $false
                 }
+                $ancestor = $ancestor.Parent
             }
-        }
-        return $null
+            return $true
+        }, $true))
+
+        if ($cmds.Count -eq 0) { return $null }
+        return @($cmds | Sort-Object { $_.Extent.StartOffset } | Select-Object -First 1)
     }
 
+    # 1) 赋值语句：优先在右侧表达式中找命令（支持 CommandExpressionAst，如 $c = (input "xxx").Content）
+    if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return Find-FirstCommandAst -AstRoot $statement.Right
+    }
+
+    # 2) Pipeline：优先按 PipelineElements 顺序找“直接命令”，否则在 CommandExpressionAst.Expression 中找
     if ($statement -is [System.Management.Automation.Language.PipelineAst] -and
         $statement.PipelineElements -and $statement.PipelineElements.Count -gt 0) {
         foreach ($elem in $statement.PipelineElements) {
             if ($elem -is [System.Management.Automation.Language.CommandAst]) {
                 return $elem
             }
+            if ($elem -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                $cmd = Find-FirstCommandAst -AstRoot $elem.Expression
+                if ($cmd) { return $cmd }
+            }
         }
         return $null
     }
 
+    # 3) 直接命令
     if ($statement -is [System.Management.Automation.Language.CommandAst]) {
         return $statement
     }
 
-    return $null
+    # 4) CommandExpressionAst：在表达式中找命令
+    if ($statement -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return Find-FirstCommandAst -AstRoot $statement.Expression
+    }
+
+    # 5) 兜底：在整条语句中找命令
+    return Find-FirstCommandAst -AstRoot $statement
 }
 
 function Get-NodeTextExecutionInfo {
@@ -4642,26 +4676,66 @@ function Record-AliasResolution {
         $CommandInfo
     )
 
-    # 优先使用生成期的原偏移信息（兼容替换逻辑）
-    if ($CommandInfo.Resolvable -and $null -ne $CommandInfo.Resolvable.StartOffset -and $null -ne $CommandInfo.Resolvable.EndOffset) {
-        $startOffset = $CommandInfo.Resolvable.StartOffset
-        $endOffset = $CommandInfo.Resolvable.EndOffset
-        $cmdNameElement = $null
-    } else {
-        # 获取命令名元素的位置信息（Text 解析 AST 的本地偏移）
-        $cmdNameElement = $null
-        if ($CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 0) {
-            $cmdNameElement = $CommandInfo.Ast.CommandElements[0]
-        }
+    # 目标：只替换“命令名 token”（别名本身），不能把整个命令（含参数）替换掉。
+    #
+    # 需要使用“原脚本偏移”：
+    # - 优先：使用生成期记录的 Command Resolvable 对应的原始 CommandAst，取其首元素 Extent 作为偏移
+    # - 其次：直接从 Node.Ast（原脚本 AST）里找匹配的 CommandAst，再取首元素 Extent
+    # - 最后：无法映射则跳过（避免错误替换）
 
-        if (-not $cmdNameElement -or -not $cmdNameElement.Extent) {
-            Write-ExecutionLog -Context $Context -Message "  [ALIAS] Cannot record alias resolution: no position info"
-            return
-        }
+    $cmdNameElement = $null
 
-        $startOffset = $cmdNameElement.Extent.StartOffset
-        $endOffset = $cmdNameElement.Extent.EndOffset
+    # 1) 优先：使用生成期的原始 AST 位置信息（最可靠）
+    if ($CommandInfo.Resolvable -and $CommandInfo.Resolvable.Ast -and
+        ($CommandInfo.Resolvable.Ast -is [System.Management.Automation.Language.CommandAst])) {
+        $origCmdAst = $CommandInfo.Resolvable.Ast
+        if ($origCmdAst.CommandElements -and $origCmdAst.CommandElements.Count -gt 0) {
+            $cmdNameElement = $origCmdAst.CommandElements[0]
+        }
     }
+
+    # 2) 兜底：从 Node.Ast（原脚本 AST）中查找同名命令
+    if (-not $cmdNameElement -and $Node -and $Node.Ast) {
+        $cmdAsts = @($Node.Ast.FindAll({
+            param($n)
+            if (-not ($n -is [System.Management.Automation.Language.CommandAst])) { return $false }
+
+            # 排除 ScriptBlockExpressionAst 内部命令（它们不在当前节点直接执行）
+            $ancestor = $n.Parent
+            while ($null -ne $ancestor -and $ancestor -ne $Node.Ast) {
+                if ($ancestor -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                    return $false
+                }
+                $ancestor = $ancestor.Parent
+            }
+            return $true
+        }, $true))
+
+        if ($cmdAsts.Count -gt 0) {
+            $matched = @()
+            foreach ($c in $cmdAsts) {
+                $name = $c.GetCommandName()
+                if ($name -and $name -eq $CommandInfo.OriginalName) {
+                    $matched += $c
+                }
+            }
+
+            if ($matched.Count -gt 0) {
+                $chosen = @($matched | Sort-Object { $_.Extent.StartOffset } | Select-Object -First 1)
+                if ($chosen -and $chosen.CommandElements -and $chosen.CommandElements.Count -gt 0) {
+                    $cmdNameElement = $chosen.CommandElements[0]
+                }
+            }
+        }
+    }
+
+    if (-not $cmdNameElement -or -not $cmdNameElement.Extent) {
+        Write-ExecutionLog -Context $Context -Message "  [ALIAS] Cannot record alias resolution: no original position info"
+        return
+    }
+
+    $startOffset = $cmdNameElement.Extent.StartOffset
+    $endOffset = $cmdNameElement.Extent.EndOffset
 
     $key = "$($Node.Id):${startOffset}:${endOffset}"
 
@@ -4732,8 +4806,10 @@ function Invoke-CFGTraversal {
         [int]$MaxTotalNodes = 50000
     )
 
-    # 创建/清空日志文件
-    $null = New-Item -Path $LogPath -ItemType File -Force
+    # 创建/清空日志文件（允许 LogPath=$null 以禁用日志）
+    if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+        $null = New-Item -Path $LogPath -ItemType File -Force
+    }
 
     # 创建执行上下文
     $execContext = New-ExecutionContext

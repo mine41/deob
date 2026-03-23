@@ -28,6 +28,10 @@ param(
 
     [string]$WorkDir,
 
+    # 是否输出完整解混淆过程（每轮 in/out/log/report + CFG dot/png）。
+    # 关闭时：只输出最终重建脚本（最快，不落盘任何过程文件）。
+    [bool]$FullOutput = $true,
+
     [ValidateSet('Outer', 'Inner')]
     [string]$OverlapStrategy = 'Inner',
 
@@ -300,6 +304,31 @@ function Write-JsonFile {
     Set-Content -LiteralPath $Path -Value $json -Encoding UTF8
 }
 
+function New-CfgFromText {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    if ($errors -and $errors.Count -gt 0) {
+        throw "脚本解析失败: $($errors[0].Message)"
+    }
+
+    # 复刻 Get-ScriptControlFlow 的 CFG 初始化（但不依赖文件路径）
+    $cfg = @{
+        Nodes = @()
+        Edges = @()
+        DefinedFunctions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        ProcessedScriptBlocks = @{}
+        DefinedAliases = @{}
+    }
+
+    Convert-AstNode -cfg $cfg -node $ast -prevNodeRef ([ref]$null)
+    return $cfg
+}
+
 # ========== 主流程 ==========
 
 $scriptFullPath = (Resolve-Path -LiteralPath $ScriptPath).ProviderPath
@@ -312,13 +341,18 @@ if ([string]::IsNullOrWhiteSpace($OutPath)) {
 
 $OutPath = [System.IO.Path]::GetFullPath($OutPath)
 
-if ([string]::IsNullOrWhiteSpace($WorkDir)) {
-    $WorkDir = $OutPath + '.work'
-}
-$WorkDir = [System.IO.Path]::GetFullPath($WorkDir)
+if ($FullOutput) {
+    if ([string]::IsNullOrWhiteSpace($WorkDir)) {
+        $WorkDir = $OutPath + '.work'
+    }
+    $WorkDir = [System.IO.Path]::GetFullPath($WorkDir)
 
-if (-not (Test-Path -LiteralPath $WorkDir)) {
-    $null = New-Item -ItemType Directory -Path $WorkDir -Force
+    if (-not (Test-Path -LiteralPath $WorkDir)) {
+        $null = New-Item -ItemType Directory -Path $WorkDir -Force
+    }
+} else {
+    # Fast 模式：不创建 workdir，不落盘过程文件
+    $WorkDir = $null
 }
 
 $genPath = Join-Path $PSScriptRoot 'Generate-CFG.ps1'
@@ -333,36 +367,74 @@ if (-not (Test-Path -LiteralPath $execPath)) { throw "缺少文件: $execPath" }
 Write-Host "=== 重建解混淆脚本（递归迭代）===" -ForegroundColor Cyan
 Write-Host "ScriptPath : $scriptFullPath" -ForegroundColor Gray
 Write-Host "OutPath    : $OutPath" -ForegroundColor Gray
-Write-Host "WorkDir    : $WorkDir" -ForegroundColor Gray
+Write-Host "FullOutput : $FullOutput" -ForegroundColor Gray
+if ($FullOutput) {
+    Write-Host "WorkDir    : $WorkDir" -ForegroundColor Gray
+}
 Write-Host "Strategy   : $OverlapStrategy" -ForegroundColor Gray
 Write-Host "MaxRounds  : $MaxRounds" -ForegroundColor Gray
 Write-Host "DryRun     : $DryRun" -ForegroundColor Gray
 Write-Host ""
 
 $currentPath = $scriptFullPath
+$currentText = $null
 $finalRound = 0
 $finalRoundOutPath = $null
 $terminatedBy = $null
 
 for ($round = 1; $round -le $MaxRounds; $round++) {
     $roundLabel = '{0:d2}' -f $round
-    $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
-    $roundOutPath = Join-Path $WorkDir ("round{0}.out.ps1" -f $roundLabel)
-    $roundLogPath = Join-Path $WorkDir ("round{0}.execution.log" -f $roundLabel)
-    $roundReportPath = Join-Path $WorkDir ("round{0}.report.json" -f $roundLabel)
+    $roundInPath = $null
+    $roundOutPath = $null
+    $roundLogPath = $null
+    $roundReportPath = $null
+    $roundCfgDotPath = $null
 
-    Copy-Item -LiteralPath $currentPath -Destination $roundInPath -Force
+    if ($FullOutput) {
+        $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
+        $roundOutPath = Join-Path $WorkDir ("round{0}.out.ps1" -f $roundLabel)
+        $roundLogPath = Join-Path $WorkDir ("round{0}.execution.log" -f $roundLabel)
+        $roundReportPath = Join-Path $WorkDir ("round{0}.report.json" -f $roundLabel)
+        $roundCfgDotPath = Join-Path $WorkDir ("round{0}.cfg.dot" -f $roundLabel)
 
-    Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $MaxRounds) -ForegroundColor Yellow
+        Copy-Item -LiteralPath $currentPath -Destination $roundInPath -Force
+        Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $MaxRounds) -ForegroundColor Yellow
 
-    $cfg = Get-ScriptControlFlow -ScriptPath $roundInPath
-    if (-not $cfg) {
-        throw "CFG 生成失败: $roundInPath"
+        $cfg = Get-ScriptControlFlow -ScriptPath $roundInPath
+        if (-not $cfg) {
+            throw "CFG 生成失败: $roundInPath"
+        }
+
+        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+
+        # 执行后导出 CFG（包含动态插入节点）
+        try {
+            Export-CfgToDot -finalCFG $cfg -outputPath $roundCfgDotPath | Out-Null
+        } catch {
+            Write-Warning "导出 CFG 失败: $_"
+        }
+
+        $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
+        $currentText = $scriptText
+    } else {
+        # Fast 模式：全程只在内存中迭代
+        if ($null -eq $currentText) {
+            # 第一次读取：用 ParseFile 获取同一份“解析视角”的全文，最大限度避免 offset 偏差
+            $currentText = Get-FullScriptTextFromFile -Path $currentPath
+        }
+
+        Write-Host ("[Round {0}/{1}] 分析+执行 (fast)..." -f $round, $MaxRounds) -ForegroundColor Yellow
+
+        $cfg = New-CfgFromText -ScriptText $currentText
+        if (-not $cfg) {
+            throw "CFG 生成失败（fast mode）"
+        }
+
+        # fast mode：禁用 execution.log（避免文件 IO）
+        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+
+        $scriptText = $currentText
     }
-
-    $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
-
-    $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
 
     $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText
     $candidates = @($base.Candidates)
@@ -374,75 +446,87 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     $newText = Apply-ReplacementsToText -Text $scriptText -Replacements $selected
 
-    # 生成 report（尽量轻量，保留 offset 和预览）
-    $skipReasonCounts = @{}
-    foreach ($s in $skipped) {
-        if (-not $skipReasonCounts.ContainsKey($s.Reason)) { $skipReasonCounts[$s.Reason] = 0 }
-        $skipReasonCounts[$s.Reason]++
-    }
-
-    $appliedItems = @()
-    foreach ($a in $selected) {
-        $appliedItems += [PSCustomObject]@{
-            Start       = $a.StartOffset
-            End         = $a.EndOffset
-            NodeId      = $a.NodeId
-            Type        = $a.Type
-            Depth       = $a.Depth
-            OriginalLen = if ($null -eq $a.Original) { 0 } else { $a.Original.Length }
-            Original    = ConvertTo-PreviewText -Text $a.Original -MaxLen 200
-            Replacement = $a.Replacement
+    if ($FullOutput) {
+        # 生成 report（尽量轻量，保留 offset 和预览）
+        $skipReasonCounts = @{}
+        foreach ($s in $skipped) {
+            if (-not $skipReasonCounts.ContainsKey($s.Reason)) { $skipReasonCounts[$s.Reason] = 0 }
+            $skipReasonCounts[$s.Reason]++
         }
-    }
 
-    $report = [ordered]@{
-        Round           = $round
-        RoundLabel      = $roundLabel
-        InputPath       = $roundInPath
-        OutputPath      = $roundOutPath
-        ExecutionLog    = $roundLogPath
-        OverlapStrategy = $OverlapStrategy
-        MaxIterations   = $MaxIterations
-        MaxTotalNodes   = $MaxTotalNodes
-        CandidateCount  = $candidates.Count
-        SelectedCount   = $selected.Count
-        AppliedCount    = $selected.Count
-        SkippedCount    = $skipped.Count
-        SkippedByReason = $skipReasonCounts
-        Applied         = $appliedItems
-        Skipped         = $skipped
-        Timestamp       = (Get-Date).ToString('o')
-    }
+        $appliedItems = @()
+        foreach ($a in $selected) {
+            $appliedItems += [PSCustomObject]@{
+                Start       = $a.StartOffset
+                End         = $a.EndOffset
+                NodeId      = $a.NodeId
+                Type        = $a.Type
+                Depth       = $a.Depth
+                OriginalLen = if ($null -eq $a.Original) { 0 } else { $a.Original.Length }
+                Original    = ConvertTo-PreviewText -Text $a.Original -MaxLen 200
+                Replacement = $a.Replacement
+            }
+        }
 
-    Write-JsonFile -Path $roundReportPath -Object $report
+        $report = [ordered]@{
+            Round           = $round
+            RoundLabel      = $roundLabel
+            InputPath       = $roundInPath
+            OutputPath      = $roundOutPath
+            ExecutionLog    = $roundLogPath
+            CfgDotPath      = $roundCfgDotPath
+            CfgPngPath      = ([System.IO.Path]::ChangeExtension($roundCfgDotPath, '.png'))
+            OverlapStrategy = $OverlapStrategy
+            MaxIterations   = $MaxIterations
+            MaxTotalNodes   = $MaxTotalNodes
+            CandidateCount  = $candidates.Count
+            SelectedCount   = $selected.Count
+            AppliedCount    = $selected.Count
+            SkippedCount    = $skipped.Count
+            SkippedByReason = $skipReasonCounts
+            Applied         = $appliedItems
+            Skipped         = $skipped
+            Timestamp       = (Get-Date).ToString('o')
+        }
 
-    if (-not $DryRun) {
+        Write-JsonFile -Path $roundReportPath -Object $report
+
         Set-Content -LiteralPath $roundOutPath -Value $newText -Encoding UTF8
+
+        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
+        Write-Host ("  in    : {0}" -f $roundInPath) -ForegroundColor Gray
+        Write-Host ("  out   : {0}" -f $roundOutPath) -ForegroundColor Gray
+        Write-Host ("  log   : {0}" -f $roundLogPath) -ForegroundColor Gray
+        Write-Host ("  report: {0}" -f $roundReportPath) -ForegroundColor Gray
+        Write-Host ("  cfg   : {0}" -f $roundCfgDotPath) -ForegroundColor Gray
+        Write-Host ""
+
+        $finalRoundOutPath = $roundOutPath
+        $currentPath = $roundOutPath
+        $currentText = $newText
     } else {
-        # DryRun 仍然写出 out 文件供下一轮继续（但最终不会写 OutPath）
-        Set-Content -LiteralPath $roundOutPath -Value $newText -Encoding UTF8
+        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
+        $currentText = $newText
     }
-
-    Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
-    Write-Host ("  in    : {0}" -f $roundInPath) -ForegroundColor Gray
-    Write-Host ("  out   : {0}" -f $roundOutPath) -ForegroundColor Gray
-    Write-Host ("  log   : {0}" -f $roundLogPath) -ForegroundColor Gray
-    Write-Host ("  report: {0}" -f $roundReportPath) -ForegroundColor Gray
-    Write-Host ""
 
     $finalRound = $round
-    $finalRoundOutPath = $roundOutPath
 
     if ($selected.Count -eq 0) {
         $terminatedBy = 'no_replacements'
         break
     }
 
-    # 下一轮输入 = 本轮输出
-    $currentPath = $roundOutPath
+    # 下一轮输入
+    if ($FullOutput) {
+        # 下一轮输入 = 本轮输出文件
+        $currentPath = $finalRoundOutPath
+    } else {
+        # fast：继续使用内存脚本文本
+        $currentPath = $scriptFullPath
+    }
 }
 
-if (-not $finalRoundOutPath) {
+if ($FullOutput -and -not $finalRoundOutPath) {
     throw "未产生任何轮次输出，无法生成最终脚本。"
 }
 
@@ -455,12 +539,21 @@ if (-not $DryRun) {
     if (-not [string]::IsNullOrWhiteSpace($outDir) -and -not (Test-Path -LiteralPath $outDir)) {
         $null = New-Item -ItemType Directory -Path $outDir -Force
     }
-    Copy-Item -LiteralPath $finalRoundOutPath -Destination $OutPath -Force
+
+    if ($FullOutput) {
+        Copy-Item -LiteralPath $finalRoundOutPath -Destination $OutPath -Force
+    } else {
+        Set-Content -LiteralPath $OutPath -Value $currentText -Encoding UTF8
+    }
 }
 
 Write-Host "=== 完成 ===" -ForegroundColor Green
 Write-Host ("TerminatedBy : {0}" -f $terminatedBy) -ForegroundColor Gray
 Write-Host ("FinalRound   : {0}" -f $finalRound) -ForegroundColor Gray
-Write-Host ("FinalWorkOut : {0}" -f $finalRoundOutPath) -ForegroundColor Gray
+if ($FullOutput) {
+    Write-Host ("FinalWorkOut : {0}" -f $finalRoundOutPath) -ForegroundColor Gray
+}
 Write-Host ("OutPath      : {0}" -f $OutPath) -ForegroundColor Gray
-Write-Host ("WorkDir      : {0}" -f $WorkDir) -ForegroundColor Gray
+if ($FullOutput) {
+    Write-Host ("WorkDir      : {0}" -f $WorkDir) -ForegroundColor Gray
+}
