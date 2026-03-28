@@ -100,6 +100,102 @@ pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 [options]
 - 该脚本无参数，内置分析目标为 `in/in.ps1`。
 - 主要用于快速联调 `Generate-CFG.ps1 + Execute-CFG.ps1`。
 
+## 参数组合推荐模板
+
+### 模板 1：保守解混（推荐默认起手）
+
+适用：
+- 先保证语义稳定，尽量避免误替换。
+
+```powershell
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+  -ScriptPath .\in\in.ps1 `
+  -OverlapStrategy Inner `
+  -VariableConflictPolicy skip `
+  -MaxRounds 5 `
+  -FullOutput:$true
+```
+
+特点：
+- 变化变量直接跳过（`skip`），风险最低。
+- 保留完整 round 产物，便于复盘。
+
+### 模板 2：激进解混（优先还原更多内容）
+
+适用：
+- 你接受一定误替换风险，想尽量还原更多片段。
+
+```powershell
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+  -ScriptPath .\in\in.ps1 `
+  -OverlapStrategy Inner `
+  -VariableConflictPolicy last `
+  -MaxRounds 10 `
+  -FullOutput:$true
+```
+
+特点：
+- 变化变量允许回写最后值（`last`）。
+- 轮次更高，适合多层混淆递归剥离。
+
+### 模板 3：高性能批处理（只要最终结果）
+
+适用：
+- 批量脚本快速跑，不需要过程文件和图。
+
+```powershell
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+  -ScriptPath .\in\in.ps1 `
+  -FullOutput:$false `
+  -MaxRounds 10 `
+  -VariableConflictPolicy skip
+```
+
+特点：
+- 不写 round 日志/report/cfg，速度和 IO 最优。
+- 仅输出最终 `.rebuilt.ps1`。
+
+### 模板 4：预评估模式（只看统计不落最终结果）
+
+适用：
+- 先评估可替换规模，再决定是否真正输出。
+
+```powershell
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+  -ScriptPath .\in\in.ps1 `
+  -DryRun `
+  -FullOutput:$true `
+  -VariableConflictPolicy skip
+```
+
+特点：
+- 会跑分析和 round 统计，但不会写最终 `OutPath` 文件。
+
+### 模板 5：交互调试模式（逐节点控制）
+
+适用：
+- 需要人工介入改变量、选分支、手选替换片段。
+
+```powershell
+pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 `
+  -ScriptPath .\in\in.ps1 `
+  -OverlapStrategy Inner `
+  -MaxIterations 1000 `
+  -MaxTotalNodes 50000
+```
+
+### 模板 6：Round 复盘模式（回看执行细节）
+
+适用：
+- 已有 `*.work`，需要按节点回放与排错。
+
+```powershell
+pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 `
+  -WorkDir .\in\in.rebuilt.ps1.work `
+  -Round 1 `
+  -CheckpointInterval 200
+```
+
 ## Generate / Execute 公开函数参数
 
 ### Generate-CFG.ps1
