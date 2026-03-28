@@ -1,98 +1,132 @@
-# Readme.md
+# Readme
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+PowerShell 反混淆工具链，核心流程：
+1. `Generate-CFG.ps1` 解析脚本并生成 CFG（含可还原片段、变量/别名信息）。
+2. `Execute-CFG.ps1` 按 CFG 节点执行并记录执行日志、片段求值结果。
+3. `Rebuild-Deobfuscated.ps1` 基于执行结果回写脚本，支持多轮迭代直到收敛。
 
-## 项目概述
+## 环境要求
 
-这是一个 PowerShell 脚本反混淆分析工具，大致流程为：
-1.生成CFG，并查找其中的可还原表达式。
-2.维护一个变量栈和共享的执行上下文，遍历cfg，对每个节点使用invoke执行，同时记录每次执行时变量的值和可还原表达式的值。
-3.执行完成后，将脚本对应的片段替换为记录的值。若同一片段被执行多次对应了多个值，则放弃替换。
+- 必须使用 `pwsh`（PowerShell 7+）。
+- `Review-RoundReplay.Wpf.ps1` 和 `Debug-Deobfuscation.Wpf.ps1` 仅支持 Windows（WPF）。
+- 安装 Graphviz 的 `dot` 可生成 PNG；未安装时仍可输出 DOT。
 
-## 常用命令
+## 快速开始
 
 ```powershell
-# 运行分析（分析 in/in.ps1 并生成控制流图）
-pwsh run.ps1
+# 1) 一键多轮解混淆（推荐主入口）
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
 
-# 生成 PNG 可视化（需要 Graphviz）
-dot -Tpng in/in.dot -o in/in.png
+# 2) 调试模式（逐节点执行）
+pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\in\in.ps1
+
+# 3) 复盘已有 round 日志
+pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
 ```
 
-## 代码架构
+## 参数说明（重点）
 
-### 核心模块: Generate-CFG.ps1
+### 1) Rebuild-Deobfuscated.ps1（主入口）
 
-这是项目的核心（4000+ 行），包含所有分析逻辑。主要功能模块：
-
-**AST 处理**
-- `Get-Ast` - 解析 PowerShell 脚本为 AST
-- `Get-DynamicInvokeInfo` - 检测动态执行结构 (iex, ScriptBlock::Create)
-
-**控制流图构建**
-- `Add-Node`, `Add-Edge`, `Add-VarToNode` - CFG 基础操作
-- `Get-ScriptControlFlow` - 生成完整控制流图（主入口函数）
-- `Export-CfgToDot` - 导出为 GraphViz DOT 格式
-
-**控制结构转换** (Convert-*AstNode 系列)
-- `Convert-IfAstNode`, `Convert-SwitchAstNode` - 条件结构
-- `Convert-LoopStatement` - 循环结构 (for/foreach/while/do)
-- `Convert-TryAstNode` - try/catch/finally 结构
-- `Convert-FunctionDefinitionAst` - 函数定义
-- `Convert-PipelineAstNode` - 管道表达式
-
-**变量和别名分析**
-- `Populate-NodeVariableUsage` - 填充节点变量使用信息
-- `Populate-NodeResolvables` - 填充可还原表达式
-- `Populate-NodeAliasUsage` - 填充别名使用信息
-- `Get-AliasDefinitionFromCommand` - 提取别名定义
-
-**嵌套结构处理**
-- `Expand-NestedScriptBlocks`, `Expand-NestedPipelines` - 展开嵌套结构
-- `Convert-ScriptBlockBody`, `Convert-ScriptBlockDefinition` - 脚本块转换
-
-### 数据流
-
+```powershell
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 [options]
 ```
-PowerShell 脚本 → AST 解析 → 控制流图构建 → 变量追踪 → 别名识别 → 可还原表达式 → DOT/PNG 输出
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `-ScriptPath` | 必填 | 输入脚本路径。 |
+| `-OutPath` | `<ScriptPath>.rebuilt.ps1` | 最终输出脚本路径。 |
+| `-WorkDir` | `<OutPath>.work`（仅 `FullOutput=$true`） | 每轮过程产物目录。`FullOutput=$false` 时忽略。 |
+| `-FullOutput` | `$true` | `true`：保留每轮 in/out/log/report/cfg；`false`：只输出最终脚本，最快。 |
+| `-OverlapStrategy` | `Inner` | 重叠片段选择策略：`Inner`（优先内层）/`Outer`（优先外层）。 |
+| `-VariableConflictPolicy` | `skip` | 变量位点多值策略：`skip`（跳过变化变量）/`last`（取最后一次可用简单值）。 |
+| `-MaxRounds` | `5` | 最大迭代轮数。 |
+| `-MaxIterations` | `1000` | 单轮 CFG 执行迭代上限（防死循环）。 |
+| `-MaxTotalNodes` | `50000` | 单轮最大节点访问数上限。 |
+| `-DryRun` | `$false` | 仅运行分析与统计，不写最终输出文件。 |
+
+常用示例：
+
+```powershell
+# 高性能模式（不落盘每轮过程）
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -FullOutput:$false
+
+# 值变化变量采用“最后值”
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy last
+
+# 保守策略：变化变量一律跳过（默认）
+pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy skip
 ```
+
+补充：
+- 从当前实现看，若某轮 `applied=0`，该轮 round 文件会被清理并停止，不再保留“空替换轮次”产物。
+
+### 2) Debug-Deobfuscation.Wpf.ps1（交互调试）
+
+```powershell
+pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\target.ps1 [options]
+```
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `-ScriptPath` | 必填 | 目标脚本路径。 |
+| `-WorkDir` | `<ScriptPath>.debug.work` | 调试输出目录。 |
+| `-OverlapStrategy` | `Inner` | 预览/导出时的重叠片段策略：`Inner`/`Outer`。 |
+| `-MaxIterations` | `1000` | 调试会话执行迭代上限。 |
+| `-MaxTotalNodes` | `50000` | 调试会话最大节点访问上限。 |
+| `-NoUI` | `$false` | 无界面模式，只输出初始化摘要。 |
+
+调试产物（在 `WorkDir`）：
+- `debug.execution.log`
+- `debug.cfg.dot` / `debug.cfg.png`
+- `debug.out.ps1`
+- `debug.report.json`
+
+### 3) Review-RoundReplay.Wpf.ps1（round 复盘）
+
+```powershell
+pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 [options]
+```
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `-WorkDir` | 交互选择 | `Rebuild-Deobfuscated` 生成的 `*.work` 目录。`-NoUI` 时必填。 |
+| `-Round` | 交互选择（`NoUI` 下默认最新轮） | 要复盘的轮次编号。 |
+| `-CheckpointInterval` | `200` | 变量状态 checkpoint 间隔。越小跳转越快但内存占用更高。 |
+| `-NoUI` | `$false` | 无界面模式，只解析并输出摘要。 |
+
+### 4) run.ps1（快速演示脚本）
+
+- 该脚本无参数，内置分析目标为 `in/in.ps1`。
+- 主要用于快速联调 `Generate-CFG.ps1 + Execute-CFG.ps1`。
+
+## Generate / Execute 公开函数参数
+
+### Generate-CFG.ps1
+
+1. `Get-ScriptControlFlow -ScriptPath <string>`
+2. `Export-CfgToDot -finalCFG <hashtable> [-outputPath <string>] [-AppliedNodeIds <int[]>]`
+
+说明：
+- `-AppliedNodeIds` 用于标记“实际发生替换”的节点（高亮）。
+- `Export-CfgToDot` 会尝试调用 `dot` 生成 PNG；若不可用只保留 DOT。
+
+### Execute-CFG.ps1
+
+1. `Invoke-CFGTraversal -CFG <hashtable> [-LogPath <string>] [-MaxIterations <int>] [-MaxTotalNodes <int>]`
+2. `New-CFGExecutionSession -CFG <hashtable> [-LogPath <string>] [-MaxIterations <int>] [-MaxTotalNodes <int>]`
+3. `Invoke-CFGStep -Session <hashtable> [-StopAtUserNode]`
+4. `Get-CFGVariableStack -Session <hashtable> [-IncludeInternal]`
+5. `Set-CFGVariableValue -Session <hashtable> -VariableName <string> -ValueExpression <string>`
+6. `Get-CFGNextEdgePreview -Session <hashtable>`
+7. `Close-CFGExecutionSession -Session <hashtable>`
 
 ## 目录结构
 
-- `in/` - 测试输入文件目录
-  - `in.ps1` - 当前分析的脚本
-  - `in.dot`, `in.png` - 生成的控制流图
-  - `finished/` - 已完成的测试用例（8 个文件覆盖各种语言特性）
-- `run.ps1` - 主运行脚本
-- `ast.ps1` - AST 工具脚本
-
-## 开发约定
-
-- 所有代码和注释使用中文
-- 测试用例放在 `in/finished/` 目录
-- 分析目标脚本放在 `in/in.ps1`
-
-## 用法（必须用 pwsh）
-
-  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
-
-  常用参数：
-
-  # 迭代最多 10 轮，内层优先（更细粒度）
-  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -MaxRounds 10 -OverlapStrategy Inner
-
-  # 高性能模式：不输出每轮过程文件/日志/CFG 图片，只输出最终 rebuilt 脚本
-  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -FullOutput:$false
-
-  # 指定工作目录（每轮的 in/out/log/report 都在这里）
-  pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -WorkDir .\out\work
-
-  ## 输出约定
-
-  - 默认输出脚本：与输入同目录，命名为 原名.rebuilt.ps1
-  - 默认工作目录：<OutPath>.work（仅当 FullOutput=$true）
-  - FullOutput=$true 时，每轮会生成：
-      - round01.in.ps1 / round01.out.ps1
-      - round01.execution.log
-      - round01.report.json（含 applied/skipped 统计与明细）
-      - round01.cfg.dot / round01.cfg.png（如环境有 Graphviz 的 dot）
+- `Generate-CFG.ps1`：CFG 生成与可还原片段识别。
+- `Execute-CFG.ps1`：CFG 执行器（批量执行 + 调试会话 API）。
+- `Rebuild-Deobfuscated.ps1`：多轮重建主入口。
+- `Debug-Deobfuscation.Wpf.ps1`：交互式调试 UI。
+- `Review-RoundReplay.Wpf.ps1`：round 复盘 UI。
+- `run.ps1`：快速演示入口。
+- `in/`：输入脚本与测试样例目录。

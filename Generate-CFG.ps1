@@ -4500,7 +4500,9 @@ function Get-ScriptControlFlow {
 function Export-CfgToDot {
     param(
         [hashtable]$finalCFG,
-        [string]$outputPath = "control_flow.dot"
+        [string]$outputPath = "control_flow.dot",
+        # 仅这些节点会高亮（表示“实际发生了替换”）
+        [int[]]$AppliedNodeIds = @()
     )
 
     # 辅助函数：终极安全格式化
@@ -4528,7 +4530,50 @@ function Export-CfgToDot {
         }
     }
 
-    # 1. 生成节点定义（可视化标记特殊管道 cmdlet，例如 ForEach-Object）
+    # 辅助函数：HTML Label 安全格式化（用于节点标签）
+    function Format-DotHtmlText {
+        param(
+            [string]$text,
+            [int]$MaxLen = 80
+        )
+
+        if ([string]::IsNullOrWhiteSpace($text)) { return "" }
+
+        # 移除控制字符（保留可见字符）
+        $cleaned = [System.Text.RegularExpressions.Regex]::Replace(
+            $text,
+            '[\x00-\x1F\x7F]',
+            ''
+        )
+
+        # 智能截断
+        $trimmed = $cleaned
+        if ($trimmed.Length -gt $MaxLen) {
+            $prefixLen = [Math]::Max(0, $MaxLen - 3)
+            $truncated = $trimmed.Substring(0, $prefixLen)
+            $lastSpace = $truncated.LastIndexOf(' ')
+            if ($lastSpace -gt 20) {
+                $truncated = $truncated.Substring(0, $lastSpace)
+            }
+            $trimmed = "$truncated..."
+        }
+
+        # HTML 转义（Graphviz HTML-like label）
+        $escaped = $trimmed.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;').Replace('"', '&quot;')
+        return $escaped
+    }
+
+    # 构建高亮节点集合（仅实际发生替换的节点）
+    $appliedNodeSet = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($nid in @($AppliedNodeIds)) {
+        try {
+            $null = $appliedNodeSet.Add([int]$nid)
+        } catch {
+            # 忽略无法转换的 NodeId
+        }
+    }
+
+    # 1. 生成节点定义（code 显眼 + 元信息下置；仅“实际替换节点”高亮黄色）
     $nodeDefinitions = @()
     foreach ($node in $finalCFG.Nodes) {
         $shape = switch ($node.Type) {
@@ -4537,22 +4582,18 @@ function Export-CfgToDot {
             {$_ -in "Merge"}                                  { "point" }
             default                                           { "box" }
         }
-        $label = "Id $($node.Id)\l$($node.Type)\l$(Format-DotLabel $node.Text)"
 
-        # DynamicInvoke 不为空的节点使用特殊样式（红色边框 + 浅红填充）
-        $style = ""
+        $metaLines = @()
+
         if ($null -ne $node.DynamicInvoke) {
-            # 获取动态执行类型标签
             $dynType = if ($node.DynamicInvoke -is [array]) {
                 ($node.DynamicInvoke | ForEach-Object { $_.Type }) -join ", "
             } else {
                 $node.DynamicInvoke.Type
             }
-            $label += "\l[DYN: $dynType]"
-            $style = ", style=filled, fillcolor=`"#ffcccc`", color=`"#cc0000`", penwidth=2"
+            $metaLines += "DYN: $(Format-DotHtmlText $dynType 70)"
         }
 
-        # Invokes 不为空的节点显示调用信息（蓝色边框 + 浅蓝填充）
         $hasInvokes = ($node.Invokes.Functions.Count -gt 0) -or ($node.Invokes.ScriptBlocks.Count -gt 0)
         if ($hasInvokes) {
             $invokeLabels = @()
@@ -4564,62 +4605,60 @@ function Export-CfgToDot {
                 $blockList = $node.Invokes.ScriptBlocks -join ", "
                 $invokeLabels += "Block: $blockList"
             }
-            $label += "\l[CALLS: $($invokeLabels -join '; ')]"
-
-            # 如果没有 DynamicInvoke 样式，使用蓝色样式
-            if ($style -eq "") {
-                $style = ", style=filled, fillcolor=`"#cce5ff`", color=`"#0066cc`", penwidth=2"
-            }
+            $metaLines += "CALLS: $(Format-DotHtmlText ($invokeLabels -join '; ') 90)"
         }
 
-        # 检测节点是否将结果保存到 _pipe_ 变量（pipeline 非末尾节点）
         $pipeVarsWritten = @($node.VarsWritten | Where-Object { $_.Name -match '^_pipe_[a-f0-9]{8}$' })
         if ($pipeVarsWritten.Count -gt 0) {
             $pipeVarList = ($pipeVarsWritten | ForEach-Object { "`$$($_.Name)" }) -join ", "
-            $label += "\l[PIPE OUT: $pipeVarList]"
-
-            # 如果没有其他样式，使用绿色样式
-            if ($style -eq "") {
-                $style = ", style=filled, fillcolor=`"#ccffcc`", color=`"#009900`", penwidth=2"
-            }
+            $metaLines += "PIPE OUT: $(Format-DotHtmlText $pipeVarList 90)"
         }
 
-        # 可还原表达式标记（黄色样式）
         if ($node.Resolvables.Count -gt 0) {
-            $label += "\l[RESOLVABLE: $($node.Resolvables.Count)]"
-
-            # 如果没有其他样式，使用黄色样式
-            if ($style -eq "") {
-                $style = ", style=filled, fillcolor=`"#fff3cc`", color=`"#cc9900`", penwidth=2"
-            }
+            $metaLines += "RESOLVABLE: $($node.Resolvables.Count)"
         }
 
-        # 管道 cmdlet 标记（例如 ForEach-Object）
         if ($node.PSObject.Properties.Match('PipeCmdlet').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($node.PipeCmdlet)) {
             $cmdletName = $node.PipeCmdlet
             if ($node.PSObject.Properties.Match('PipeCmdletName').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($node.PipeCmdletName)) {
                 $cmdletName = $node.PipeCmdletName
             }
-            $label += "\l[PIPE CMDLET: $(Format-DotLabel $cmdletName)]"
-
-            # 如果没有其他样式，使用橙色样式
-            if ($style -eq "") {
-                $style = ", style=filled, fillcolor=`"#ffe6cc`", color=`"#cc6600`", penwidth=2"
-            }
+            $metaLines += "PIPE CMDLET: $(Format-DotHtmlText $cmdletName 80)"
         }
 
-        # 别名使用标记（紫色样式）
         if ($node.AliasesUsed.Count -gt 0) {
             $aliasList = ($node.AliasesUsed | ForEach-Object { "$($_.Name)->$($_.Target)" }) -join ", "
-            $label += "\l[ALIAS: $aliasList]"
-
-            # 如果没有其他样式，使用紫色样式
-            if ($style -eq "") {
-                $style = ", style=filled, fillcolor=`"#e6ccff`", color=`"#9933ff`", penwidth=2"
-            }
+            $metaLines += "ALIAS: $(Format-DotHtmlText $aliasList 90)"
         }
 
-        $nodeDefinitions += "    $($node.Id) [label=`"$label`", shape=$shape$style];"
+        $idTypeText = Format-DotHtmlText ("Id $($node.Id) | $($node.Type)") 80
+        $codeText = Format-DotHtmlText $node.Text 90
+        if ([string]::IsNullOrWhiteSpace($codeText)) { $codeText = "(empty)" }
+
+        $labelLines = @(
+            "<FONT POINT-SIZE=`"9`" COLOR=`"#666666`">$idTypeText</FONT>",
+            "<B><FONT POINT-SIZE=`"16`">$codeText</FONT></B>"
+        )
+        foreach ($meta in $metaLines) {
+            $labelLines += "<FONT POINT-SIZE=`"10`" COLOR=`"#333333`">$meta</FONT>"
+        }
+        $htmlLabel = "<$($labelLines -join '<BR ALIGN=`"LEFT`"/>')>"
+
+        # 着色规则：仅实际替换节点高亮；其余全部白色
+        $isAppliedNode = $false
+        try {
+            $isAppliedNode = $appliedNodeSet.Contains([int]$node.Id)
+        } catch {
+            $isAppliedNode = $false
+        }
+
+        $style = if ($isAppliedNode) {
+            'style="filled,rounded", fillcolor="#fff3cc", color="#cc9900", penwidth=2'
+        } else {
+            'style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1'
+        }
+
+        $nodeDefinitions += "    $($node.Id) [label=$htmlLabel, shape=$shape, $style];"
     }
 
     # 2. 生成边定义（同样使用foreach语句）

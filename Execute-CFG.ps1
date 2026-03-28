@@ -221,31 +221,116 @@ function Get-NodeVariableValues {
 
 # 格式化变量值用于日志输出
 function Format-VariableValue {
-    param($Value)
+    param(
+        $Value,
+        [int]$Depth = 0
+    )
+
+    function Get-TextPreview {
+        param(
+            [string]$Text,
+            [int]$MaxLen = 120
+        )
+        if ($null -eq $Text) { return '' }
+        $clean = $Text -replace "`r", '\r' -replace "`n", '\n'
+        if ($clean.Length -gt $MaxLen) {
+            return $clean.Substring(0, $MaxLen - 3) + '...'
+        }
+        return $clean
+    }
 
     if ($null -eq $Value) {
         return '$null'
     }
 
+    # 占位符类型
+    if ($Value -is [BlockedCommandPlaceholder]) {
+        return $script:BlockedPlaceholderMarker
+    }
+
     $type = $Value.GetType().Name
+
+    # 避免深层递归造成过长文本
+    if ($Depth -ge 3) {
+        if ($Value -is [string]) {
+            return "`"$(Get-TextPreview -Text $Value -MaxLen 80)`""
+        }
+        return "[$type]"
+    }
+
+    # Char[] 展示字符串内容
+    if ($Value -is [char[]]) {
+        $count = $Value.Length
+        $text = -join $Value
+        $preview = Get-TextPreview -Text $text -MaxLen 160
+        return "[Char[]] Count=$count `"$preview`""
+    }
+
+    # Byte[] 展示十六进制预览
+    if ($Value -is [byte[]]) {
+        $count = $Value.Length
+        $max = [Math]::Min(24, $count)
+        if ($max -le 0) {
+            return "[Byte[]] Count=0"
+        }
+        $hex = for ($i = 0; $i -lt $max; $i++) { '{0:X2}' -f $Value[$i] }
+        $suffix = if ($count -gt $max) { ' ...' } else { '' }
+        return "[Byte[]] Count=$count Hex=$($hex -join ' ')$suffix"
+    }
+
+    # 字典对象显示 key=value 预览
+    if ($Value -is [System.Collections.IDictionary]) {
+        $maxPairs = 6
+        $pairs = New-Object System.Collections.Generic.List[string]
+        $i = 0
+        foreach ($k in $Value.Keys) {
+            if ($i -ge $maxPairs) { break }
+            $vText = Format-VariableValue -Value $Value[$k] -Depth ($Depth + 1)
+            $pairs.Add("$k=$vText")
+            $i++
+        }
+        $suffix = if ($Value.Count -gt $maxPairs) { '; ...' } else { '' }
+        return "[$type] @{ $($pairs -join '; ')$suffix }"
+    }
 
     # 数组/集合
     if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
-        $count = @($Value).Count
-        if ($count -le 5) {
-            $items = @($Value) | ForEach-Object { Format-VariableValue $_ }
-            return "@($($items -join ', '))"
-        } else {
-            return "[$type] Count=$count"
+        $maxPreviewItems = 8
+        $knownCount = $null
+
+        if ($Value -is [array]) {
+            $knownCount = $Value.Length
+        } elseif ($Value -is [System.Collections.ICollection]) {
+            try { $knownCount = [int]$Value.Count } catch { $knownCount = $null }
         }
+
+        $items = New-Object System.Collections.Generic.List[string]
+        $idx = 0
+        $hasMore = $false
+        foreach ($item in $Value) {
+            if ($idx -ge $maxPreviewItems) {
+                $hasMore = $true
+                break
+            }
+            $items.Add((Format-VariableValue -Value $item -Depth ($Depth + 1)))
+            $idx++
+        }
+
+        if (-not $hasMore -and $null -ne $knownCount -and $knownCount -gt $maxPreviewItems) {
+            $hasMore = $true
+        }
+
+        $suffix = if ($hasMore) { ', ...' } else { '' }
+        $itemsText = $items -join ', '
+        if ($null -ne $knownCount) {
+            return "[$type] Count=$knownCount @($itemsText$suffix)"
+        }
+        return "[$type] @($itemsText$suffix)"
     }
 
     # 字符串
     if ($Value -is [string]) {
-        if ($Value.Length -gt 50) {
-            return "`"$($Value.Substring(0, 47))...`""
-        }
-        return "`"$Value`""
+        return "`"$(Get-TextPreview -Text $Value -MaxLen 120)`""
     }
 
     # 数字/布尔
@@ -254,6 +339,11 @@ function Format-VariableValue {
     }
 
     # 其他对象
+    $objText = [string]$Value
+    if (-not [string]::IsNullOrWhiteSpace($objText) -and $objText -ne $type -and $objText -notmatch '^System\.') {
+        $preview = Get-TextPreview -Text $objText -MaxLen 120
+        return "[$type] $preview"
+    }
     return "[$type]"
 }
 
@@ -4887,4 +4977,793 @@ function Invoke-CFGTraversal {
     }
 
     return $context
+}
+
+# ========== 调试模式：会话化单步执行 API ==========
+
+function New-CFGExecutionSession {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$CFG,
+        [string]$LogPath = "execution.log",
+        [int]$MaxIterations = 1000,
+        [int]$MaxTotalNodes = 50000
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+        $null = New-Item -Path $LogPath -ItemType File -Force
+    }
+
+    $execContext = New-ExecutionContext
+    $context = @{
+        CFG                 = $CFG
+        ExecContext         = $execContext
+        LogPath             = $LogPath
+        VisitedNodes        = @{}
+        MaxIterations       = $MaxIterations
+        MaxTotalNodes       = $MaxTotalNodes
+        TotalVisits         = 0
+        LastConditionResult = $true
+        ResolvableResults   = @{}
+        VariableReadResults = @{}
+
+        ScopeStack            = @()
+        CurrentScopePrefix    = ""
+        ForbiddenCommands     = @(
+            'Remove-Item', 'del', 'rm', 'rmdir', 'rd',
+            'Format-Volume', 'Clear-Disk',
+            'Stop-Process', 'kill', 'spps',
+            'Stop-Computer', 'Restart-Computer',
+            'Set-ExecutionPolicy',
+            'New-Service', 'Remove-Service',
+            'Clear-Content', 'Clear-ItemProperty',
+            'Remove-ItemProperty', 'Clear-RecycleBin',
+            'Start-Process', 'Invoke-WebRequest', 'Invoke-RestMethod',
+            'New-Object', 'Add-Type'
+        )
+        FunctionSubgraphs      = @{}
+        ScriptBlockSubgraphs   = @{}
+        VarToBlockMapping      = @{}
+        CallStack              = @()
+        MaxCallDepth           = 100
+        DynamicInvokeResults   = @()
+        LastSubgraphResult     = $null
+        PipelineCurrentStack   = @()
+        OutputCaptureStack     = @()
+        LastPipelineFlowControl = $null
+        TextParseCache         = @{}
+        TextParseErrors        = @()
+    }
+
+    Write-ExecutionLog -Context $context -Message "=== CFG 调试会话开始 ==="
+    Write-ExecutionLog -Context $context -Message "MaxIterations: $MaxIterations, MaxTotalNodes: $MaxTotalNodes"
+    Write-ExecutionLog -Context $context -Message ""
+    Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
+    Initialize-SubgraphMappings -CFG $CFG -Context $context
+    Write-ExecutionLog -Context $context -Message ""
+
+    $startNode = $CFG.Nodes | Where-Object { $_.Type -eq "Start" } | Select-Object -First 1
+    $completed = $false
+    $stopReason = $null
+    if ($null -eq $startNode) {
+        Write-ExecutionLog -Context $context -Message "!!! 未找到 Start 节点 !!!"
+        $completed = $true
+        $stopReason = 'NoStartNode'
+    }
+
+    return @{
+        CFG           = $CFG
+        Context       = $context
+        CurrentNode   = $startNode
+        IsCompleted   = $completed
+        StopReason    = $stopReason
+        StepCounter   = 0
+        History       = New-Object System.Collections.ArrayList
+        SummaryLogged = $false
+        Closed        = $false
+    }
+}
+
+function Write-CFGExecutionSummary {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session
+    )
+
+    if ($Session.SummaryLogged) { return }
+
+    $context = $Session.Context
+    Write-ExecutionLog -Context $context -Message ""
+    Write-ExecutionLog -Context $context -Message "=== 执行统计 ==="
+    Write-ExecutionLog -Context $context -Message "Total visits: $($context.TotalVisits)"
+    Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
+    if ($Session.StopReason) {
+        Write-ExecutionLog -Context $context -Message "StopReason: $($Session.StopReason)"
+    }
+
+    $Session.SummaryLogged = $true
+}
+
+function Close-CFGExecutionSession {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session
+    )
+
+    if ($Session.Closed) { return }
+    Write-CFGExecutionSummary -Session $Session
+    if ($Session.Context -and $Session.Context.ExecContext) {
+        Close-ExecutionContext -ExecContext $Session.Context.ExecContext
+    }
+    $Session.Closed = $true
+}
+
+function Test-CFGDebugAutoPassNodeType {
+    param([string]$NodeType)
+    $autoTypes = @(
+        'Start', 'MainStart', 'MainEnd',
+        'If Condition', 'Else', 'Merge', 'Default',
+        'Try', 'Catch', 'Finally', 'FunctionDef',
+        'LoopStart', 'LoopEnd', 'ProcessEnd', 'SwitchStart', 'SwitchEnd',
+        'FuncStart', 'BlockStart', 'FuncParams', 'BlockParams',
+        'FuncEnd', 'BlockEnd', 'Return'
+    )
+    return ($NodeType -in $autoTypes)
+}
+
+function Get-CFGEdgeLabel {
+    param(
+        [Parameter(Mandatory)][hashtable]$CFG,
+        [Parameter(Mandatory)][int]$FromNodeId,
+        [Parameter(Mandatory)][int]$ToNodeId
+    )
+
+    $edge = $CFG.Edges | Where-Object { $_.From -eq $FromNodeId -and $_.To -eq $ToNodeId } | Select-Object -First 1
+    if ($edge) { return [string]$edge.Label }
+    return $null
+}
+
+function Get-CFGConditionEdgeLabel {
+    param(
+        [Parameter(Mandatory)][string]$NodeType,
+        [Parameter(Mandatory)][bool]$ConditionValue
+    )
+
+    switch ($NodeType) {
+        'Condition'        { if ($ConditionValue) { return 'True' } else { return 'False' } }
+        'SwitchCondition'  { if ($ConditionValue) { return 'True' } else { return 'False' } }
+        'CaseCondition'    { if ($ConditionValue) { return 'True' } else { return 'False' } }
+        'ForEachCondition' { if ($ConditionValue) { return 'Has next' } else { return 'No more items' } }
+        'ProcessCondition' { if ($ConditionValue) { return 'Has next' } else { return 'No more items' } }
+        default            { if ($ConditionValue) { return 'True' } else { return 'False' } }
+    }
+}
+
+function Invoke-CFGStep {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session,
+        [switch]$StopAtUserNode = $true
+    )
+
+    if ($Session.IsCompleted) {
+        return @{
+            Completed   = $true
+            StopReason  = $Session.StopReason
+            Records     = @()
+            LastRecord  = $null
+            CurrentNode = $Session.CurrentNode
+        }
+    }
+
+    $context = $Session.Context
+    $records = New-Object System.Collections.ArrayList
+
+    function Convert-VarMapToRecord {
+        param([hashtable]$VarMap)
+        $out = [ordered]@{}
+        foreach ($k in @($VarMap.Keys | Sort-Object)) {
+            $out[$k] = Format-VariableValue $VarMap[$k]
+        }
+        return $out
+    }
+
+    function Add-Record {
+        param($Record)
+        if ($null -eq $Record.PSObject.Properties['Step']) {
+            $Record | Add-Member -NotePropertyName Step -NotePropertyValue $Session.StepCounter -Force
+        } else {
+            $Record.Step = $Session.StepCounter
+        }
+        $Session.StepCounter++
+        $null = $records.Add($Record)
+        $null = $Session.History.Add($Record)
+    }
+
+    while (-not $Session.IsCompleted) {
+        $currentNode = $Session.CurrentNode
+        if ($null -eq $currentNode) {
+            $Session.IsCompleted = $true
+            if (-not $Session.StopReason) { $Session.StopReason = 'NoNextNode' }
+            break
+        }
+
+        # 调试单步语义：
+        # 本次点击如果已经自动穿过了结构节点（records.Count > 0），
+        # 遇到第一个“有效执行节点”时先停下，让用户下一次点击再真正执行该节点。
+        $isAutoPassCurrent = Test-CFGDebugAutoPassNodeType -NodeType $currentNode.Type
+        if ($StopAtUserNode -and -not $isAutoPassCurrent -and $records.Count -gt 0) {
+            break
+        }
+
+        # 终点
+        if ($currentNode.Type -eq "End") {
+            Write-ExecutionLog -Context $context -Message "=== 执行结束 ==="
+            Add-Record ([PSCustomObject]@{
+                Time             = (Get-Date).ToString('HH:mm:ss.fff')
+                NodeId           = $currentNode.Id
+                NodeType         = $currentNode.Type
+                Code             = [string]$currentNode.Text
+                Status           = 'END'
+                Action           = 'End'
+                Target           = $null
+                Reason           = $null
+                Error            = $null
+                Result           = $null
+                Executed         = $false
+                Success          = $true
+                ConditionResult  = $null
+                VarsRead         = [ordered]@{}
+                VarsWritten      = [ordered]@{}
+                NextNodeId       = $null
+                NextEdgeLabel    = $null
+                AutoPassed       = $true
+            })
+            $Session.CurrentNode = $null
+            $Session.IsCompleted = $true
+            $Session.StopReason = 'EndNode'
+            break
+        }
+
+        # FuncEnd / BlockEnd 特殊处理
+        if ($currentNode.Type -eq "FuncEnd" -or $currentNode.Type -eq "BlockEnd") {
+            Write-ExecutionLog -Context $context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
+            Write-ExecutionLog -Context $context -Message "  Code: $($currentNode.Text)"
+
+            $returnValue = $context.LastSubgraphResult
+            $nextNode = $null
+
+            $scope = Pop-ExecutionScope -Context $context
+            if ($scope) {
+                if ($scope.ReturnNodeId) {
+                    $context.LastSubgraphResult = $null
+
+                    if ($scope.TargetVarName -and $null -ne $returnValue) {
+                        $actualVarName = $scope.TargetVarName
+                        if ($context.ScopeStack.Count -gt 0) {
+                            $outerScope = $context.ScopeStack[-1]
+                            if ($outerScope.LocalVars -and $scope.TargetVarName -in $outerScope.LocalVars) {
+                                $actualVarName = $outerScope.ScopePrefix + $scope.TargetVarName
+                            }
+                        }
+                        $context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $returnValue)
+                        Write-ExecutionLog -Context $context -Message "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)"
+                    }
+
+                    Write-ExecutionLog -Context $context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
+                    $nextNode = Get-NodeById -CFG $context.CFG -Id $scope.ReturnNodeId
+                } else {
+                    $context.LastSubgraphResult = $returnValue
+                    Write-ExecutionLog -Context $context -Message "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)"
+                }
+            }
+
+            $edgeLabel = if ($nextNode) { Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $currentNode.Id -ToNodeId $nextNode.Id } else { $null }
+            Add-Record ([PSCustomObject]@{
+                Time             = (Get-Date).ToString('HH:mm:ss.fff')
+                NodeId           = $currentNode.Id
+                NodeType         = $currentNode.Type
+                Code             = [string]$currentNode.Text
+                Status           = 'OK'
+                Action           = 'ReturnToCaller'
+                Target           = if ($nextNode) { $nextNode.Id } else { $null }
+                Reason           = $null
+                Error            = $null
+                Result           = if ($null -ne $returnValue) { Format-VariableValue $returnValue } else { $null }
+                Executed         = $false
+                Success          = $true
+                ConditionResult  = $null
+                VarsRead         = [ordered]@{}
+                VarsWritten      = [ordered]@{}
+                NextNodeId       = if ($nextNode) { $nextNode.Id } else { $null }
+                NextEdgeLabel    = $edgeLabel
+                AutoPassed       = $true
+            })
+
+            $Session.CurrentNode = $nextNode
+            if ($null -eq $nextNode) {
+                $Session.IsCompleted = $true
+                if (-not $Session.StopReason) { $Session.StopReason = 'NoNextNode' }
+                break
+            }
+            continue
+        }
+
+        # Return 节点特殊处理
+        if ($currentNode.Type -eq "Return") {
+            Write-ExecutionLog -Context $context -Message "--- Node $($currentNode.Id) [Return] ---"
+            Write-ExecutionLog -Context $context -Message "  Code: $($currentNode.Text)"
+
+            $context.VisitedNodes[$currentNode.Id] = ($context.VisitedNodes[$currentNode.Id] ?? 0) + 1
+            $context.TotalVisits++
+
+            $returnValue = $null
+            $nextNode = $null
+
+            if ($context.ScopeStack.Count -gt 0) {
+                $currentScope = $context.ScopeStack[-1]
+                $retInfo = Get-NodeTextReturnExpression -Node $currentNode -Context $context
+                if (-not $retInfo.Success) {
+                    Write-ExecutionLog -Context $context -Message "  [RETURN] Parse Node.Text failed: $($retInfo.Error)"
+                } elseif ($retInfo.Code) {
+                    $returnCode = Convert-CodeForCurrentScope -Code $retInfo.Code -Context $context
+                    $evalResult = Invoke-InContext -ExecContext $context.ExecContext -Code $returnCode
+                    if ($evalResult.Success -and $null -ne $evalResult.Result) {
+                        if ($context.OutputCaptureStack -and $context.OutputCaptureStack.Count -gt 0) {
+                            Add-OutputsToCurrentCapture -Context $context -Result $evalResult.Result
+                        }
+                        if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                            if ($evalResult.Result.Count -eq 1) { $returnValue = $evalResult.Result[0] }
+                            elseif ($evalResult.Result.Count -gt 1) { $returnValue = $evalResult.Result }
+                        } else {
+                            $returnValue = $evalResult.Result
+                        }
+                        Write-ExecutionLog -Context $context -Message "  [RETURN] Expression value: $(Format-VariableValue $returnValue)"
+                    }
+                }
+
+                $context.LastSubgraphResult = $returnValue
+                if ($currentScope.EndNodeId) {
+                    Write-ExecutionLog -Context $context -Message "  [RETURN] Jumping to EndNode $($currentScope.EndNodeId)"
+                    $nextNode = Get-NodeById -CFG $context.CFG -Id $currentScope.EndNodeId
+                }
+            } else {
+                $nextNodes = Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context
+                if ($nextNodes.Count -gt 0) { $nextNode = $nextNodes[0] }
+            }
+
+            $edgeLabel = if ($nextNode) { Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $currentNode.Id -ToNodeId $nextNode.Id } else { $null }
+            Add-Record ([PSCustomObject]@{
+                Time             = (Get-Date).ToString('HH:mm:ss.fff')
+                NodeId           = $currentNode.Id
+                NodeType         = $currentNode.Type
+                Code             = [string]$currentNode.Text
+                Status           = 'OK'
+                Action           = 'Return'
+                Target           = if ($nextNode) { $nextNode.Id } else { $null }
+                Reason           = $null
+                Error            = $null
+                Result           = if ($null -ne $returnValue) { Format-VariableValue $returnValue } else { $null }
+                Executed         = $true
+                Success          = $true
+                ConditionResult  = $null
+                VarsRead         = [ordered]@{}
+                VarsWritten      = [ordered]@{}
+                NextNodeId       = if ($nextNode) { $nextNode.Id } else { $null }
+                NextEdgeLabel    = $edgeLabel
+                AutoPassed       = $true
+            })
+
+            $Session.CurrentNode = $nextNode
+            if ($null -eq $nextNode) {
+                $Session.IsCompleted = $true
+                if (-not $Session.StopReason) { $Session.StopReason = 'NoNextNode' }
+                break
+            }
+            continue
+        }
+
+        if ($context.TotalVisits -ge $context.MaxTotalNodes) {
+            Write-ExecutionLog -Context $context -Message "!!! 达到最大节点访问次数 ($($context.MaxTotalNodes)) !!!"
+            $Session.IsCompleted = $true
+            $Session.StopReason = 'MaxTotalNodes'
+            break
+        }
+
+        $nodeKey = $currentNode.Id
+        if (-not $context.VisitedNodes.ContainsKey($nodeKey)) {
+            $context.VisitedNodes[$nodeKey] = 0
+        }
+        if ($context.VisitedNodes[$nodeKey] -ge $context.MaxIterations) {
+            Write-ExecutionLog -Context $context -Message "!!! 节点 $nodeKey 达到最大迭代次数 ($($context.MaxIterations)) !!!"
+            $Session.IsCompleted = $true
+            $Session.StopReason = 'MaxIterations'
+            break
+        }
+
+        $context.VisitedNodes[$nodeKey]++
+        $context.TotalVisits++
+
+        Write-ExecutionLog -Context $context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
+        Write-ExecutionLog -Context $context -Message "  Code: $($currentNode.Text)"
+
+        if ($currentNode.Type -in @('FuncParams', 'BlockParams') -and $context.ScopeStack.Count -gt 0) {
+            $currentScope = $context.ScopeStack[-1]
+            if ($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) {
+                if ($currentNode.Ast -and $currentNode.Ast.Parameters) {
+                    $paramNames = @()
+                    foreach ($param in $currentNode.Ast.Parameters) {
+                        $paramNames += $param.Name.VariablePath.UserPath
+                    }
+
+                    for ($i = 0; $i -lt [Math]::Min($paramNames.Count, $currentScope.Arguments.Count); $i++) {
+                        $paramName = $paramNames[$i]
+                        $argValue = $currentScope.Arguments[$i]
+                        $prefixedName = $currentScope.ScopePrefix + $paramName
+                        $context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
+                        Write-ExecutionLog -Context $context -Message "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)"
+                        if ($paramName -notin $currentScope.LocalVars) {
+                            $currentScope.LocalVars += $paramName
+                        }
+                    }
+                }
+            }
+        }
+
+        $varsBefore = @{}
+        foreach ($varInfo in @($currentNode.VarsRead)) {
+            $actualVarName = $varInfo.Name
+            if ($context.ScopeStack.Count -gt 0) {
+                $currentScope = $context.ScopeStack[-1]
+                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
+                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
+                }
+            }
+            $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
+            $varsBefore[$varInfo.Name] = $value
+
+            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value)) {
+                $key = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
+                if (-not $context.VariableReadResults.ContainsKey($key)) {
+                    $context.VariableReadResults[$key] = @{
+                        NodeId  = $currentNode.Id
+                        VarInfo = $varInfo
+                        Values  = @()
+                    }
+                }
+                $context.VariableReadResults[$key].Values += (Format-ResolvableValue $value)
+            }
+        }
+
+        $execResult = Invoke-NodeSafe -Node $currentNode -Context $context
+
+        if ($context.OutputCaptureStack -and $context.OutputCaptureStack.Count -gt 0) {
+            $captureThis = $true
+            $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
+            if ($currentNode.Type -in $nonOutputTypes) { $captureThis = $false }
+            if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNode.VarsWritten) {
+                foreach ($v in $currentNode.VarsWritten) {
+                    if ($v.Name -match '^_pipe_[a-f0-9]+$') {
+                        $captureThis = $false
+                        break
+                    }
+                }
+            }
+            if ($captureThis) {
+                Add-OutputsToCurrentCapture -Context $context -Result $execResult.Result
+            }
+        }
+
+        if ($context.OutputCaptureStack -and $context.OutputCaptureStack.Count -gt 0 -and $currentNode.Type -in @('Break', 'Continue')) {
+            $label = $currentNode.Type
+            $edge = $context.CFG.Edges | Where-Object { $_.From -eq $currentNode.Id -and $_.Label -eq $label } | Select-Object -First 1
+            if ($edge) {
+                $targetNode = Get-NodeById -CFG $context.CFG -Id $edge.To
+                if ($targetNode -and $targetNode.Type -in @('BlockEnd', 'FuncEnd', 'ProcessEnd', 'End', 'MainEnd')) {
+                    $context.LastPipelineFlowControl = $label
+                }
+            }
+        }
+
+        $varsAfter = @{}
+        foreach ($varInfo in @($currentNode.VarsWritten)) {
+            $actualVarName = $varInfo.Name
+            if ($context.ScopeStack.Count -gt 0) {
+                $currentScope = $context.ScopeStack[-1]
+                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
+                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
+                }
+            }
+            $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
+            $varsAfter[$varInfo.Name] = $value
+        }
+
+        $status = if ($execResult.Action -eq "Blocked") {
+            "BLOCKED"
+        } elseif (-not $execResult.Executed) {
+            "SKIP"
+        } elseif ($execResult.Success) {
+            "OK"
+        } else {
+            "ERR"
+        }
+
+        Write-ExecutionLog -Context $context -Message "  Status: $status"
+        if ($execResult.Action -and $execResult.Action -notin @("Execute", "Skip")) {
+            Write-ExecutionLog -Context $context -Message "  Action: $($execResult.Action)"
+            if ($execResult.Target) { Write-ExecutionLog -Context $context -Message "  Target: $($execResult.Target)" }
+            if ($execResult.Reason) { Write-ExecutionLog -Context $context -Message "  Reason: $($execResult.Reason)" }
+        }
+
+        if ($execResult.Executed) {
+            if ($varsBefore.Count -gt 0) {
+                Write-ExecutionLog -Context $context -Message "  VarsRead:"
+                foreach ($kv in $varsBefore.GetEnumerator()) {
+                    Write-ExecutionLog -Context $context -Message "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)"
+                }
+            }
+            if ($varsAfter.Count -gt 0) {
+                Write-ExecutionLog -Context $context -Message "  VarsWritten:"
+                foreach ($kv in $varsAfter.GetEnumerator()) {
+                    Write-ExecutionLog -Context $context -Message "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)"
+                }
+            }
+            if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
+                Write-ExecutionLog -Context $context -Message "  Result: $(Format-VariableValue $execResult.Result)"
+                if ($context.ScopeStack.Count -gt 0) {
+                    if ($execResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+                        if ($execResult.Result.Count -eq 1) { $context.LastSubgraphResult = $execResult.Result[0] }
+                        else { $context.LastSubgraphResult = $execResult.Result }
+                    } else {
+                        $context.LastSubgraphResult = $execResult.Result
+                    }
+                }
+            }
+            if (-not $execResult.Success -and $execResult.Error) {
+                Write-ExecutionLog -Context $context -Message "  Error: $($execResult.Error)"
+            }
+            if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')) {
+                Write-ExecutionLog -Context $context -Message "  ConditionResult: $($context.LastConditionResult)"
+            }
+        }
+
+        $nextNode = $null
+        if ($execResult.Action -in @("CallFunction", "CallScriptBlock") -and $execResult.JumpToNode) {
+            Write-ExecutionLog -Context $context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
+            $nextNode = $execResult.JumpToNode
+        } else {
+            $nextNodes = Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context
+            if ($nextNodes.Count -gt 0) {
+                $nextNode = $nextNodes[0]
+            }
+        }
+
+        $nextEdgeLabel = if ($nextNode) { Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $currentNode.Id -ToNodeId $nextNode.Id } else { $null }
+        $autoPassed = Test-CFGDebugAutoPassNodeType -NodeType $currentNode.Type
+
+        Add-Record ([PSCustomObject]@{
+            Time             = (Get-Date).ToString('HH:mm:ss.fff')
+            NodeId           = $currentNode.Id
+            NodeType         = $currentNode.Type
+            Code             = [string]$currentNode.Text
+            Status           = $status
+            Action           = $execResult.Action
+            Target           = $execResult.Target
+            Reason           = $execResult.Reason
+            Error            = $execResult.Error
+            Result           = if ($null -ne $execResult.Result) { Format-VariableValue $execResult.Result } else { $null }
+            Executed         = [bool]$execResult.Executed
+            Success          = [bool]$execResult.Success
+            ConditionResult  = if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')) { [bool]$context.LastConditionResult } else { $null }
+            VarsRead         = Convert-VarMapToRecord -VarMap $varsBefore
+            VarsWritten      = Convert-VarMapToRecord -VarMap $varsAfter
+            NextNodeId       = if ($nextNode) { $nextNode.Id } else { $null }
+            NextEdgeLabel    = $nextEdgeLabel
+            AutoPassed       = $autoPassed
+        })
+
+        $Session.CurrentNode = $nextNode
+        if ($null -eq $nextNode) {
+            $Session.IsCompleted = $true
+            if (-not $Session.StopReason) { $Session.StopReason = 'NoNextNode' }
+            break
+        }
+
+        if ($StopAtUserNode -and -not $autoPassed) {
+            break
+        }
+    }
+
+    if ($Session.IsCompleted) {
+        Write-CFGExecutionSummary -Session $Session
+    }
+
+    return @{
+        Completed   = $Session.IsCompleted
+        StopReason  = $Session.StopReason
+        Records     = @($records)
+        LastRecord  = if ($records.Count -gt 0) { $records[$records.Count - 1] } else { $null }
+        CurrentNode = $Session.CurrentNode
+    }
+}
+
+function Test-CFGInternalVariableName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $true }
+    if ($Name -in $script:AutoVariables) { return $true }
+    if ($Name -match '^(_pipe_|_sc_[a-f0-9]{8}_|__|_fe_|_sw_|_foreach_|_where_|_select_|_proc_|_dyn_|_block_)') { return $true }
+    if ($Name -in @('Error','Host','PID','PWD','ShellId','StackTrace','Matches','LastExitCode','PSBoundParameters','PSDefaultParameterValues','MyInvocation','PSScriptRoot','PSCommandPath')) { return $true }
+    if ($Name -match '^PS[A-Z]') { return $true }
+    return $false
+}
+
+function Get-CFGVariableStack {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session,
+        [switch]$IncludeInternal
+    )
+
+    $context = $Session.Context
+    $eval = Invoke-InContext -ExecContext $context.ExecContext -Code "Get-Variable | Select-Object Name, Value"
+    if (-not $eval.Success -or $null -eq $eval.Result) { return @() }
+
+    $rows = @()
+    foreach ($item in @($eval.Result)) {
+        if ($null -eq $item -or -not $item.PSObject.Properties['Name']) { continue }
+        $actualName = [string]$item.Name
+        if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
+
+        $isInternal = Test-CFGInternalVariableName -Name $actualName
+        if (-not $IncludeInternal -and $isInternal) { continue }
+
+        $displayName = $actualName
+        if ($actualName -match '^_sc_[a-f0-9]{8}_(.+)$') {
+            $displayName = [string]$Matches[1]
+        }
+
+        $rows += [PSCustomObject]@{
+            DisplayName = $displayName
+            ActualName  = $actualName
+            IsInternal  = $isInternal
+            Value       = if ($item.PSObject.Properties['Value']) { $item.Value } else { $null }
+            ValueText   = if ($item.PSObject.Properties['Value']) { Format-VariableValue $item.Value } else { '$null' }
+        }
+    }
+
+    return @($rows | Sort-Object DisplayName, ActualName)
+}
+
+function Set-CFGVariableValue {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session,
+        [Parameter(Mandatory)][string]$VariableName,
+        [Parameter(Mandatory)][string]$ValueExpression
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VariableName)) {
+        throw "VariableName 不能为空。"
+    }
+    if ([string]::IsNullOrWhiteSpace($ValueExpression)) {
+        throw "ValueExpression 不能为空。"
+    }
+
+    $context = $Session.Context
+    $tokens = $null
+    $errors = $null
+    $exprAst = [System.Management.Automation.Language.Parser]::ParseInput($ValueExpression, [ref]$tokens, [ref]$errors)
+    if ($errors -and $errors.Count -gt 0) {
+        throw "变量值表达式解析失败: $($errors[0].Message)"
+    }
+
+    $cmdAsts = @($exprAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))
+    foreach ($cmdAst in $cmdAsts) {
+        $cmdName = $cmdAst.GetCommandName()
+        if ([string]::IsNullOrWhiteSpace($cmdName)) { continue }
+        if ($context.ForbiddenCommands -contains $cmdName) {
+            throw "变量值表达式包含禁用命令: $cmdName"
+        }
+    }
+
+    $evalResult = Invoke-InContext -ExecContext $context.ExecContext -Code "($ValueExpression)"
+    if (-not $evalResult.Success) {
+        throw "变量值求值失败: $($evalResult.Error)"
+    }
+
+    $valueToSet = $null
+    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+        if ($evalResult.Result.Count -eq 1) {
+            $valueToSet = $evalResult.Result[0]
+        } elseif ($evalResult.Result.Count -gt 1) {
+            $valueToSet = @($evalResult.Result)
+        }
+    } else {
+        $valueToSet = $evalResult.Result
+    }
+
+    $context.ExecContext.Runspace.SessionStateProxy.SetVariable($VariableName, $valueToSet)
+
+    return [PSCustomObject]@{
+        Name      = $VariableName
+        Value     = $valueToSet
+        ValueText = Format-VariableValue $valueToSet
+    }
+}
+
+function Get-CFGNextEdgePreview {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session
+    )
+
+    if ($Session.IsCompleted -or $null -eq $Session.CurrentNode) {
+        return [PSCustomObject]@{
+            HasPreview         = $false
+            NodeId             = $null
+            NodeType           = $null
+            EdgeLabel          = $null
+            ToNodeId           = $null
+            PredictedCondition = $null
+            Error              = $null
+        }
+    }
+
+    $context = $Session.Context
+    $node = $Session.CurrentNode
+    $conditionTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
+
+    if ($node.Type -in $conditionTypes) {
+        $code = Convert-CodeForCurrentScope -Code ([string]$node.Text) -Context $context
+        $eval = Invoke-InContext -ExecContext $context.ExecContext -Code $code
+        if (-not $eval.Success) {
+            return [PSCustomObject]@{
+                HasPreview         = $false
+                NodeId             = $node.Id
+                NodeType           = $node.Type
+                EdgeLabel          = $null
+                ToNodeId           = $null
+                PredictedCondition = $null
+                Error              = $eval.Error
+            }
+        }
+
+        $pred = $false
+        if ($null -ne $eval.Result -and $eval.Result.Count -gt 0) {
+            $pred = [bool]$eval.Result[0]
+        }
+        $label = Get-CFGConditionEdgeLabel -NodeType $node.Type -ConditionValue $pred
+        $edge = $context.CFG.Edges | Where-Object { $_.From -eq $node.Id -and $_.Label -eq $label } | Select-Object -First 1
+        $toNodeId = if ($edge) { [int]$edge.To } else { $null }
+
+        return [PSCustomObject]@{
+            HasPreview         = [bool]$edge
+            NodeId             = $node.Id
+            NodeType           = $node.Type
+            EdgeLabel          = $label
+            ToNodeId           = $toNodeId
+            PredictedCondition = $pred
+            Error              = $null
+        }
+    }
+
+    $nextNodes = Get-NextNodes -CFG $context.CFG -Node $node -Context $context
+    if ($nextNodes.Count -eq 0) {
+        return [PSCustomObject]@{
+            HasPreview         = $false
+            NodeId             = $node.Id
+            NodeType           = $node.Type
+            EdgeLabel          = $null
+            ToNodeId           = $null
+            PredictedCondition = $null
+            Error              = $null
+        }
+    }
+
+    $nextNode = $nextNodes[0]
+    $label = Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $node.Id -ToNodeId $nextNode.Id
+    return [PSCustomObject]@{
+        HasPreview         = $true
+        NodeId             = $node.Id
+        NodeType           = $node.Type
+        EdgeLabel          = $label
+        ToNodeId           = $nextNode.Id
+        PredictedCondition = $null
+        Error              = $null
+    }
 }

@@ -35,6 +35,12 @@ param(
     [ValidateSet('Outer', 'Inner')]
     [string]$OverlapStrategy = 'Inner',
 
+    # 变量读取同位置出现多值时的处理策略：
+    # - skip: 直接跳过
+    # - last: 采用最后一次可用简单值
+    [ValidateSet('skip', 'last')]
+    [string]$VariableConflictPolicy = 'skip',
+
     [int]$MaxRounds = 5,
 
     [int]$MaxIterations = 1000,
@@ -94,6 +100,36 @@ function ConvertTo-PreviewText {
     return $Text.Substring(0, $MaxLen) + '...'
 }
 
+function Test-SimpleVariableReplacementLiteral {
+    param([string]$Replacement)
+
+    if ([string]::IsNullOrWhiteSpace($Replacement)) { return $false }
+
+    # 集合/复杂对象字面量默认不做变量位替换（例如 @(...), @{...}, {...}）
+    if ($Replacement -match '^\s*@\(') { return $false }
+    if ($Replacement -match '^\s*@\{') { return $false }
+    if ($Replacement -match '^\s*\{')  { return $false }
+
+    # 其余视为简单字面量（字符串、数字、布尔、枚举/类型转换等）
+    return $true
+}
+
+function Get-LastValidVariableReplacement {
+    param([array]$Values)
+
+    if (-not $Values -or $Values.Count -eq 0) { return $null }
+
+    for ($i = $Values.Count - 1; $i -ge 0; $i--) {
+        $v = [string]$Values[$i]
+        if ([string]::IsNullOrWhiteSpace($v)) { continue }
+        if ($v -eq '__BLOCKED_PLACEHOLDER__') { continue }
+        if ($v -eq '$null') { continue }
+        if (-not (Test-SimpleVariableReplacementLiteral -Replacement $v)) { continue }
+        return $v
+    }
+    return $null
+}
+
 function Get-FullScriptTextFromFile {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -109,13 +145,14 @@ function Get-FullScriptTextFromFile {
 function Get-ReplacementsFromResolvableResults {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
-        [Parameter(Mandatory)][string]$ScriptText
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][ValidateSet('skip', 'last')][string]$VariableConflictPolicy
     )
 
     $candidates = @()
     $skipped = @()
 
-    if (-not $Context.ResolvableResults) {
+    if (-not $Context.ResolvableResults -and -not $Context.VariableReadResults) {
         return [PSCustomObject]@{
             Candidates = @()
             Skipped    = @()
@@ -168,6 +205,14 @@ function Get-ReplacementsFromResolvableResults {
             continue
         }
 
+        # $null 替换默认跳过：
+        # 许多调用（如 [array]::Reverse($a)）通过副作用修改变量但返回 $null，
+        # 若直接回写为 $null 会丢失原脚本语义。
+        if ($replacement -eq '$null') {
+            $skipped += New-SkipRecord -Reason 'null_replacement' -Message 'replacement 为 $null，默认跳过以避免破坏副作用语句' -Item $baseItem
+            continue
+        }
+
         $original = $ScriptText.Substring($start, $end - $start)
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'no_change' -Message 'replacement 与原片段一致' -Item $baseItem
@@ -210,6 +255,108 @@ function Get-ReplacementsFromResolvableResults {
         $null = $regionMap.Remove($key)
         $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "同区间出现不同 replacement，跳过: [$start-$end]" -Item $existing
         $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "同区间出现不同 replacement，跳过: [$start-$end]" -Item $cand
+    }
+
+    # 额外候选：变量读取结果（简单类型），并处理“同位置多值变化”。
+    if ($Context.VariableReadResults) {
+        foreach ($rec in $Context.VariableReadResults.Values) {
+            $v = $rec.VarInfo
+            if (-not $v) { continue }
+
+            $start = $v.StartOffset
+            $end = $v.EndOffset
+            $type = if ($v.PSObject.Properties['IsInlineResult'] -and $v.IsInlineResult) { 'Inline' } else { 'VarRead' }
+            $depth = $null
+            $nodeId = $rec.NodeId
+
+            $baseItem = [PSCustomObject]@{
+                StartOffset = $start
+                EndOffset   = $end
+                Type        = $type
+                Depth       = $depth
+                NodeId      = $nodeId
+            }
+
+            if ($null -eq $start -or $null -eq $end) {
+                $skipped += New-SkipRecord -Reason 'no_offset' -Message '变量读取无 StartOffset/EndOffset，无法回写' -Item $baseItem
+                continue
+            }
+
+            if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+                $skipped += New-SkipRecord -Reason 'out_of_range' -Message "变量读取 offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+                continue
+            }
+
+            $allValues = @($rec.Values)
+            $uniqueValues = @($allValues | Select-Object -Unique)
+            $replacement = $null
+            if ($uniqueValues.Count -ne 1) {
+                if ($VariableConflictPolicy -eq 'skip') {
+                    $skipped += New-SkipRecord -Reason 'var_inconsistent' -Message "变量读取同位置多值($($uniqueValues.Count))，策略=skip，跳过" -Item $baseItem
+                    continue
+                }
+
+                $replacement = Get-LastValidVariableReplacement -Values $allValues
+                if ([string]::IsNullOrWhiteSpace([string]$replacement)) {
+                    $skipped += New-SkipRecord -Reason 'var_last_invalid' -Message "变量读取同位置多值($($uniqueValues.Count))，策略=last 但无可用最终值，跳过" -Item $baseItem
+                    continue
+                }
+            } else {
+                $replacement = [string]$uniqueValues[0]
+            }
+
+            if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
+                $skipped += New-SkipRecord -Reason 'blocked' -Message '变量读取值为占位符，跳过替换' -Item $baseItem
+                continue
+            }
+            if ($replacement -eq '$null') {
+                $skipped += New-SkipRecord -Reason 'null_replacement' -Message '变量读取 replacement 为 $null，默认跳过' -Item $baseItem
+                continue
+            }
+            if (-not (Test-SimpleVariableReplacementLiteral -Replacement $replacement)) {
+                $skipped += New-SkipRecord -Reason 'var_not_simple' -Message '变量读取值非简单字面量，跳过替换' -Item $baseItem
+                continue
+            }
+
+            $original = $ScriptText.Substring($start, $end - $start)
+            if ($original -eq $replacement) {
+                $skipped += New-SkipRecord -Reason 'no_change' -Message '变量读取 replacement 与原片段一致' -Item $baseItem
+                continue
+            }
+
+            $cand = [PSCustomObject]@{
+                StartOffset = $start
+                EndOffset   = $end
+                Replacement = $replacement
+                Original    = $original
+                Type        = $type
+                Depth       = $depth
+                NodeId      = $nodeId
+            }
+
+            $key = "$start`:$end"
+            if ($conflictRegions.ContainsKey($key)) {
+                $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "同区间已冲突，忽略变量读取: [$start-$end]" -Item $cand
+                continue
+            }
+            if (-not $regionMap.ContainsKey($key)) {
+                $regionMap[$key] = $cand
+                continue
+            }
+
+            $existing = $regionMap[$key]
+            if ($existing.Replacement -eq $cand.Replacement) {
+                $skipped += New-SkipRecord -Reason 'duplicate' -Message "变量读取同区间重复记录，已去重: [$start-$end]" -Item $cand
+                continue
+            }
+
+            $conflictRegions[$key] = @{
+                Replacements = @($existing.Replacement, $cand.Replacement)
+            }
+            $null = $regionMap.Remove($key)
+            $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "变量读取同区间出现不同 replacement，跳过: [$start-$end]" -Item $existing
+            $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "变量读取同区间出现不同 replacement，跳过: [$start-$end]" -Item $cand
+        }
     }
 
     $candidates = @($regionMap.Values)
@@ -372,6 +519,7 @@ if ($FullOutput) {
     Write-Host "WorkDir    : $WorkDir" -ForegroundColor Gray
 }
 Write-Host "Strategy   : $OverlapStrategy" -ForegroundColor Gray
+Write-Host "VarPolicy  : $VariableConflictPolicy" -ForegroundColor Gray
 Write-Host "MaxRounds  : $MaxRounds" -ForegroundColor Gray
 Write-Host "DryRun     : $DryRun" -ForegroundColor Gray
 Write-Host ""
@@ -389,6 +537,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $roundLogPath = $null
     $roundReportPath = $null
     $roundCfgDotPath = $null
+    $roundCfgPngPath = $null
 
     if ($FullOutput) {
         $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
@@ -396,6 +545,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         $roundLogPath = Join-Path $WorkDir ("round{0}.execution.log" -f $roundLabel)
         $roundReportPath = Join-Path $WorkDir ("round{0}.report.json" -f $roundLabel)
         $roundCfgDotPath = Join-Path $WorkDir ("round{0}.cfg.dot" -f $roundLabel)
+        $roundCfgPngPath = [System.IO.Path]::ChangeExtension($roundCfgDotPath, '.png')
 
         Copy-Item -LiteralPath $currentPath -Destination $roundInPath -Force
         Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $MaxRounds) -ForegroundColor Yellow
@@ -406,13 +556,6 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         }
 
         $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
-
-        # 执行后导出 CFG（包含动态插入节点）
-        try {
-            Export-CfgToDot -finalCFG $cfg -outputPath $roundCfgDotPath | Out-Null
-        } catch {
-            Write-Warning "导出 CFG 失败: $_"
-        }
 
         $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
         $currentText = $scriptText
@@ -436,7 +579,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         $scriptText = $currentText
     }
 
-    $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText
+    $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
     $candidates = @($base.Candidates)
     $skipped = @($base.Skipped)
 
@@ -446,7 +589,59 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     $newText = Apply-ReplacementsToText -Text $scriptText -Replacements $selected
 
+    # 无替换：本轮不落盘任何 round 产物，直接收敛退出
+    if ($selected.Count -eq 0) {
+        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
+
+        if ($FullOutput) {
+            # 清理本轮可能已创建的临时文件（in/log）；其余文件本轮不会生成
+            $cleanupPaths = @(
+                $roundInPath,
+                $roundOutPath,
+                $roundLogPath,
+                $roundReportPath,
+                $roundCfgDotPath,
+                $roundCfgPngPath
+            ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+            foreach ($p in $cleanupPaths) {
+                if (Test-Path -LiteralPath $p) {
+                    Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            Write-Host "  no replacements in this round, artifacts skipped." -ForegroundColor DarkGray
+
+            # 如果前面没有任何 round out，则最终输出回退到当前输入脚本
+            if (-not $finalRoundOutPath) {
+                $finalRoundOutPath = $currentPath
+            }
+        } else {
+            $currentText = $scriptText
+        }
+
+        $finalRound = $round
+        $terminatedBy = 'no_replacements'
+        break
+    }
+
     if ($FullOutput) {
+        # 执行后导出 CFG（包含动态插入节点），并仅高亮“本轮实际应用替换”的节点
+        $appliedNodeIds = @()
+        foreach ($a in $selected) {
+            if ($null -eq $a -or $null -eq $a.NodeId) { continue }
+            if ("$($a.NodeId)" -match '^\d+$') {
+                $appliedNodeIds += [int]$a.NodeId
+            }
+        }
+        $appliedNodeIds = @($appliedNodeIds | Sort-Object -Unique)
+
+        try {
+            Export-CfgToDot -finalCFG $cfg -outputPath $roundCfgDotPath -AppliedNodeIds $appliedNodeIds | Out-Null
+        } catch {
+            Write-Warning "导出 CFG 失败: $_"
+        }
+
         # 生成 report（尽量轻量，保留 offset 和预览）
         $skipReasonCounts = @{}
         foreach ($s in $skipped) {
@@ -475,8 +670,9 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             OutputPath      = $roundOutPath
             ExecutionLog    = $roundLogPath
             CfgDotPath      = $roundCfgDotPath
-            CfgPngPath      = ([System.IO.Path]::ChangeExtension($roundCfgDotPath, '.png'))
+            CfgPngPath      = $roundCfgPngPath
             OverlapStrategy = $OverlapStrategy
+            VariableConflictPolicy = $VariableConflictPolicy
             MaxIterations   = $MaxIterations
             MaxTotalNodes   = $MaxTotalNodes
             CandidateCount  = $candidates.Count
@@ -484,6 +680,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             AppliedCount    = $selected.Count
             SkippedCount    = $skipped.Count
             SkippedByReason = $skipReasonCounts
+            AppliedNodeIds  = $appliedNodeIds
             Applied         = $appliedItems
             Skipped         = $skipped
             Timestamp       = (Get-Date).ToString('o')
@@ -510,11 +707,6 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     }
 
     $finalRound = $round
-
-    if ($selected.Count -eq 0) {
-        $terminatedBy = 'no_replacements'
-        break
-    }
 
     # 下一轮输入
     if ($FullOutput) {
