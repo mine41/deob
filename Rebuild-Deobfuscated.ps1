@@ -130,6 +130,61 @@ function Get-LastValidVariableReplacement {
     return $null
 }
 
+function Get-VariableAccessKindMapFromScriptText {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $map = @{}
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) { return $map }
+
+    # 依赖 Generate-CFG.ps1 中的 Get-VariableAccessKind；若不可用则降级为“不做上下文过滤”。
+    if (-not (Get-Command Get-VariableAccessKind -ErrorAction SilentlyContinue)) {
+        return $map
+    }
+
+    try {
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    } catch {
+        return $map
+    }
+
+    if (-not $ast) { return $map }
+
+    $varAsts = @($ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.VariableExpressionAst]
+        }, $true))
+
+    foreach ($vAst in $varAsts) {
+        if (-not $vAst.Extent) { continue }
+        $start = $vAst.Extent.StartOffset
+        $end = $vAst.Extent.EndOffset
+        if ($null -eq $start -or $null -eq $end -or $end -le $start) { continue }
+
+        $kind = $null
+        try {
+            $kind = Get-VariableAccessKind -VarAst $vAst
+        } catch {
+            $kind = $null
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$kind)) { continue }
+
+        $key = "$start`:$end"
+        if (-not $map.ContainsKey($key)) {
+            $map[$key] = $kind
+            continue
+        }
+
+        # 同 offset 若出现多种判定，优先采用更严格的非 Read 判定。
+        if ($map[$key] -eq 'Read' -and $kind -ne 'Read') {
+            $map[$key] = $kind
+        }
+    }
+
+    return $map
+}
+
 function Get-FullScriptTextFromFile {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -258,6 +313,8 @@ function Get-ReplacementsFromResolvableResults {
     }
 
     # 额外候选：变量读取结果（简单类型），并处理“同位置多值变化”。
+    # 变量位点必须是纯 Read 上下文；ReadWrite（例如 $x++、$x+=1）一律跳过。
+    $varAccessKindMap = Get-VariableAccessKindMapFromScriptText -ScriptText $ScriptText
     if ($Context.VariableReadResults) {
         foreach ($rec in $Context.VariableReadResults.Values) {
             $v = $rec.VarInfo
@@ -285,6 +342,15 @@ function Get-ReplacementsFromResolvableResults {
             if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
                 $skipped += New-SkipRecord -Reason 'out_of_range' -Message "变量读取 offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
                 continue
+            }
+
+            $key = "$start`:$end"
+            if ($type -eq 'VarRead' -and $varAccessKindMap.ContainsKey($key)) {
+                $accessKind = [string]$varAccessKindMap[$key]
+                if ($accessKind -ne 'Read') {
+                    $skipped += New-SkipRecord -Reason 'var_write_context' -Message "变量位点为 $accessKind 上下文，跳过替换（避免生成无效语法）" -Item $baseItem
+                    continue
+                }
             }
 
             $allValues = @($rec.Values)
@@ -334,7 +400,6 @@ function Get-ReplacementsFromResolvableResults {
                 NodeId      = $nodeId
             }
 
-            $key = "$start`:$end"
             if ($conflictRegions.ContainsKey($key)) {
                 $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "同区间已冲突，忽略变量读取: [$start-$end]" -Item $cand
                 continue
@@ -439,6 +504,123 @@ function Apply-ReplacementsToText {
     }
 
     return $result
+}
+
+function Test-PowerShellSyntax {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $tokens = $null
+    $errors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+
+    $isValid = (-not $errors -or $errors.Count -eq 0)
+    return [PSCustomObject]@{
+        IsValid    = $isValid
+        ErrorCount = if ($errors) { [int]$errors.Count } else { 0 }
+        FirstError = if ($errors -and $errors.Count -gt 0) { [string]$errors[0].Message } else { $null }
+    }
+}
+
+function Get-ReplacementIdentity {
+    param($Replacement)
+
+    if (-not $Replacement) { return '' }
+    $start = if ($Replacement.PSObject.Properties['StartOffset']) { [string]$Replacement.StartOffset } else { '' }
+    $end = if ($Replacement.PSObject.Properties['EndOffset']) { [string]$Replacement.EndOffset } else { '' }
+    $type = if ($Replacement.PSObject.Properties['Type']) { [string]$Replacement.Type } else { '' }
+    $nodeId = if ($Replacement.PSObject.Properties['NodeId']) { [string]$Replacement.NodeId } else { '' }
+    $rep = if ($Replacement.PSObject.Properties['Replacement']) { [string]$Replacement.Replacement } else { '' }
+    return "$start`:$end`:$type`:$nodeId`:$rep"
+}
+
+function Ensure-SyntaxSafeReplacements {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [AllowEmptyCollection()][array]$Selected
+    )
+
+    if (-not $Selected -or $Selected.Count -eq 0) {
+        $baseCheck = Test-PowerShellSyntax -ScriptText $ScriptText
+        return [PSCustomObject]@{
+            Selected         = @()
+            Skipped          = @()
+            BaselineIsValid  = $baseCheck.IsValid
+            FinalIsValid     = $baseCheck.IsValid
+            FinalError       = $null
+        }
+    }
+
+    $baselineCheck = Test-PowerShellSyntax -ScriptText $ScriptText
+    $skipped = @()
+    $effective = @($Selected)
+
+    function Invoke-SyntaxCheckWithReplacements {
+        param(
+            [string]$SourceText,
+            [array]$Replacements
+        )
+        $candidateText = Apply-ReplacementsToText -Text $SourceText -Replacements $Replacements
+        return (Test-PowerShellSyntax -ScriptText $candidateText)
+    }
+
+    $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+    if ($check.IsValid) {
+        return [PSCustomObject]@{
+            Selected         = @($effective)
+            Skipped          = @()
+            BaselineIsValid  = $baselineCheck.IsValid
+            FinalIsValid     = $true
+            FinalError       = $null
+        }
+    }
+
+    # 第一阶段：优先移除变量位点替换，再尝试移除 Inline 结果替换。
+    foreach ($dropType in @('VarRead', 'Inline')) {
+        if ($check.IsValid) { break }
+
+        $toDrop = @($effective | Where-Object { [string]$_.Type -eq $dropType })
+        if ($toDrop.Count -eq 0) { continue }
+
+        foreach ($d in $toDrop) {
+            $skipped += New-SkipRecord -Reason 'syntax_guard' -Message "替换后语法错误，移除 $dropType 候选" -Item $d
+        }
+
+        $effective = @($effective | Where-Object { [string]$_.Type -ne $dropType })
+        $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+    }
+
+    # 第二阶段：若仍不合法，按“小跨度优先”继续移除，直到可解析或清空。
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        $ordered = @($effective | Sort-Object @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
+        foreach ($cand in $ordered) {
+            if ($check.IsValid) { break }
+
+            $candId = Get-ReplacementIdentity -Replacement $cand
+            $next = @($effective | Where-Object { (Get-ReplacementIdentity -Replacement $_) -ne $candId })
+            if ($next.Count -eq $effective.Count) { continue }
+
+            $skipped += New-SkipRecord -Reason 'syntax_guard' -Message '替换后语法错误，移除该候选以保持脚本可解析' -Item $cand
+            $effective = $next
+            $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+        }
+    }
+
+    # 最终兜底：若仍不合法，清空全部替换，确保输出至少保持原始可解析性。
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        foreach ($left in @($effective)) {
+            $skipped += New-SkipRecord -Reason 'syntax_guard_fallback' -Message '替换后仍语法错误，清空全部替换' -Item $left
+        }
+        $effective = @()
+        $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+    }
+
+    return [PSCustomObject]@{
+        Selected         = @($effective)
+        Skipped          = @($skipped)
+        BaselineIsValid  = $baselineCheck.IsValid
+        FinalIsValid     = $check.IsValid
+        FinalError       = $check.FirstError
+    }
 }
 
 function Write-JsonFile {
@@ -587,7 +769,17 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $selected = @($sel.Selected)
     $skipped += @($sel.Skipped)
 
+    $syntaxGuard = Ensure-SyntaxSafeReplacements -ScriptText $scriptText -Selected $selected
+    $selected = @($syntaxGuard.Selected)
+    $skipped += @($syntaxGuard.Skipped)
+
     $newText = Apply-ReplacementsToText -Text $scriptText -Replacements $selected
+    if ($syntaxGuard.BaselineIsValid) {
+        $roundSyntax = Test-PowerShellSyntax -ScriptText $newText
+        if (-not $roundSyntax.IsValid) {
+            throw "语法保护失败：替换后脚本不可解析。Error=$($roundSyntax.FirstError)"
+        }
+    }
 
     # 无替换：本轮不落盘任何 round 产物，直接收敛退出
     if ($selected.Count -eq 0) {

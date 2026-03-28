@@ -132,6 +132,58 @@ function Get-LastValidVariableReplacement {
     return $null
 }
 
+function Get-VariableAccessKindMapFromScriptText {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $map = @{}
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) { return $map }
+
+    if (-not (Get-Command Get-VariableAccessKind -ErrorAction SilentlyContinue)) {
+        return $map
+    }
+
+    try {
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    } catch {
+        return $map
+    }
+
+    if (-not $ast) { return $map }
+
+    $varAsts = @($ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.VariableExpressionAst]
+        }, $true))
+
+    foreach ($vAst in $varAsts) {
+        if (-not $vAst.Extent) { continue }
+        $start = $vAst.Extent.StartOffset
+        $end = $vAst.Extent.EndOffset
+        if ($null -eq $start -or $null -eq $end -or $end -le $start) { continue }
+
+        $kind = $null
+        try {
+            $kind = Get-VariableAccessKind -VarAst $vAst
+        } catch {
+            $kind = $null
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$kind)) { continue }
+
+        $key = "$start`:$end"
+        if (-not $map.ContainsKey($key)) {
+            $map[$key] = $kind
+            continue
+        }
+        if ($map[$key] -eq 'Read' -and $kind -ne 'Read') {
+            $map[$key] = $kind
+        }
+    }
+
+    return $map
+}
+
 function New-SkipRecord {
     param(
         [string]$Reason,
@@ -249,6 +301,7 @@ function Get-ReplacementsFromResolvableResults {
         }
     }
 
+    $varAccessKindMap = Get-VariableAccessKindMapFromScriptText -ScriptText $ScriptText
     if ($Context.VariableReadResults) {
         foreach ($rec in @($Context.VariableReadResults.Values)) {
             $v = $rec.VarInfo
@@ -276,6 +329,15 @@ function Get-ReplacementsFromResolvableResults {
             if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
                 $skipped += New-SkipRecord -Reason 'out_of_range' -Message '变量读取 offset 越界' -Item $baseItem
                 continue
+            }
+
+            $key = "$start`:$end"
+            if ($type -eq 'VarRead' -and $varAccessKindMap.ContainsKey($key)) {
+                $accessKind = [string]$varAccessKindMap[$key]
+                if ($accessKind -ne 'Read') {
+                    $skipped += New-SkipRecord -Reason 'var_write_context' -Message "变量位点为 $accessKind 上下文，跳过替换（避免生成无效语法）" -Item $baseItem
+                    continue
+                }
             }
 
             $allValues = @($rec.Values)
@@ -326,7 +388,6 @@ function Get-ReplacementsFromResolvableResults {
                 ObservedValueCount = $uniqueValues.Count
             }
 
-            $key = "$start`:$end"
             if (-not $regionMap.ContainsKey($key)) {
                 $regionMap[$key] = $cand
                 continue
@@ -487,6 +548,112 @@ function Apply-ReplacementsToText {
     return $result
 }
 
+function Test-PowerShellSyntax {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $tokens = $null
+    $errors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+
+    return [PSCustomObject]@{
+        IsValid    = (-not $errors -or $errors.Count -eq 0)
+        ErrorCount = if ($errors) { [int]$errors.Count } else { 0 }
+        FirstError = if ($errors -and $errors.Count -gt 0) { [string]$errors[0].Message } else { $null }
+    }
+}
+
+function Get-ReplacementIdentity {
+    param($Replacement)
+
+    if (-not $Replacement) { return '' }
+    $start = if ($Replacement.PSObject.Properties['StartOffset']) { [string]$Replacement.StartOffset } else { '' }
+    $end = if ($Replacement.PSObject.Properties['EndOffset']) { [string]$Replacement.EndOffset } else { '' }
+    $type = if ($Replacement.PSObject.Properties['Type']) { [string]$Replacement.Type } else { '' }
+    $nodeId = if ($Replacement.PSObject.Properties['NodeId']) { [string]$Replacement.NodeId } else { '' }
+    $rep = if ($Replacement.PSObject.Properties['Replacement']) { [string]$Replacement.Replacement } else { '' }
+    return "$start`:$end`:$type`:$nodeId`:$rep"
+}
+
+function Ensure-SyntaxSafeReplacements {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [array]$Selected
+    )
+
+    if (-not $Selected -or $Selected.Count -eq 0) {
+        $baseCheck = Test-PowerShellSyntax -ScriptText $ScriptText
+        return [PSCustomObject]@{
+            Selected = @()
+            Skipped  = @()
+            FinalIsValid = $baseCheck.IsValid
+            FinalError = $null
+        }
+    }
+
+    $skipped = @()
+    $effective = @($Selected)
+
+    function Invoke-SyntaxCheckWithReplacements {
+        param(
+            [string]$SourceText,
+            [array]$Replacements
+        )
+        $candidateText = Apply-ReplacementsToText -Text $SourceText -Replacements $Replacements
+        return (Test-PowerShellSyntax -ScriptText $candidateText)
+    }
+
+    $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+    if ($check.IsValid) {
+        return [PSCustomObject]@{
+            Selected = @($effective)
+            Skipped  = @()
+            FinalIsValid = $true
+            FinalError = $null
+        }
+    }
+
+    foreach ($dropType in @('VarRead', 'Inline')) {
+        if ($check.IsValid) { break }
+        $toDrop = @($effective | Where-Object { [string]$_.Type -eq $dropType })
+        if ($toDrop.Count -eq 0) { continue }
+
+        foreach ($d in $toDrop) {
+            $skipped += New-SkipRecord -Reason 'syntax_guard' -Message "替换后语法错误，移除 $dropType 候选" -Item $d
+        }
+        $effective = @($effective | Where-Object { [string]$_.Type -ne $dropType })
+        $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+    }
+
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        $ordered = @($effective | Sort-Object @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
+        foreach ($cand in $ordered) {
+            if ($check.IsValid) { break }
+            $candId = Get-ReplacementIdentity -Replacement $cand
+            $next = @($effective | Where-Object { (Get-ReplacementIdentity -Replacement $_) -ne $candId })
+            if ($next.Count -eq $effective.Count) { continue }
+
+            $skipped += New-SkipRecord -Reason 'syntax_guard' -Message '替换后语法错误，移除该候选以保持脚本可解析' -Item $cand
+            $effective = $next
+            $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+        }
+    }
+
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        foreach ($left in @($effective)) {
+            $skipped += New-SkipRecord -Reason 'syntax_guard_fallback' -Message '替换后仍语法错误，清空全部替换' -Item $left
+        }
+        $effective = @()
+        $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+    }
+
+    return [PSCustomObject]@{
+        Selected = @($effective)
+        Skipped  = @($skipped)
+        FinalIsValid = $check.IsValid
+        FinalError = $check.FirstError
+    }
+}
+
 function Build-DebugPreview {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -541,18 +708,20 @@ function Build-DebugPreview {
     }
 
     $resolved = Resolve-SelectedCandidates -Candidates $candidates -SelectedByKey $selectedByKey -ManualSelection $ManualSelection -Strategy $Strategy
+    $syntaxGuard = Ensure-SyntaxSafeReplacements -ScriptText $ScriptText -Selected $resolved.Selected
+    $finalSelected = @($syntaxGuard.Selected)
     $resolvedKeys = @{}
-    foreach ($x in @($resolved.Selected)) { $resolvedKeys[[string]$x.Key] = $true }
+    foreach ($x in @($finalSelected)) { $resolvedKeys[[string]$x.Key] = $true }
     foreach ($c in $candidates) {
         $c.IsSelected = $resolvedKeys.ContainsKey([string]$c.Key)
     }
 
-    $newText = Apply-ReplacementsToText -Text $ScriptText -Replacements $resolved.Selected
+    $newText = Apply-ReplacementsToText -Text $ScriptText -Replacements $finalSelected
 
     return [PSCustomObject]@{
         Candidates = @($candidates)
-        Selected   = @($resolved.Selected)
-        Skipped    = @($base.Skipped) + @($resolved.Skipped)
+        Selected   = @($finalSelected)
+        Skipped    = @($base.Skipped) + @($resolved.Skipped) + @($syntaxGuard.Skipped)
         Rebuilt    = $newText
     }
 }
