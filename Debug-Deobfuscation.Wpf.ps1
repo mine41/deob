@@ -965,6 +965,7 @@ if ($NoUI) {
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="当前变量:" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="1" Name="TxtVarName" IsReadOnly="True" Margin="8,0,12,0"/>
@@ -972,6 +973,7 @@ if ($NoUI) {
                   <TextBox Grid.Column="3" Name="TxtVarExpr" Margin="8,0,12,0"/>
                   <Button Grid.Column="4" Name="BtnApplyVar" Content="应用变量" Width="90" Margin="0,0,8,0"/>
                   <Button Grid.Column="5" Name="BtnRefreshVar" Content="刷新" Width="70"/>
+                  <CheckBox Grid.Column="6" Name="ChkVarAdvanced" Content="高级内部变量" Margin="12,0,0,0" VerticalAlignment="Center"/>
                 </Grid>
               </Border>
             </Grid>
@@ -1025,6 +1027,7 @@ $txtVarName = $window.FindName('TxtVarName')
 $txtVarExpr = $window.FindName('TxtVarExpr')
 $btnApplyVar = $window.FindName('BtnApplyVar')
 $btnRefreshVar = $window.FindName('BtnRefreshVar')
+$chkVarAdvanced = $window.FindName('ChkVarAdvanced')
 $txtPreviewSummary = $window.FindName('TxtPreviewSummary')
 $txtRebuiltPreview = $window.FindName('TxtRebuiltPreview')
 
@@ -1489,7 +1492,8 @@ function Request-SelectionRefresh {
 }
 
 function Refresh-VarGrid {
-    $rows = Get-CFGVariableStack -Session $script:DebugState.Session
+    $showAdvanced = ($null -ne $chkVarAdvanced -and $chkVarAdvanced.IsChecked)
+    $rows = Get-CFGVariableStack -Session $script:DebugState.Session -IncludeAdvancedInternal:$showAdvanced
     $varGrid.ItemsSource = @($rows)
 }
 
@@ -1718,6 +1722,8 @@ $nodeReplaceGrid.AddHandler(
 )
 
 $btnRefreshVar.Add_Click({ Refresh-VarGrid; Update-CurrentNodeUi })
+$chkVarAdvanced.Add_Checked({ Refresh-VarGrid })
+$chkVarAdvanced.Add_Unchecked({ Refresh-VarGrid })
 
 $varGrid.Add_SelectionChanged({
     $row = $varGrid.SelectedItem

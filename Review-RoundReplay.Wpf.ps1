@@ -180,7 +180,7 @@ function Select-RoundDialog {
     </DataGrid>
 
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-      <Button Name="BtnOk" Content="OK" Width="90" Margin="0,0,8,0" IsDefault="True"/>
+      <Button Name="BtnOk" Content="OK" Width="90" Margin="0,0,8,0"/>
       <Button Name="BtnCancel" Content="Cancel" Width="90" IsCancel="True"/>
     </StackPanel>
   </Grid>
@@ -196,13 +196,33 @@ function Select-RoundDialog {
     $grid.ItemsSource = @($rows)
     $grid.SelectedIndex = 0
 
-    $btnOk.Add_Click({
+    $acceptSelection = {
         $sel = $grid.SelectedItem
-        if ($sel -and $sel.Round) {
+        if ($sel -and $null -ne $sel.Round) {
             $win.Tag = [int]$sel.Round
             $win.DialogResult = $true
             $win.Close()
         }
+    }
+
+    $btnOk.Add_Click({
+        & $acceptSelection
+    })
+
+    $grid.Add_MouseDoubleClick({
+        & $acceptSelection
+    })
+
+    $grid.Add_KeyDown({
+        param($sender, $e)
+        if ($e.Key -eq [System.Windows.Input.Key]::Enter) {
+            $e.Handled = $true
+            & $acceptSelection
+        }
+    })
+
+    $win.Add_ContentRendered({
+        $null = $grid.Focus()
     })
 
     $null = $win.ShowDialog()
@@ -1041,8 +1061,18 @@ function Update-ReportUi {
 
     if ($ReportData) {
         $txtReportSummary.Text = "candidates=$($ReportData.CandidateCount) applied=$($ReportData.AppliedCount) skipped=$($ReportData.SkippedCount)  (Strategy=$($ReportData.OverlapStrategy))"
-        $appliedGrid.ItemsSource = if ($ReportData.Applied) { @($ReportData.Applied) } else { @() }
-        $skippedGrid.ItemsSource = if ($ReportData.Skipped) { @($ReportData.Skipped) } else { @() }
+
+        [object[]]$appliedRows = @()
+        [object[]]$skippedRows = @()
+        if ($ReportData.Applied) {
+            $appliedRows = @($ReportData.Applied)
+        }
+        if ($ReportData.Skipped) {
+            $skippedRows = @($ReportData.Skipped)
+        }
+
+        $appliedGrid.ItemsSource = $appliedRows
+        $skippedGrid.ItemsSource = $skippedRows
     } else {
         $txtReportSummary.Text = "(no report.json)"
         $appliedGrid.ItemsSource = @()

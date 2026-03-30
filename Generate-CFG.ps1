@@ -1083,6 +1083,340 @@ function Convert-ProcessBlock {
     $prevNodeRef.Value = $loopEnd
 }
 
+function Test-ForEachObjectCommandAst {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    if ($null -eq $CommandAst) { return $false }
+    $cmdName = $CommandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($cmdName)) { return $false }
+    return ($cmdName -in @('ForEach-Object', 'ForEach', '%'))
+}
+
+function Get-ForEachObjectExpansionInfo {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    $result = [ordered]@{
+        IsForEachObject = $false
+        CanExpand       = $false
+        Reason          = $null
+        BeginBlockAst   = $null
+        ProcessBlockAst = $null
+        EndBlockAst     = $null
+    }
+
+    if (-not (Test-ForEachObjectCommandAst -CommandAst $CommandAst)) {
+        return [PSCustomObject]$result
+    }
+
+    $result.IsForEachObject = $true
+
+    function Resolve-ForEachLiteralScriptBlock {
+        param(
+            $Ast,
+            [string]$Role
+        )
+
+        if ($null -eq $Ast) {
+            return @{ Success = $false; Reason = "$Role block is missing"; BlockAst = $null }
+        }
+
+        if ($Ast -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+            return @{ Success = $false; Reason = "$Role block is not a literal scriptblock"; BlockAst = $null }
+        }
+
+        $sbAst = $Ast.ScriptBlock
+        if ($null -eq $sbAst) {
+            return @{ Success = $false; Reason = "$Role block has no ScriptBlock AST"; BlockAst = $null }
+        }
+
+        if ($sbAst.ParamBlock) {
+            return @{ Success = $false; Reason = "$Role block with param() is not expanded"; BlockAst = $null }
+        }
+
+        if ($null -ne $sbAst.BeginBlock -or $null -ne $sbAst.ProcessBlock) {
+            return @{ Success = $false; Reason = "$Role block with nested begin/process is not expanded"; BlockAst = $null }
+        }
+
+        return @{ Success = $true; Reason = $null; BlockAst = $sbAst }
+    }
+
+    $beginArg = $null
+    $processArg = $null
+    $endArg = $null
+    $positional = @()
+
+    for ($i = 1; $i -lt $CommandAst.CommandElements.Count; $i++) {
+        $elem = $CommandAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $pname = $elem.ParameterName
+            if ($pname -in @('Begin', 'Process', 'End')) {
+                $argAst = $elem.Argument
+                if (-not $argAst -and ($i + 1 -lt $CommandAst.CommandElements.Count)) {
+                    $i++
+                    $argAst = $CommandAst.CommandElements[$i]
+                }
+
+                switch ($pname) {
+                    'Begin'   { $beginArg = $argAst }
+                    'Process' { $processArg = $argAst }
+                    'End'     { $endArg = $argAst }
+                }
+            }
+            continue
+        }
+
+        $positional += $elem
+    }
+
+    if (-not $beginArg -and -not $processArg -and -not $endArg) {
+        $blocks = @()
+        foreach ($e in $positional) {
+            if ($e -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                $blocks += $e
+            } elseif ($e -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                $result.Reason = 'variable-backed scriptblock arguments fall back to runtime execution'
+                return [PSCustomObject]$result
+            }
+        }
+
+        if ($blocks.Count -eq 1) {
+            $processArg = $blocks[0]
+        } elseif ($blocks.Count -eq 2) {
+            $beginArg = $blocks[0]
+            $processArg = $blocks[1]
+        } elseif ($blocks.Count -ge 3) {
+            $beginArg = $blocks[0]
+            $processArg = $blocks[1]
+            $endArg = $blocks[2]
+        }
+    }
+
+    if (-not $processArg) {
+        $result.Reason = 'process block is missing'
+        return [PSCustomObject]$result
+    }
+
+    if ($beginArg) {
+        $resolvedBegin = Resolve-ForEachLiteralScriptBlock -Ast $beginArg -Role 'Begin'
+        if (-not $resolvedBegin.Success) {
+            $result.Reason = $resolvedBegin.Reason
+            return [PSCustomObject]$result
+        }
+        $result.BeginBlockAst = $resolvedBegin.BlockAst
+    }
+
+    $resolvedProcess = Resolve-ForEachLiteralScriptBlock -Ast $processArg -Role 'Process'
+    if (-not $resolvedProcess.Success) {
+        $result.Reason = $resolvedProcess.Reason
+        return [PSCustomObject]$result
+    }
+    $result.ProcessBlockAst = $resolvedProcess.BlockAst
+
+    if ($endArg) {
+        $resolvedEnd = Resolve-ForEachLiteralScriptBlock -Ast $endArg -Role 'End'
+        if (-not $resolvedEnd.Success) {
+            $result.Reason = $resolvedEnd.Reason
+            return [PSCustomObject]$result
+        }
+        $result.EndBlockAst = $resolvedEnd.BlockAst
+    }
+
+    $result.CanExpand = $true
+    return [PSCustomObject]$result
+}
+
+function New-OutputCaptureNode {
+    param(
+        [hashtable]$cfg,
+        [ValidateSet('OutputCaptureStart', 'OutputCaptureEnd')]
+        [string]$Type,
+        [string]$Text,
+        [int]$Line,
+        [string]$TargetVarName,
+        $OwnerAst = $null
+    )
+
+    $node = Add-Node -cfg $cfg -type $Type -text $Text -line $Line -ast $null -ownerAst $OwnerAst
+    $node.VarsRead = @()
+    $node.VarsWritten = @()
+
+    if ($Type -eq 'OutputCaptureEnd' -and -not [string]::IsNullOrWhiteSpace($TargetVarName)) {
+        $targetVarEntry = [PSCustomObject]@{ Name = $TargetVarName; Scope = [VarScope]::Unspecified }
+        Add-VarToNode -node $node -varEntry $targetVarEntry -accessType 'Write'
+        $node | Add-Member -NotePropertyName 'CaptureTargetVar' -NotePropertyValue $TargetVarName -Force
+    }
+
+    return $node
+}
+
+function Convert-InlineStatementList {
+    param(
+        [hashtable]$cfg,
+        [object[]]$Statements,
+        [ref]$prevNodeRef,
+        [pscustomobject]$NormalExitNode,
+        $endNodeRef = $null,
+        $loopContext = $null,
+        [string]$CurrentVar = $null,
+        [switch]$ReplacePipelineCurrent
+    )
+
+    $bodyStartIndex = $cfg.Nodes.Count
+    foreach ($statement in $Statements) {
+        $hasTerminator = Convert-AstNode -cfg $cfg -node $statement -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $null
+        if ($hasTerminator) { break }
+    }
+
+    if ($ReplacePipelineCurrent -and -not [string]::IsNullOrWhiteSpace($CurrentVar)) {
+        Replace-PipelineCurrentInNodes -cfg $cfg -nodes $cfg.Nodes -startIndex $bodyStartIndex -currentVar $CurrentVar -IncludePSItem
+    }
+
+    if ($null -ne $prevNodeRef.Value) {
+        $lastType = $prevNodeRef.Value.Type
+        if ($lastType -notin @('Break', 'Continue', 'Return', 'Exit', 'Throw')) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $NormalExitNode.Id
+        }
+    }
+
+    $prevNodeRef.Value = $NormalExitNode
+}
+
+function Expand-ForEachObjectPipelineElement {
+    param(
+        [hashtable]$cfg,
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [ref]$prevNodeRef,
+        [string]$PipeVarName,
+        [pscustomobject]$PipeVarEntry,
+        [string]$IncomingEdgeLabel = 'Pipeline'
+    )
+
+    $info = Get-ForEachObjectExpansionInfo -CommandAst $CommandAst
+    if (-not $info.IsForEachObject -or -not $info.CanExpand) {
+        return [PSCustomObject]@{
+            Expanded  = $false
+            Reason    = $info.Reason
+            FinalNode = $prevNodeRef.Value
+        }
+    }
+
+    $line = $CommandAst.Extent.StartLineNumber
+    $guid = [guid]::NewGuid().ToString('N').Substring(0, 12)
+    $inputVar = "__pfo_in_$guid"
+    $indexVar = "__pfo_${guid}_idx"
+    $currentVar = "__pfo_${guid}_cur"
+    $outputVar = "__pfo_${guid}_out"
+
+    $inputVarEntry = [PSCustomObject]@{ Name = $inputVar; Scope = [VarScope]::Unspecified }
+    $indexVarEntry = [PSCustomObject]@{ Name = $indexVar; Scope = [VarScope]::Unspecified }
+    $currentVarEntry = [PSCustomObject]@{ Name = $currentVar; Scope = [VarScope]::Unspecified }
+    $outputVarEntry = [PSCustomObject]@{ Name = $outputVar; Scope = [VarScope]::Unspecified }
+
+    $initText = "`$$inputVar = `$$PipeVarName; `$$indexVar = 0; `$$outputVar = @()"
+    $initNode = Add-Node -cfg $cfg -type 'ProcessInit' -text $initText -line $line -ast $null -ownerAst $CommandAst
+    $initNode.VarsRead = @()
+    $initNode.VarsWritten = @()
+    Add-VarToNode -node $initNode -varEntry $PipeVarEntry -accessType 'Read'
+    Add-VarToNode -node $initNode -varEntry $inputVarEntry -accessType 'Write'
+    Add-VarToNode -node $initNode -varEntry $indexVarEntry -accessType 'Write'
+    Add-VarToNode -node $initNode -varEntry $outputVarEntry -accessType 'Write'
+    if ($null -ne $prevNodeRef.Value) {
+        if ([string]::IsNullOrWhiteSpace($IncomingEdgeLabel)) {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $initNode.Id
+        } else {
+            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $initNode.Id -label $IncomingEdgeLabel
+        }
+    }
+
+    $currentNode = $initNode
+    $breakLoopEnd = Add-Node -cfg $cfg -type 'LoopEnd' -text 'Break ForEach-Object' -line $CommandAst.Extent.EndLineNumber -ast $null -ownerAst $CommandAst
+
+    $beginStatements = if ($info.BeginBlockAst -and $info.BeginBlockAst.EndBlock) { @($info.BeginBlockAst.EndBlock.Statements) } else { @() }
+    if ($beginStatements.Count -gt 0) {
+        $beginCaptureStart = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureStart' -Text 'Capture Begin Output' -Line $line -TargetVarName $null -OwnerAst $CommandAst
+        $beginNormalCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Begin Output' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
+        $beginBreakCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Begin Output (Break)' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
+        Add-Edge -cfg $cfg -from $currentNode.Id -to $beginCaptureStart.Id
+
+        $beginPrevNodeRef = [ref]$beginCaptureStart
+        $beginLoopContext = [PSCustomObject]@{
+            LoopEnd      = $beginBreakCaptureEnd
+            LoopContinue = $beginNormalCaptureEnd
+        }
+        Convert-InlineStatementList -cfg $cfg -Statements $beginStatements -prevNodeRef $beginPrevNodeRef -NormalExitNode $beginNormalCaptureEnd -endNodeRef $beginNormalCaptureEnd -loopContext $beginLoopContext
+        Add-Edge -cfg $cfg -from $beginBreakCaptureEnd.Id -to $breakLoopEnd.Id
+        $currentNode = $beginNormalCaptureEnd
+    }
+
+    $conditionNode = Add-Node -cfg $cfg -type 'ProcessCondition' -text "[bool](`$$indexVar -lt `$$inputVar.Count)" -line $line -ast $null -ownerAst $CommandAst
+    $conditionNode.VarsRead = @($indexVarEntry, $inputVarEntry)
+    $conditionNode.VarsWritten = @()
+    Add-Edge -cfg $cfg -from $currentNode.Id -to $conditionNode.Id
+
+    $normalLoopEnd = Add-Node -cfg $cfg -type 'ProcessEnd' -text 'End ForEach-Object Process' -line $CommandAst.Extent.EndLineNumber -ast $null -ownerAst $CommandAst
+    Add-Edge -cfg $cfg -from $conditionNode.Id -to $normalLoopEnd.Id -label 'No more items'
+
+    $bindNode = Add-Node -cfg $cfg -type 'ProcessBind' -text "`$$currentVar = `$$inputVar[`$$indexVar]" -line $line -ast $null -ownerAst $CommandAst
+    $bindNode.VarsRead = @($inputVarEntry, $indexVarEntry)
+    $bindNode.VarsWritten = @($currentVarEntry)
+    Add-Edge -cfg $cfg -from $conditionNode.Id -to $bindNode.Id -label 'Has next'
+
+    $processCaptureStart = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureStart' -Text 'Capture Process Output' -Line $line -TargetVarName $null -OwnerAst $CommandAst
+    $processNormalCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Process Output' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
+    $processBreakCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Process Output (Break)' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
+    $processContinueCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Process Output (Continue)' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
+    Add-Edge -cfg $cfg -from $bindNode.Id -to $processCaptureStart.Id
+
+    $processStatements = if ($info.ProcessBlockAst -and $info.ProcessBlockAst.EndBlock) { @($info.ProcessBlockAst.EndBlock.Statements) } else { @() }
+    $processPrevNodeRef = [ref]$processCaptureStart
+    $processLoopContext = [PSCustomObject]@{
+        LoopEnd      = $processBreakCaptureEnd
+        LoopContinue = $processContinueCaptureEnd
+    }
+    Convert-InlineStatementList -cfg $cfg -Statements $processStatements -prevNodeRef $processPrevNodeRef -NormalExitNode $processNormalCaptureEnd -endNodeRef $processNormalCaptureEnd -loopContext $processLoopContext -CurrentVar $currentVar -ReplacePipelineCurrent
+
+    $iterNode = Add-Node -cfg $cfg -type 'ProcessIter' -text "`$$indexVar++" -line $line -ast $null -ownerAst $CommandAst
+    $iterNode.VarsRead = @($indexVarEntry)
+    $iterNode.VarsWritten = @($indexVarEntry)
+    Add-Edge -cfg $cfg -from $processNormalCaptureEnd.Id -to $iterNode.Id
+    Add-Edge -cfg $cfg -from $processContinueCaptureEnd.Id -to $iterNode.Id
+    Add-Edge -cfg $cfg -from $processBreakCaptureEnd.Id -to $breakLoopEnd.Id
+    Add-Edge -cfg $cfg -from $iterNode.Id -to $conditionNode.Id
+
+    $currentNode = $normalLoopEnd
+    $endStatements = if ($info.EndBlockAst -and $info.EndBlockAst.EndBlock) { @($info.EndBlockAst.EndBlock.Statements) } else { @() }
+    if ($endStatements.Count -gt 0) {
+        $endCaptureStart = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureStart' -Text 'Capture End Output' -Line $line -TargetVarName $null -OwnerAst $CommandAst
+        $endNormalCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append End Output' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
+        Add-Edge -cfg $cfg -from $normalLoopEnd.Id -to $endCaptureStart.Id
+
+        $endPrevNodeRef = [ref]$endCaptureStart
+        $endLoopContext = [PSCustomObject]@{
+            LoopEnd      = $endNormalCaptureEnd
+            LoopContinue = $endNormalCaptureEnd
+        }
+        Convert-InlineStatementList -cfg $cfg -Statements $endStatements -prevNodeRef $endPrevNodeRef -NormalExitNode $endNormalCaptureEnd -endNodeRef $endNormalCaptureEnd -loopContext $endLoopContext
+        $currentNode = $endNormalCaptureEnd
+    }
+
+    $commitNode = Add-Node -cfg $cfg -type 'AssignmentStatementAst' -text "`$$PipeVarName = `$$outputVar" -line $line -ast $null -ownerAst $CommandAst
+    $commitNode.VarsRead = @($outputVarEntry)
+    $commitNode.VarsWritten = @($PipeVarEntry)
+    Add-Edge -cfg $cfg -from $currentNode.Id -to $commitNode.Id
+    Add-Edge -cfg $cfg -from $breakLoopEnd.Id -to $commitNode.Id
+
+    $prevNodeRef.Value = $commitNode
+    return [PSCustomObject]@{
+        Expanded  = $true
+        Reason    = $null
+        FinalNode = $commitNode
+    }
+}
 # 为 PipelineElement 节点标记特殊管道 cmdlet（仅用于可视化/后续分析，不改变 CFG 结构）
 function Mark-PipelineCmdletNode {
     param(
@@ -1717,8 +2051,6 @@ function Expand-NestedPipelines {
         return $null
     }
 
-    # 计算每个 Pipeline 的嵌套深度（从 ast 开始向下计算）
-    # 深度越大表示越内层，应该先处理
     $pipelinesWithDepth = $nestedPipelines | ForEach-Object {
         $depth = 0
         $ancestor = $_.Parent
@@ -1734,11 +2066,8 @@ function Expand-NestedPipelines {
         }
     }
 
-    # 按深度降序排列（最深的先处理），同深度的按位置倒序
     $sortedPipelines = $pipelinesWithDepth | Sort-Object @{Expression={$_.Depth}; Descending=$true}, @{Expression={$_.Pipeline.Extent.StartOffset}; Descending=$true}
 
-    # 记录所有 Pipeline 的变量名和替换信息
-    # Key: Pipeline AST -> Value: @{ Original, Replacement, PipeVar, ... }
     $pipelineReplacements = @{}
     $pipeVarEntries = @()
 
@@ -1751,28 +2080,35 @@ function Expand-NestedPipelines {
         $elements = $pipeline.PipelineElements
         $lastIndex = $elements.Count - 1
 
-        # 拆分 Pipeline 的前 N-1 个元素为独立节点
         for ($i = 0; $i -lt $elements.Count - 1; $i++) {
             $element = $elements[$i]
             $elementText = $element.Extent.Text
             $elementVarEntries = @()
 
-            # 检查此元素内是否有已处理的内层 Pipeline，进行替换
             foreach ($innerPipeline in $pipelineReplacements.Keys) {
                 if ($elementText.Contains($pipelineReplacements[$innerPipeline].Original)) {
                     $elementText = $elementText.Replace(
                         $pipelineReplacements[$innerPipeline].Original,
                         $pipelineReplacements[$innerPipeline].Replacement
                     )
-                    # 也收集内层 Pipeline 的变量
                     $elementVarEntries += $pipelineReplacements[$innerPipeline].PipeVarEntry
                 }
             }
 
-            # 检查此元素内是否有 ScriptBlock 需要展开
+            $expandedForEach = $false
+            if ($i -gt 0 -and $element -is [System.Management.Automation.Language.CommandAst]) {
+                $foreachExpansion = Expand-ForEachObjectPipelineElement -cfg $cfg -CommandAst $element -prevNodeRef $prevNodeRef -PipeVarName $pipeVar -PipeVarEntry $pipeVarEntry -IncomingEdgeLabel 'Pipeline'
+                if ($foreachExpansion.Expanded) {
+                    $expandedForEach = $true
+                }
+            }
+
+            if ($expandedForEach) {
+                continue
+            }
+
             $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
             if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
-                # 应用 ScriptBlock 替换到 elementText
                 $nestedSBs = Get-AllNestedScriptBlocks -ast $element
                 foreach ($sb in $nestedSBs) {
                     if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
@@ -1783,7 +2119,6 @@ function Expand-NestedPipelines {
                 }
             }
 
-            # 构建节点文本
             if ($i -eq 0) {
                 $nodeText = $elementText
             } else {
@@ -1793,21 +2128,16 @@ function Expand-NestedPipelines {
             $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
             Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
 
-            # 添加 ScriptBlock 变量到 VarsRead
             foreach ($varEntry in $elementVarEntries) {
                 Add-VarToNode -node $pipeNode -varEntry $varEntry -accessType "Read"
             }
 
-            # 变量流处理
             if ($i -eq 0) {
-                # 首元素：写入 $pipeVar
                 Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
             } else {
-                # 中间元素：读取 + 写入 $pipeVar
                 Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Both"
             }
 
-            # 连接边
             if ($null -ne $prevNodeRef.Value) {
                 if ($i -gt 0) {
                     Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
@@ -1818,12 +2148,10 @@ function Expand-NestedPipelines {
             $prevNodeRef.Value = $pipeNode
         }
 
-        # 处理最后一个元素
         $lastElement = $elements[$lastIndex]
         $lastElementText = $lastElement.Extent.Text
         $lastElementVarEntries = @()
 
-        # 检查是否有已处理的内层 Pipeline
         foreach ($innerPipeline in $pipelineReplacements.Keys) {
             if ($lastElementText.Contains($pipelineReplacements[$innerPipeline].Original)) {
                 $lastElementText = $lastElementText.Replace(
@@ -1834,23 +2162,29 @@ function Expand-NestedPipelines {
             }
         }
 
-        # 检查此元素内是否有 ScriptBlock 需要展开
-        $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $lastElement -prevNodeRef $prevNodeRef
-        if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
-            $nestedSBs = Get-AllNestedScriptBlocks -ast $lastElement
-            foreach ($sb in $nestedSBs) {
-                if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
-                    $varName = $cfg.ProcessedScriptBlocks[$sb]
-                    $lastElementText = $lastElementText.Replace($sb.Extent.Text, "`$$varName")
-                    $lastElementVarEntries += [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+        $expandedLastForEach = $false
+        if ($lastIndex -gt 0 -and $lastElement -is [System.Management.Automation.Language.CommandAst]) {
+            $foreachExpansion = Expand-ForEachObjectPipelineElement -cfg $cfg -CommandAst $lastElement -prevNodeRef $prevNodeRef -PipeVarName $pipeVar -PipeVarEntry $pipeVarEntry -IncomingEdgeLabel 'Pipeline'
+            if ($foreachExpansion.Expanded) {
+                $expandedLastForEach = $true
+            }
+        }
+
+        if (-not $expandedLastForEach) {
+            $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $lastElement -prevNodeRef $prevNodeRef
+            if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
+                $nestedSBs = Get-AllNestedScriptBlocks -ast $lastElement
+                foreach ($sb in $nestedSBs) {
+                    if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
+                        $varName = $cfg.ProcessedScriptBlocks[$sb]
+                        $lastElementText = $lastElementText.Replace($sb.Extent.Text, "`$$varName")
+                        $lastElementVarEntries += [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
+                    }
                 }
             }
         }
 
-        # 记录替换信息：将整个 Pipeline 替换为 "$pipeVar | 最后一个元素"
-        # 注意：$originalText 需要是已经替换过内层 Pipeline 和 ScriptBlock 后的文本
         $originalText = $pipeline.Extent.Text
-        # 应用 ScriptBlock 替换
         $nestedSBsInPipeline = Get-AllNestedScriptBlocks -ast $pipeline
         foreach ($sb in $nestedSBsInPipeline) {
             if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
@@ -1858,12 +2192,12 @@ function Expand-NestedPipelines {
                 $originalText = $originalText.Replace($sb.Extent.Text, "`$$varName")
             }
         }
-        # 应用之前处理过的内层 Pipeline 的替换
         foreach ($innerPipeline in $pipelineReplacements.Keys) {
             $innerR = $pipelineReplacements[$innerPipeline]
             $originalText = $originalText.Replace($innerR.Original, $innerR.Replacement)
         }
-        $replacementText = "`$$pipeVar | " + $lastElementText
+
+        $replacementText = if ($expandedLastForEach) { "`$$pipeVar" } else { "`$$pipeVar | " + $lastElementText }
 
         $pipelineReplacements[$pipeline] = @{
             Original = $originalText
@@ -1874,10 +2208,8 @@ function Expand-NestedPipelines {
         $pipeVarEntries += $pipeVarEntry
     }
 
-    # 修改原始文本：按照处理顺序（最深的先替换）
     $modifiedText = $ast.Extent.Text
 
-    # 首先替换所有 ScriptBlock
     $allNestedSBs = Get-AllNestedScriptBlocks -ast $ast
     foreach ($sb in $allNestedSBs) {
         if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
@@ -1886,19 +2218,16 @@ function Expand-NestedPipelines {
         }
     }
 
-    # 然后替换所有 Pipeline
     foreach ($pipeInfo in $sortedPipelines) {
         $pipeline = $pipeInfo.Pipeline
         $r = $pipelineReplacements[$pipeline]
         $modifiedText = $modifiedText.Replace($r.Original, $r.Replacement)
     }
 
-    # 收集所有 ScriptBlock 变量
     $allScriptBlockVarEntries = @()
     foreach ($pipeline in $pipelineReplacements.Keys) {
         $allScriptBlockVarEntries += $pipelineReplacements[$pipeline].LastElementVarEntries
     }
-    # 也收集所有直接处理的 ScriptBlock 变量
     foreach ($sb in $allNestedSBs) {
         if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
             $varName = $cfg.ProcessedScriptBlocks[$sb]
@@ -1912,7 +2241,6 @@ function Expand-NestedPipelines {
         ScriptBlockVarEntries = $allScriptBlockVarEntries
     }
 }
-
 #处理IfstatementAst
 function Convert-IfAstNode {
     param(
@@ -3444,7 +3772,6 @@ function Convert-AssignmentAstNode {
         [ref]$prevNodeRef
     )
 
-    # 检查是否是多元素 Pipeline
     if ($assignAst.Right -is [System.Management.Automation.Language.PipelineAst] -and
         $assignAst.Right.PipelineElements.Count -gt 1) {
         $leftText = $assignAst.Left.Extent.Text
@@ -3461,7 +3788,6 @@ function Convert-AssignmentAstNode {
         $elements = $assignAst.Right.PipelineElements
         $lastIndex = $elements.Count - 1
 
-        # 【修改】使用唯一的 Pipeline 中间变量，避免 $_ 在同一 runspace 中冲突
         $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
         $pipeVarName = "_pipe_$guid"
         $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVarName; Scope = [VarScope]::Unspecified }
@@ -3472,8 +3798,6 @@ function Convert-AssignmentAstNode {
             $hasPipelineExpansion = $false
             $allVarEntries = @()
 
-            # 1) 展开元素内的嵌套 Pipeline（会创建前置 PipelineElement 节点）
-            # Expand-NestedPipelines 内部也会处理其内部的 ScriptBlock
             $pipelineExpansion = Expand-NestedPipelines -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
             if ($null -ne $pipelineExpansion) {
                 $baseText = $pipelineExpansion.ModifiedText
@@ -3484,7 +3808,27 @@ function Convert-AssignmentAstNode {
                 $hasPipelineExpansion = $true
             }
 
-            # 2) 展开元素内的 ScriptBlock（非嵌套 Pipeline 场景）
+            $expandedForEach = $false
+            if ($i -gt 0 -and $element -is [System.Management.Automation.Language.CommandAst]) {
+                $foreachExpansion = Expand-ForEachObjectPipelineElement -cfg $cfg -CommandAst $element -prevNodeRef $prevNodeRef -PipeVarName $pipeVarName -PipeVarEntry $pipeVarEntry -IncomingEdgeLabel 'Pipeline'
+                if ($foreachExpansion.Expanded) {
+                    $expandedForEach = $true
+                    if ($i -eq $lastIndex) {
+                        $assignText = "$leftText $operatorText `$$pipeVarName"
+                        $assignNode = Add-Node -cfg $cfg -type $assignAst.GetType().Name -text $assignText -line $assignAst.Extent.StartLineNumber -ast $assignAst
+                        Add-VarToNode -node $assignNode -varEntry $pipeVarEntry -accessType "Read"
+                        if ($null -ne $prevNodeRef.Value) {
+                            Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $assignNode.Id -label "Pipeline"
+                        }
+                        $prevNodeRef.Value = $assignNode
+                    }
+                }
+            }
+
+            if ($expandedForEach) {
+                continue
+            }
+
             if (-not $hasPipelineExpansion) {
                 $sbExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
                 if ($null -ne $sbExpansion -and -not $sbExpansion.InvokeOnlyExpanded -and $null -ne $sbExpansion.ModifiedText) {
@@ -3495,7 +3839,6 @@ function Convert-AssignmentAstNode {
                 }
             }
             else {
-                # 已展开 Pipeline，兜底：替换 Pipeline 外残留的 ScriptBlock（理论上 Expand-NestedPipelines 已覆盖）
                 $remainingSBs = Get-AllNestedScriptBlocks -ast $element
                 foreach ($sb in $remainingSBs) {
                     if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
@@ -3518,7 +3861,6 @@ function Convert-AssignmentAstNode {
             $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $nodeAst
             Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
 
-            # 将展开产生的变量加入 VarsRead（ScriptBlock 变量 / 内层 PipeVar）
             foreach ($varEntry in $allVarEntries) {
                 Add-VarToNode -node $pipeNode -varEntry $varEntry -accessType "Read"
             }
@@ -3543,36 +3885,28 @@ function Convert-AssignmentAstNode {
         return
     }
 
-    # 检查右侧是否包含 ScriptBlock，如果有则创建独立子图
-    # 同时记录是否是直接赋值（$var = { ... }），这种情况不需要替换文本
     $isDirectScriptBlockAssignment = $false
     $nestedScriptBlocks = Get-AllNestedScriptBlocks -ast $assignAst.Right
     foreach ($sb in $nestedScriptBlocks) {
-        # 跳过已处理的 ScriptBlock
         if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
             continue
         }
 
         $execType = Get-ScriptBlockExecutionType -scriptBlockExprAst $sb
         if ($execType -eq "Deferred") {
-            # 从赋值左侧获取变量名
             $varName = $null
             $left = $assignAst.Left
             if ($left -is [System.Management.Automation.Language.VariableExpressionAst]) {
                 $varName = $left.VariablePath.UserPath
             }
 
-            # 检查 ScriptBlock 是否直接作为赋值右侧（而不是嵌套在其他表达式中）
-            # 只有 $var = { ... } 这种直接赋值才使用变量名作为子图名称
             $isDirectAssignment = $false
             if ($null -ne $varName) {
                 $rightAst = $assignAst.Right
-                # 情况1: 右侧直接是 CommandExpressionAst，其 Expression 是 ScriptBlock
                 if ($rightAst -is [System.Management.Automation.Language.CommandExpressionAst] -and
                     $rightAst.Expression -eq $sb) {
                     $isDirectAssignment = $true
                 }
-                # 情况2: 右侧是 PipelineAst，包含单个 CommandExpressionAst
                 elseif ($rightAst -is [System.Management.Automation.Language.PipelineAst] -and
                     $rightAst.PipelineElements.Count -eq 1) {
                     $element = $rightAst.PipelineElements[0]
@@ -3584,13 +3918,10 @@ function Convert-AssignmentAstNode {
             }
 
             if ($isDirectAssignment) {
-                # 直接赋值：$scriptBlock = { ... }
-                # 使用变量名作为子图名称，标记为已处理
                 $cfg.ProcessedScriptBlocks[$sb] = $varName
                 $null = Convert-ScriptBlockDefinition -cfg $cfg -scriptBlockExprAst $sb -blockName $varName
-                $isDirectScriptBlockAssignment = $true  # 标记为直接赋值，后续不替换文本
+                $isDirectScriptBlockAssignment = $true
             } else {
-                # 嵌套在其他表达式中，生成唯一块名称
                 $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
                 $blockName = "_block_$guid"
                 $cfg.ProcessedScriptBlocks[$sb] = $blockName
@@ -3599,50 +3930,54 @@ function Convert-AssignmentAstNode {
         }
     }
 
-    # 检查右侧是否有嵌套的 Pipeline 或需要展开的 ScriptBlock（如 InvokeOnly 类型）
     $modifiedText = $assignAst.Extent.Text
     $hasExpansion = $false
-    $hasPipelineNodes = $false  # 是否有前置的 Pipeline 节点被创建
+    $hasPipelineNodes = $false
+    $finalVarEntries = @()
 
-    # 1. 检查嵌套 Pipeline
     $pipelineExpansion = Expand-NestedPipelines -cfg $cfg -ast $assignAst.Right -prevNodeRef $prevNodeRef
     if ($null -ne $pipelineExpansion) {
-        # 替换右侧的 Pipeline
         $modifiedText = $modifiedText.Replace($assignAst.Right.Extent.Text, $pipelineExpansion.ModifiedText)
         $hasExpansion = $true
-        $hasPipelineNodes = $true  # Expand-NestedPipelines 会创建 PipelineElement 节点
-    }
-
-    # 2. 检查需要展开的 ScriptBlock（如 InvokeOnly 类型）
-    $scriptBlockExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $assignAst.Right -prevNodeRef $prevNodeRef
-    if ($null -ne $scriptBlockExpansion) {
-        if ($null -ne $scriptBlockExpansion.ModifiedText) {
-            # 有修改后的文本（包括 InvokeOnly 和 Immediate 类型）
-            # 替换右侧表达式为修改后的文本
-            $modifiedText = $modifiedText.Replace($assignAst.Right.Extent.Text, $scriptBlockExpansion.ModifiedText)
-            $hasExpansion = $true
-            # 注意：InvokeOnly 返回 InvokeOnlyExpanded = false 时不会创建 PipelineElement 节点
-            # 只有文本被替换，不需要设置 hasPipelineNodes
+        $hasPipelineNodes = $true
+        if ($null -ne $pipelineExpansion.PipeVarEntries) {
+            $finalVarEntries += $pipelineExpansion.PipeVarEntries
         }
-        # InvokeOnlyExpanded = true 的情况只在独立的 & { } 时发生，不会出现在赋值语句中
+        if ($null -ne $pipelineExpansion.ScriptBlockVarEntries) {
+            $finalVarEntries += $pipelineExpansion.ScriptBlockVarEntries
+        }
     }
 
-    # 如果没有 Pipeline 展开，也需要替换已处理的 ScriptBlock
-    # 但如果是直接赋值（$var = { ... }），则不替换，保持原始文本
+    if (-not $hasPipelineNodes) {
+        $scriptBlockExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $assignAst.Right -prevNodeRef $prevNodeRef
+        if ($null -ne $scriptBlockExpansion) {
+            if ($null -ne $scriptBlockExpansion.ModifiedText) {
+                $modifiedText = $modifiedText.Replace($assignAst.Right.Extent.Text, $scriptBlockExpansion.ModifiedText)
+                $hasExpansion = $true
+            }
+            if ($null -ne $scriptBlockExpansion.ScriptBlockVarEntries) {
+                $finalVarEntries += $scriptBlockExpansion.ScriptBlockVarEntries
+            }
+        }
+    }
+
     if (-not $hasExpansion -and -not $isDirectScriptBlockAssignment) {
         foreach ($sb in (Get-AllNestedScriptBlocks -ast $assignAst.Right)) {
             if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
                 $varName = $cfg.ProcessedScriptBlocks[$sb]
                 $modifiedText = $modifiedText.Replace($sb.Extent.Text, "`$$varName")
+                $finalVarEntries += [PSCustomObject]@{ Name = $varName; Scope = [VarScope]::Unspecified }
             }
         }
     }
 
-    # 创建赋值语句节点
     $currentNode = Add-Node -cfg $cfg -type $assignAst.GetType().Name -text $modifiedText -line $assignAst.Extent.StartLineNumber -ast $assignAst
+    foreach ($varEntry in $finalVarEntries) {
+        Add-VarToNode -node $currentNode -varEntry $varEntry -accessType "Read"
+    }
+
     if ($null -ne $prevNodeRef.Value) {
         if ($hasPipelineNodes) {
-            # 只有真正有 Pipeline 节点被前置创建时才使用 Pipeline 标签
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $currentNode.Id -label "Pipeline"
         } else {
             Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $currentNode.Id
@@ -3650,7 +3985,6 @@ function Convert-AssignmentAstNode {
     }
     $prevNodeRef.Value = $currentNode
 }
-
 # 处理 PipelineAst 节点
 function Convert-PipelineAstNode {
     param(
@@ -3665,7 +3999,6 @@ function Convert-PipelineAstNode {
     $elements = $pipelineAst.PipelineElements
     $lastIndex = $elements.Count - 1
 
-    # 【修改】使用唯一的 Pipeline 中间变量，避免 $_ 在同一 runspace 中冲突
     $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
     $pipeVarName = "_pipe_$guid"
     $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVarName; Scope = [VarScope]::Unspecified }
@@ -3674,38 +4007,49 @@ function Convert-PipelineAstNode {
         $element = $elements[$i]
         $baseText = $element.Extent.Text
         $hasExpansion = $false
-        $hasPipelineExpansion = $false  # 是否有 Pipeline 展开（区分 ScriptBlock 展开）
+        $hasPipelineExpansion = $false
         $allVarEntries = @()
         $skipNodeCreation = $false
 
-        # 1. 检查当前元素内部是否有嵌套的多元素 Pipeline（如子表达式中的 pipeline）
-        # Expand-NestedPipelines 内部会处理 Pipeline 内的 ScriptBlock
         $pipelineExpansion = Expand-NestedPipelines -cfg $cfg -ast $element -prevNodeRef $prevNodeRef
         if ($null -ne $pipelineExpansion) {
             $baseText = $pipelineExpansion.ModifiedText
             $allVarEntries += $pipelineExpansion.PipeVarEntries
-            # 也添加 ScriptBlock 变量
             if ($null -ne $pipelineExpansion.ScriptBlockVarEntries) {
                 $allVarEntries += $pipelineExpansion.ScriptBlockVarEntries
             }
             $hasExpansion = $true
-            $hasPipelineExpansion = $true  # 区分 Pipeline 展开
+            $hasPipelineExpansion = $true
         }
 
-        # 2. 检查当前元素内部是否有嵌套的 ScriptBlock（仅处理不在嵌套 Pipeline 内的 ScriptBlock）
-        # 如果已经有 Pipeline 展开，ScriptBlock 已经在 Expand-NestedPipelines 中处理过了
-        # 这里只需要处理不在 Pipeline 内的独立 ScriptBlock
+        $expandedForEach = $false
+        if ($i -gt 0 -and $element -is [System.Management.Automation.Language.CommandAst]) {
+            $foreachExpansion = Expand-ForEachObjectPipelineElement -cfg $cfg -CommandAst $element -prevNodeRef $prevNodeRef -PipeVarName $pipeVarName -PipeVarEntry $pipeVarEntry -IncomingEdgeLabel 'Pipeline'
+            if ($foreachExpansion.Expanded) {
+                $expandedForEach = $true
+                if ($i -eq $lastIndex) {
+                    $emitNode = Add-Node -cfg $cfg -type "PipelineElement" -text "`$$pipeVarName" -line $element.Extent.StartLineNumber -ast $null -ownerAst $element
+                    $emitNode.VarsRead = @($pipeVarEntry)
+                    $emitNode.VarsWritten = @()
+                    if ($null -ne $prevNodeRef.Value) {
+                        Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $emitNode.Id -label "Pipeline"
+                    }
+                    $prevNodeRef.Value = $emitNode
+                }
+            }
+        }
+
+        if ($expandedForEach) {
+            continue
+        }
+
         if (-not $hasExpansion) {
             $scriptBlockExpansion = Expand-NestedScriptBlocks -cfg $cfg -ast $element -prevNodeRef $prevNodeRef -endNodeRef $endNodeRef -loopContext $loopContext -switchContext $switchContext
             if ($null -ne $scriptBlockExpansion) {
                 if ($scriptBlockExpansion.InvokeOnlyExpanded) {
-                    # InvokeOnly 类型（如 & { } 或 . { }）已经完全展开，不需要创建后续节点
-                    # 但如果是 pipeline 的非首元素，需要修改已创建的节点，添加管道输入
                     if ($i -gt 0 -and $null -ne $prevNodeRef.Value) {
                         $createdNode = $prevNodeRef.Value
-                        # 修改节点文本，添加管道前缀
                         $createdNode.Text = "`$$pipeVarName | " + $createdNode.Text
-                        # 添加管道变量读取
                         Add-VarToNode -node $createdNode -varEntry $pipeVarEntry -accessType "Read"
                     }
                     $skipNodeCreation = $true
@@ -3713,13 +4057,9 @@ function Convert-PipelineAstNode {
                     $baseText = $scriptBlockExpansion.ModifiedText
                     $allVarEntries += $scriptBlockExpansion.ScriptBlockVarEntries
                     $hasExpansion = $true
-                    # 注意：ScriptBlock 展开不设置 hasPipelineExpansion
                 }
             }
         } else {
-            # Pipeline 已展开，但还需要将 Pipeline 外的 ScriptBlock 也替换到 baseText 中
-            # （实际上 Expand-NestedPipelines 应该已经处理了所有 ScriptBlock）
-            # 这里做额外检查：如果 baseText 中仍有未替换的 ScriptBlock，进行替换
             $remainingSBs = Get-AllNestedScriptBlocks -ast $element
             foreach ($sb in $remainingSBs) {
                 if ($cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
@@ -3729,56 +4069,41 @@ function Convert-PipelineAstNode {
             }
         }
 
-        # 如果是 InvokeOnly 类型，跳过节点创建
         if ($skipNodeCreation) {
             continue
         }
 
-        # 构建节点文本：使用唯一的 $_pipe_xxxx 变量
         $nodeText = if ($i -gt 0) { "`$$pipeVarName | " + $baseText } else { $baseText }
         $pipeNode = Add-Node -cfg $cfg -type "PipelineElement" -text $nodeText -line $element.Extent.StartLineNumber -ast $element
         Mark-PipelineCmdletNode -Node $pipeNode -ElementAst $element
 
-        # 添加展开的变量到 VarsRead
         foreach ($varEntry in $allVarEntries) {
             Add-VarToNode -node $pipeNode -varEntry $varEntry -accessType "Read"
         }
 
-        # 连接边
         if ($null -ne $prevNodeRef.Value) {
             if ($hasPipelineExpansion) {
-                # 有 Pipeline 展开（嵌套 Pipeline），使用 Pipeline 标签
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
             } elseif ($i -gt 0) {
-                # Pipeline 元素之间用 "Pipeline" 标签
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id -label "Pipeline"
             } else {
-                # 首元素与前一个节点的普通连接（包括 ScriptBlock 展开的情况）
                 Add-Edge -cfg $cfg -from $prevNodeRef.Value.Id -to $pipeNode.Id
             }
         }
 
-        # 变量流处理：
-        # - 首元素：只写入 $_pipe_xxxx (产生管道输出)
-        # - 中间元素：读取 + 写入 $_pipe_xxxx (接收输入并产生输出)
-        # - 末元素：只读取 $_pipe_xxxx (接收输入，不再传递)
         if ($i -eq 0) {
-            # 首元素：写入 $_pipe_xxxx
             if ($elements.Count -gt 1) {
                 Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Write"
             }
         } elseif ($i -eq $lastIndex) {
-            # 末元素：只读取 $_pipe_xxxx
             Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Read"
         } else {
-            # 中间元素：读取 + 写入 $_pipe_xxxx
             Add-VarToNode -node $pipeNode -varEntry $pipeVarEntry -accessType "Both"
         }
 
         $prevNodeRef.Value = $pipeNode
     }
 }
-
 # 处理 ReturnStatementAst 节点
 # 返回 $true 表示后续语句不可达
 function Convert-ReturnAstNode {

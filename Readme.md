@@ -212,7 +212,7 @@ pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 `
 1. `Invoke-CFGTraversal -CFG <hashtable> [-LogPath <string>] [-MaxIterations <int>] [-MaxTotalNodes <int>]`
 2. `New-CFGExecutionSession -CFG <hashtable> [-LogPath <string>] [-MaxIterations <int>] [-MaxTotalNodes <int>]`
 3. `Invoke-CFGStep -Session <hashtable> [-StopAtUserNode]`
-4. `Get-CFGVariableStack -Session <hashtable> [-IncludeInternal]`
+4. `Get-CFGVariableStack -Session <hashtable> [-IncludeAdvancedInternal] [-IncludeInternal]`
 5. `Set-CFGVariableValue -Session <hashtable> -VariableName <string> -ValueExpression <string>`
 6. `Get-CFGNextEdgePreview -Session <hashtable>`
 7. `Close-CFGExecutionSession -Session <hashtable>`

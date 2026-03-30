@@ -1310,6 +1310,39 @@ function Invoke-NodeSafe {
         }
     }
 
+    if ($Node.Type -eq 'OutputCaptureStart') {
+        Push-OutputCapture -Context $Context
+        return @{
+            Success  = $true
+            Executed = $true
+            Result   = $null
+            Error    = $null
+            Action   = 'CaptureStart'
+        }
+    }
+
+    if ($Node.Type -eq 'OutputCaptureEnd') {
+        $frame = Pop-OutputCapture -Context $Context
+        $outputs = if ($frame -and $frame.Outputs) { @($frame.Outputs) } else { @() }
+        $targetVarName = $null
+        if ($Node.PSObject.Properties.Match('CaptureTargetVar').Count -gt 0) {
+            $targetVarName = [string]$Node.CaptureTargetVar
+        }
+        if (-not [string]::IsNullOrWhiteSpace($targetVarName)) {
+            $existingValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $targetVarName
+            $combinedOutputs = @()
+            if ($null -ne $existingValue) { $combinedOutputs += @($existingValue) }
+            if ($outputs.Count -gt 0) { $combinedOutputs += $outputs }
+            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($targetVarName, $combinedOutputs)
+        }
+        return @{
+            Success  = $true
+            Executed = $true
+            Result   = $null
+            Error    = $null
+            Action   = 'CaptureEnd'
+        }
+    }
     # 2. 脚本块调用检测 - 统一使用 Get-ScriptBlockCallInfo 处理各种形式
     if ($Context.ScriptBlockSubgraphs.Count -gt 0 -and $Node.Ast) {
         $callInfo = Get-ScriptBlockCallInfo -Node $Node -Context $Context
@@ -3829,7 +3862,7 @@ function Invoke-NodeTraverse {
             $captureThis = $true
 
             # 条件/控制节点的求值结果不属于脚本输出流
-            $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
+            $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition', 'OutputCaptureStart', 'OutputCaptureEnd')
             if ($currentNode.Type -in $nonOutputTypes) {
                 $captureThis = $false
             }
@@ -5104,7 +5137,7 @@ function Test-CFGDebugAutoPassNodeType {
         'Try', 'Catch', 'Finally', 'FunctionDef',
         'LoopStart', 'LoopEnd', 'ProcessEnd', 'SwitchStart', 'SwitchEnd',
         'FuncStart', 'BlockStart', 'FuncParams', 'BlockParams',
-        'FuncEnd', 'BlockEnd', 'Return'
+        'FuncEnd', 'BlockEnd', 'Return', 'OutputCaptureStart', 'OutputCaptureEnd'
     )
     return ($NodeType -in $autoTypes)
 }
@@ -5436,7 +5469,7 @@ function Invoke-CFGStep {
 
         if ($context.OutputCaptureStack -and $context.OutputCaptureStack.Count -gt 0) {
             $captureThis = $true
-            $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
+            $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition', 'OutputCaptureStart', 'OutputCaptureEnd')
             if ($currentNode.Type -in $nonOutputTypes) { $captureThis = $false }
             if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNode.VarsWritten) {
                 foreach ($v in $currentNode.VarsWritten) {
@@ -5595,10 +5628,269 @@ function Test-CFGInternalVariableName {
     return $false
 }
 
+function Get-CFGVariableStackShortId {
+    param(
+        [string]$Id,
+        [int]$MaxLength = 8
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Id)) { return '' }
+    if ($Id.Length -le $MaxLength) { return $Id }
+    return $Id.Substring(0, $MaxLength)
+}
+
+function Get-CFGVariableStackDescriptor {
+    param([string]$ActualName)
+
+    if ([string]::IsNullOrWhiteSpace($ActualName)) {
+        return [PSCustomObject]@{
+            Tier       = 'HiddenInternal'
+            DisplayName = $ActualName
+            SortBucket = 99
+            ValueMode  = 'Default'
+        }
+    }
+
+    if ($ActualName -eq '_') {
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = 'pipeline.current'
+            SortBucket  = 10
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -eq 'PSItem') {
+        return [PSCustomObject]@{
+            Tier        = 'HiddenInternal'
+            DisplayName = 'PSItem'
+            SortBucket  = 11
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -eq '__proc_input') {
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = 'process.input'
+            SortBucket  = 30
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^_pipe_([a-f0-9]{8})$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "pipe#$shortId"
+            SortBucket  = 20
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^__prc_([a-f0-9]{12})_idx$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "process.index#$shortId"
+            SortBucket  = 31
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__prc_([a-f0-9]{12})_current$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "process.current#$shortId"
+            SortBucket  = 32
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__prc_([a-f0-9]{12})$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'AdvancedInternal'
+            DisplayName = "process.collection#$shortId"
+            SortBucket  = 70
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^__pfo_in_([a-f0-9]{12})$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'AdvancedInternal'
+            DisplayName = "pfo.input#$shortId"
+            SortBucket  = 71
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^__pfo_([a-f0-9]{12})_idx$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "pfo.index#$shortId"
+            SortBucket  = 40
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__pfo_([a-f0-9]{12})_cur$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "pfo.current#$shortId"
+            SortBucket  = 41
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__pfo_([a-f0-9]{12})_out$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'AdvancedInternal'
+            DisplayName = "pfo.output#$shortId"
+            SortBucket  = 72
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^__sw_([a-f0-9]{12})_idx$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "switch.index#$shortId"
+            SortBucket  = 50
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__sw_([a-f0-9]{12})_current$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "switch.current#$shortId"
+            SortBucket  = 51
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__sw_([a-f0-9]{12})$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'AdvancedInternal'
+            DisplayName = "switch.collection#$shortId"
+            SortBucket  = 73
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^__fe_([a-f0-9]{12})_idx$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'DefaultInternal'
+            DisplayName = "foreach.index#$shortId"
+            SortBucket  = 60
+            ValueMode   = 'Default'
+        }
+    }
+
+    if ($ActualName -match '^__fe_([a-f0-9]{12})$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        return [PSCustomObject]@{
+            Tier        = 'AdvancedInternal'
+            DisplayName = "foreach.collection#$shortId"
+            SortBucket  = 74
+            ValueMode   = 'CollectionSummary'
+        }
+    }
+
+    if ($ActualName -match '^_sc_([a-f0-9]{8})_(.+)$') {
+        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
+        $logicalName = [string]$Matches[2]
+        return [PSCustomObject]@{
+            Tier        = 'AdvancedInternal'
+            DisplayName = "`$$logicalName @scope#$shortId"
+            SortBucket  = 80
+            ValueMode   = 'Default'
+        }
+    }
+
+    if (Test-CFGInternalVariableName -Name $ActualName) {
+        return [PSCustomObject]@{
+            Tier        = 'HiddenInternal'
+            DisplayName = $ActualName
+            SortBucket  = 90
+            ValueMode   = 'Default'
+        }
+    }
+
+    return [PSCustomObject]@{
+        Tier        = 'User'
+        DisplayName = $ActualName
+        SortBucket  = 0
+        ValueMode   = 'Default'
+    }
+}
+
+function Format-CFGVariableStackValue {
+    param(
+        $Value,
+        [string]$Mode = 'Default'
+    )
+
+    if ($Mode -ne 'CollectionSummary') {
+        return Format-VariableValue $Value
+    }
+
+    if ($null -eq $Value) {
+        return '$null'
+    }
+
+    if ($Value -is [string] -or $Value -isnot [System.Collections.IEnumerable]) {
+        return Format-VariableValue $Value
+    }
+
+    $knownCount = $null
+    if ($Value -is [array]) {
+        $knownCount = $Value.Length
+    } elseif ($Value -is [System.Collections.ICollection]) {
+        try { $knownCount = [int]$Value.Count } catch { $knownCount = $null }
+    }
+
+    $items = New-Object System.Collections.Generic.List[string]
+    $idx = 0
+    $hasMore = $false
+    foreach ($item in $Value) {
+        if ($idx -ge 3) {
+            $hasMore = $true
+            break
+        }
+        $items.Add((Format-VariableValue -Value $item -Depth 1))
+        $idx++
+    }
+
+    if (-not $hasMore -and $null -ne $knownCount -and $knownCount -gt $idx) {
+        $hasMore = $true
+    }
+
+    $typeName = $Value.GetType().Name
+    $itemsText = $items -join ', '
+    $suffix = if ($hasMore) { ', ...' } else { '' }
+    if ($null -ne $knownCount) {
+        return "[$typeName] Count=$knownCount @($itemsText$suffix)"
+    }
+    return "[$typeName] @($itemsText$suffix)"
+}
+
 function Get-CFGVariableStack {
     param(
         [Parameter(Mandatory)][hashtable]$Session,
-        [switch]$IncludeInternal
+        [switch]$IncludeInternal,
+        [switch]$IncludeAdvancedInternal
     )
 
     $context = $Session.Context
@@ -5612,23 +5904,34 @@ function Get-CFGVariableStack {
         if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
 
         $isInternal = Test-CFGInternalVariableName -Name $actualName
-        if (-not $IncludeInternal -and $isInternal) { continue }
+        $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
 
-        $displayName = $actualName
-        if ($actualName -match '^_sc_[a-f0-9]{8}_(.+)$') {
-            $displayName = [string]$Matches[1]
+        if (-not $IncludeInternal) {
+            if ($descriptor.Tier -eq 'HiddenInternal') { continue }
+            if ($descriptor.Tier -eq 'AdvancedInternal' -and -not $IncludeAdvancedInternal) { continue }
         }
 
         $rows += [PSCustomObject]@{
-            DisplayName = $displayName
+            DisplayName = $descriptor.DisplayName
             ActualName  = $actualName
             IsInternal  = $isInternal
+            DisplayTier = $descriptor.Tier
+            SortBucket  = [int]$descriptor.SortBucket
             Value       = if ($item.PSObject.Properties['Value']) { $item.Value } else { $null }
-            ValueText   = if ($item.PSObject.Properties['Value']) { Format-VariableValue $item.Value } else { '$null' }
+            ValueText   = if ($item.PSObject.Properties['Value']) { Format-CFGVariableStackValue -Value $item.Value -Mode $descriptor.ValueMode } else { '$null' }
         }
     }
 
-    return @($rows | Sort-Object DisplayName, ActualName)
+    $uniqueRows = New-Object System.Collections.Generic.List[object]
+    $seenKeys = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($row in @($rows | Sort-Object SortBucket, DisplayName, ActualName)) {
+        $key = "{0}`0{1}" -f [string]$row.DisplayName, [string]$row.ActualName
+        if ($seenKeys.Add($key)) {
+            [void]$uniqueRows.Add($row)
+        }
+    }
+
+    return $uniqueRows.ToArray()
 }
 
 function Set-CFGVariableValue {
@@ -5678,10 +5981,17 @@ function Set-CFGVariableValue {
         $valueToSet = $evalResult.Result
     }
 
-    $context.ExecContext.Runspace.SessionStateProxy.SetVariable($VariableName, $valueToSet)
+    $targetNames = @($VariableName)
+    if ($VariableName -in @('_', 'PSItem')) {
+        $targetNames = @('_', 'PSItem')
+    }
+
+    foreach ($targetName in $targetNames) {
+        $context.ExecContext.Runspace.SessionStateProxy.SetVariable($targetName, $valueToSet)
+    }
 
     return [PSCustomObject]@{
-        Name      = $VariableName
+        Name      = ($targetNames -join ', ')
         Value     = $valueToSet
         ValueText = Format-VariableValue $valueToSet
     }
