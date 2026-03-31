@@ -5885,6 +5885,125 @@ function Format-CFGVariableStackValue {
     }
     return "[$typeName] @($itemsText$suffix)"
 }
+function Resolve-CFGVariableStackActualName {
+    param(
+        [hashtable]$Context,
+        [string]$VariableName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VariableName)) { return $VariableName }
+
+    $name = [string]$VariableName
+    if ($name.StartsWith('$')) {
+        $name = $name.Substring(1)
+    }
+
+    if ($name -eq 'pipeline.current') {
+        return '_'
+    }
+
+    if ($name -match '^_sc_[a-f0-9]{8}_') {
+        return $name
+    }
+
+    if ($Context.ScopeStack.Count -gt 0) {
+        $currentScope = $Context.ScopeStack[-1]
+        if ($currentScope.LocalVars -and $name -in $currentScope.LocalVars) {
+            return ($currentScope.ScopePrefix + $name)
+        }
+    }
+
+    return $name
+}
+
+function Test-CFGVariableStackTierVisible {
+    param(
+        [string]$Tier,
+        [switch]$IncludeInternal,
+        [switch]$IncludeAdvancedInternal
+    )
+
+    if ($IncludeInternal) { return $true }
+    if ($Tier -eq 'HiddenInternal') { return $false }
+    if ($Tier -eq 'AdvancedInternal' -and -not $IncludeAdvancedInternal) { return $false }
+    return $true
+}
+
+function Get-CFGVariableStackPlaceholderRows {
+    param(
+        [Parameter(Mandatory)][hashtable]$Session,
+        [string[]]$ExistingActualNames = @(),
+        [switch]$IncludeInternal,
+        [switch]$IncludeAdvancedInternal
+    )
+
+    $context = $Session.Context
+    $rows = New-Object System.Collections.Generic.List[object]
+    $seenActualNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @($ExistingActualNames)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
+            $null = $seenActualNames.Add([string]$name)
+        }
+    }
+
+    $addFromNode = {
+        param($Node, [string]$Source)
+
+        if (-not $Node) { return }
+        $varInfos = @($Node.VarsRead) + @($Node.VarsWritten)
+        foreach ($varInfo in @($varInfos)) {
+            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) { continue }
+
+            $actualName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varInfo.Name)
+            if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
+            if ($seenActualNames.Contains($actualName)) { continue }
+
+            $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
+            if (-not (Test-CFGVariableStackTierVisible -Tier $descriptor.Tier -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)) {
+                continue
+            }
+
+            $isInternal = Test-CFGInternalVariableName -Name $actualName
+            $rows.Add([PSCustomObject]@{
+                DisplayName       = $descriptor.DisplayName
+                ActualName        = $actualName
+                IsInternal        = $isInternal
+                DisplayTier       = $descriptor.Tier
+                SortBucket        = [int]$descriptor.SortBucket
+                Value             = $null
+                ValueText         = '(missing; set manually)'
+                IsPlaceholder     = $true
+                PlaceholderSource = $Source
+            }) | Out-Null
+            $null = $seenActualNames.Add($actualName)
+        }
+    }
+
+    if ($Session.CurrentNode) {
+        & $addFromNode $Session.CurrentNode 'CurrentNode'
+    }
+
+    if ($Session.History -and $Session.History.Count -gt 0) {
+        $lastRecord = $Session.History[$Session.History.Count - 1]
+        $hasFailure = $false
+        if ($lastRecord) {
+            if ($lastRecord.PSObject.Properties['Success'] -and -not [bool]$lastRecord.Success) {
+                $hasFailure = $true
+            }
+            if (-not $hasFailure -and $lastRecord.PSObject.Properties['Error'] -and -not [string]::IsNullOrWhiteSpace([string]$lastRecord.Error)) {
+                $hasFailure = $true
+            }
+        }
+        if ($hasFailure -and $lastRecord.PSObject.Properties['NodeId']) {
+            $lastNode = Get-NodeById -CFG $Session.CFG -Id ([int]$lastRecord.NodeId)
+            if ($lastNode) {
+                & $addFromNode $lastNode 'LastFailedNode'
+            }
+        }
+    }
+
+    return $rows.ToArray()
+}
 
 function Get-CFGVariableStack {
     param(
@@ -5905,22 +6024,25 @@ function Get-CFGVariableStack {
 
         $isInternal = Test-CFGInternalVariableName -Name $actualName
         $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
-
-        if (-not $IncludeInternal) {
-            if ($descriptor.Tier -eq 'HiddenInternal') { continue }
-            if ($descriptor.Tier -eq 'AdvancedInternal' -and -not $IncludeAdvancedInternal) { continue }
+        if (-not (Test-CFGVariableStackTierVisible -Tier $descriptor.Tier -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)) {
+            continue
         }
 
         $rows += [PSCustomObject]@{
-            DisplayName = $descriptor.DisplayName
-            ActualName  = $actualName
-            IsInternal  = $isInternal
-            DisplayTier = $descriptor.Tier
-            SortBucket  = [int]$descriptor.SortBucket
-            Value       = if ($item.PSObject.Properties['Value']) { $item.Value } else { $null }
-            ValueText   = if ($item.PSObject.Properties['Value']) { Format-CFGVariableStackValue -Value $item.Value -Mode $descriptor.ValueMode } else { '$null' }
+            DisplayName       = $descriptor.DisplayName
+            ActualName        = $actualName
+            IsInternal        = $isInternal
+            DisplayTier       = $descriptor.Tier
+            SortBucket        = [int]$descriptor.SortBucket
+            Value             = if ($item.PSObject.Properties['Value']) { $item.Value } else { $null }
+            ValueText         = if ($item.PSObject.Properties['Value']) { Format-CFGVariableStackValue -Value $item.Value -Mode $descriptor.ValueMode } else { '$null' }
+            IsPlaceholder     = $false
+            PlaceholderSource = $null
         }
     }
+
+    $existingActualNames = @($rows | ForEach-Object { [string]$_.ActualName })
+    $rows += @(Get-CFGVariableStackPlaceholderRows -Session $Session -ExistingActualNames $existingActualNames -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)
 
     $uniqueRows = New-Object System.Collections.Generic.List[object]
     $seenKeys = [System.Collections.Generic.HashSet[string]]::new()
@@ -5981,8 +6103,9 @@ function Set-CFGVariableValue {
         $valueToSet = $evalResult.Result
     }
 
-    $targetNames = @($VariableName)
-    if ($VariableName -in @('_', 'PSItem')) {
+    $resolvedName = Resolve-CFGVariableStackActualName -Context $context -VariableName $VariableName
+    $targetNames = @($resolvedName)
+    if ($VariableName -in @('_', 'PSItem', 'pipeline.current') -or $resolvedName -in @('_', 'PSItem')) {
         $targetNames = @('_', 'PSItem')
     }
 

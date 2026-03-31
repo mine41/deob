@@ -968,7 +968,7 @@ if ($NoUI) {
                     <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="当前变量:" VerticalAlignment="Center"/>
-                  <TextBox Grid.Column="1" Name="TxtVarName" IsReadOnly="True" Margin="8,0,12,0"/>
+                  <TextBox Grid.Column="1" Name="TxtVarName" Margin="8,0,12,0"/>
                   <TextBlock Grid.Column="2" Text="新值表达式:" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="3" Name="TxtVarExpr" Margin="8,0,12,0"/>
                   <Button Grid.Column="4" Name="BtnApplyVar" Content="应用变量" Width="90" Margin="0,0,8,0"/>
@@ -1733,19 +1733,23 @@ $varGrid.Add_SelectionChanged({
 })
 
 $btnApplyVar.Add_Click({
-    $row = $varGrid.SelectedItem
-    if (-not $row) {
-        [System.Windows.MessageBox]::Show("请先在变量表中选择一个变量。", "提示", "OK", "Warning") | Out-Null
+    $selectedRow = $varGrid.SelectedItem
+    $varName = [string]$txtVarName.Text
+    if ([string]::IsNullOrWhiteSpace($varName) -and $selectedRow) {
+        $varName = [string]$selectedRow.ActualName
+    }
+    if ([string]::IsNullOrWhiteSpace($varName)) {
+        [System.Windows.MessageBox]::Show("请选择变量，或直接输入变量名。", "提示", "OK", "Warning") | Out-Null
         return
     }
+
     $expr = [string]$txtVarExpr.Text
     if ([string]::IsNullOrWhiteSpace($expr)) {
         [System.Windows.MessageBox]::Show("请输入变量新值表达式。", "提示", "OK", "Warning") | Out-Null
         return
     }
-
     try {
-        $setResult = Set-CFGVariableValue -Session $script:DebugState.Session -VariableName ([string]$row.ActualName) -ValueExpression $expr
+        $setResult = Set-CFGVariableValue -Session $script:DebugState.Session -VariableName $varName -ValueExpression $expr
         Refresh-VarGrid
         Update-CurrentNodeUi
         Update-StatusBar -Suffix "Set $($setResult.Name) = $($setResult.ValueText)"
