@@ -1,23 +1,24 @@
 if ($false) {
     # 高置信：Binary / Convert / Unary / Paren / SubExpression / ExpandableString
-    $intAdd        = 1 + 2
-    $intNeg        = -([int]1)
-    $intPos        = +([int]1)
-    $doubleVal     = [double]1.5
+    $intAdd        = 3
+    $intNeg        = -1
+    $intPos        = +1
+    $doubleVal     = 1.5
     $decimalVal    = [decimal]'1.5'
-    $charVal       = [char]49
-    $boolAnd       = $true -and $false
-    $boolEq        = 1 -eq 1
-    $boolNot       = -not $true
-    $boolBang      = !$false
-    $bitBnot       = -bnot 1
-    $nullParen     = ($null)
-    $parenExpr     = (1 + 2)
-    $subExpr       = $(1 + 2)
-    $expandHigh    = "ab$('c')"
-    $joinHigh      = @('a', 'b', 'c') -join ''
-    $formatHigh    = '{0}{1}{2}' -f 'a', 'b', 'c'
-
+#做的好----------------------------------
+    $charVal       = [char]'1'
+    $boolAnd       = $False
+    $boolEq        = $True
+    $boolNot       = $False
+    $boolBang      = $True
+    $bitBnot       = -2
+    $nullParen     = $null
+    $parenExpr     = 3
+    $subExpr       = 3
+    $expandHigh    = "ab'c'"
+    $joinHigh      = 'abc'
+    $formatHigh    = 'abc'
+#做的好----------------------------------
     # 低置信：未知变量仅在字符串安全上下文回退为空
     $strPlusLow    = 'pre' + $missing + 'suf'
     $expandLow1    = "pre $missing suf"
@@ -36,3 +37,5 @@ if ($false) {
 }
 
 'OK'
+
+
