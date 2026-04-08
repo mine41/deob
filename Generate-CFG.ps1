@@ -5053,6 +5053,9 @@ function New-RuntimeSubgraph {
         [string]$BlockNamePrefix = "_dyn_"  # 块名前缀
     )
 
+    $initialNodeCount = if ($null -ne $cfg.Nodes) { @($cfg.Nodes).Count } else { 0 }
+    $initialEdgeCount = if ($null -ne $cfg.Edges) { @($cfg.Edges).Count } else { 0 }
+
     # 1. 解析代码字符串为 AST
     $errors = $null
     $tokens = $null
@@ -5090,6 +5093,25 @@ function New-RuntimeSubgraph {
         $lastType = $prev.Value.Type
         if ($lastType -notin @("Return", "Exit", "Throw", "Break", "Continue", "End")) {
             Add-Edge -cfg $cfg -from $prev.Value.Id -to $blockEnd.Id
+        }
+    }
+
+    $allNodes = if ($null -ne $cfg.Nodes) { @($cfg.Nodes) } else { @() }
+    $allEdges = if ($null -ne $cfg.Edges) { @($cfg.Edges) } else { @() }
+    $newNodes = if ($allNodes.Count -gt $initialNodeCount) { @($allNodes | Select-Object -Skip $initialNodeCount) } else { @() }
+    $newEdges = if ($allEdges.Count -gt $initialEdgeCount) { @($allEdges | Select-Object -Skip $initialEdgeCount) } else { @() }
+    if (Get-Command -Name Sync-CFGExecutionIndexesIncremental -ErrorAction SilentlyContinue) {
+        try {
+            $null = Sync-CFGExecutionIndexesIncremental -CFG $cfg -NewNodes $newNodes -NewEdges $newEdges
+        }
+        catch {
+            if (Get-Command -Name Ensure-CFGExecutionIndexes -ErrorAction SilentlyContinue) {
+                try {
+                    $null = Ensure-CFGExecutionIndexes -CFG $cfg
+                }
+                catch {
+                }
+            }
         }
     }
 

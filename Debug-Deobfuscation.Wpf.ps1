@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   交互式调试解混淆模式（单轮）：生成 CFG 后，在 WPF 界面中逐步执行节点。
 
@@ -27,7 +27,38 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if (-not $IsWindows) {
+function Test-IsWindowsHost {
+    return ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
+}
+
+function Get-CurrentPowerShellExecutablePath {
+    $exe = $null
+
+    try {
+        $p = Get-Process -Id $PID -ErrorAction Stop
+        if ($p.Path) { $exe = [string]$p.Path }
+    } catch {
+        $exe = $null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($exe) -and (Test-Path -LiteralPath $exe)) {
+        return $exe
+    }
+
+    foreach ($candidate in @((Join-Path $PSHOME 'powershell.exe'), (Join-Path $PSHOME 'pwsh.exe')) | Select-Object -Unique) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    $commandName = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'powershell.exe' } else { 'pwsh' }
+    $cmd = Get-Command $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cmd -and $cmd.Source) { return [string]$cmd.Source }
+
+    return $null
+}
+
+if (-not (Test-IsWindowsHost)) {
     throw "该脚本仅支持 Windows（需要 WPF）。"
 }
 
@@ -50,21 +81,10 @@ function Restart-SelfAsStaIfNeeded {
         }
     }
 
-    $exe = $null
-    try {
-        $p = Get-Process -Id $PID -ErrorAction Stop
-        if ($p.Path) { $exe = $p.Path }
-    } catch {
-        $exe = $null
-    }
+    $exe = Get-CurrentPowerShellExecutablePath
     if (-not $exe) {
-        $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
-        if ($cmd) { $exe = $cmd.Source }
+        throw "当前线程不是 STA，且无法定位当前 PowerShell 宿主。请用 -Sta 运行。"
     }
-    if (-not $exe) {
-        throw "当前线程不是 STA，且无法定位 pwsh。请用 -Sta 运行。"
-    }
-
     & $exe @argList
     exit $LASTEXITCODE
 }
@@ -1495,12 +1515,14 @@ try {
 $layout = Get-DotPlainLayout -DotPath $cfgDotPath
 $scriptText = Get-FullScriptTextFromFile -Path $scriptPathFull
 $session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+$currentHostDisplay = Format-PowerShellHostInfo -HostInfo $session.Context.HostInfo
 $preview = Build-DebugPreview -Context $session.Context -ScriptText $scriptText -Strategy $OverlapStrategy
 
 if ($NoUI) {
     [PSCustomObject]@{
         ScriptPath   = $scriptPathFull
         WorkDir      = $WorkDir
+        Host         = $currentHostDisplay
         Nodes        = $cfg.Nodes.Count
         Steps        = $session.StepCounter
         HasGraphPng  = [bool](Test-Path -LiteralPath $cfgPngPath)
@@ -2513,7 +2535,7 @@ $window.Add_Closed({
     }
 })
 
-$window.Title = "解混淆调试模式 - $([System.IO.Path]::GetFileName($scriptPathFull))"
+$window.Title = "解混淆调试模式 - $([System.IO.Path]::GetFileName($scriptPathFull)) [$currentHostDisplay]"
 $null = $window.ShowDialog()
 
 

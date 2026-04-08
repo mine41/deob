@@ -19,21 +19,23 @@ PowerShell 反混淆工具链。当前版本已经从“仅动态回写”扩展
 
 ## 环境要求
 
-- 必须使用 `pwsh`（PowerShell 7+）。
+- 运行宿主就是解混语义来源：使用 `powershell.exe` 时按 Windows PowerShell 5.1 语义分析；使用 `pwsh` 时按 PowerShell 7+ 语义分析。
 - `Debug-Deobfuscation.Wpf.ps1` 与 `Review-RoundReplay.Wpf.ps1` 依赖 WPF，仅支持 Windows。
 - 安装 Graphviz 的 `dot` 后可额外生成 PNG；未安装时仍可输出 DOT。
 
 ## 快速开始
 
+> 说明：下面命令中的 `<host>` 表示当前分析宿主，可使用 `powershell.exe` 或 `pwsh`。要分析针对 PS5 的脚本请用 `powershell.exe`；要分析针对 PS7+ 的脚本请用 `pwsh`。
+
 ```powershell
 # 1) 一键多轮解混淆（推荐主入口）
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
 
 # 2) 调试模式（逐节点执行 + 人工改变量）
-pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\in\in.ps1
+<host> -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\in\in.ps1
 
 # 3) 复盘已有 round 日志
-pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
+<host> -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
 ```
 
 ## 混合解混策略
@@ -172,7 +174,7 @@ pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt
 ### 1) `Rebuild-Deobfuscated.ps1`（主入口）
 
 ```powershell
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 [options]
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 [options]
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -205,19 +207,19 @@ pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 [optio
 
 ```powershell
 # 高性能模式（不落盘每轮过程）
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -FullOutput:$false
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -FullOutput:$false
 
 # 值变化变量采用“最后值”
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy last
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy last
 
 # 保守策略：变化变量一律跳过（默认）
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy skip
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy skip
 ```
 
 ### 2) `Debug-Deobfuscation.Wpf.ps1`（交互调试）
 
 ```powershell
-pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\target.ps1 [options]
+<host> -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\target.ps1 [options]
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -250,7 +252,7 @@ pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\target.ps
 ### 3) `Review-RoundReplay.Wpf.ps1`（round 复盘）
 
 ```powershell
-pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 [options]
+<host> -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 [options]
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -387,7 +389,7 @@ Get-CFGExecutionFailures -Session <hashtable>
 - 先保证语义稳定，尽量避免误替换。
 
 ```powershell
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
   -ScriptPath .\in\in.ps1 `
   -OverlapStrategy Inner `
   -VariableConflictPolicy skip `
@@ -406,7 +408,7 @@ pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
 - 你接受一定误替换风险，想尽量还原更多片段。
 
 ```powershell
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
   -ScriptPath .\in\in.ps1 `
   -OverlapStrategy Inner `
   -VariableConflictPolicy last `
@@ -424,7 +426,7 @@ pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
 - 批量脚本快速跑，不需要过程文件和图。
 
 ```powershell
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
   -ScriptPath .\in\in.ps1 `
   -FullOutput:$false `
   -MaxRounds 10 `
@@ -441,7 +443,7 @@ pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
 - 先评估可替换规模，再决定是否真正输出。
 
 ```powershell
-pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
   -ScriptPath .\in\in.ps1 `
   -DryRun `
   -FullOutput:$true `
@@ -457,7 +459,7 @@ pwsh -NoProfile -File .\Rebuild-Deobfuscated.ps1 `
 - 需要人工介入改变量、选分支、手选替换片段。
 
 ```powershell
-pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 `
+<host> -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 `
   -ScriptPath .\in\in.ps1 `
   -OverlapStrategy Inner `
   -MaxIterations 1000 `
@@ -475,7 +477,7 @@ pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 `
 - 已有 `*.work`，需要按节点回放与排错。
 
 ```powershell
-pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 `
+<host> -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 `
   -WorkDir .\in\in.rebuilt.ps1.work `
   -Round 1 `
   -CheckpointInterval 200
@@ -510,7 +512,6 @@ pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 `
 - `Rebuild-Deobfuscated.ps1`：多轮重建主入口（动态 + 静态混合策略）。
 - `Debug-Deobfuscation.Wpf.ps1`：交互式调试 UI（逐步执行、补变量、静态预览）。
 - `Review-RoundReplay.Wpf.ps1`：round 复盘 UI。
-- `run.ps1`：快速演示入口。
 - `in/`：输入脚本与测试样例目录。
 
 

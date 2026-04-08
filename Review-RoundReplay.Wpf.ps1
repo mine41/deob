@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   基于 Rebuild-Deobfuscated 生成的 roundXX.execution.log / report / cfg 图，提供 WPF 交互界面复盘逐节点执行过程。
 
@@ -10,14 +10,14 @@
 
   注意：
   - 该脚本需要 Windows + WPF（仅在 Windows 可用）
-  - 建议用 pwsh 并使用 -Sta（脚本会自动尝试以 STA 重新启动自身）
+  - 建议用要模拟的宿主（powershell.exe / pwsh）并使用 -Sta（脚本会自动尝试以同宿主重新启动自身）
   - 节点图交互依赖 Graphviz dot（用于 dot -Tplain 取布局坐标）
 
 .EXAMPLE
-  pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1
+  powershell.exe -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1
 
 .EXAMPLE
-  pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
+  powershell.exe -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
 #>
 
 [CmdletBinding()]
@@ -33,7 +33,60 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if (-not $IsWindows) {
+function Test-IsWindowsHost {
+    return ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
+}
+
+function Get-CurrentPowerShellExecutablePath {
+    $exe = $null
+
+    try {
+        $p = Get-Process -Id $PID -ErrorAction Stop
+        if ($p.Path) { $exe = [string]$p.Path }
+    } catch {
+        $exe = $null
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($exe) -and (Test-Path -LiteralPath $exe)) {
+        return $exe
+    }
+
+    foreach ($candidate in @((Join-Path $PSHOME 'powershell.exe'), (Join-Path $PSHOME 'pwsh.exe')) | Select-Object -Unique) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    $commandName = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'powershell.exe' } else { 'pwsh' }
+    $cmd = Get-Command $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cmd -and $cmd.Source) { return [string]$cmd.Source }
+
+    return $null
+}
+
+function Get-ReportHostDisplay {
+    param($ReportData)
+
+    if (-not $ReportData) { return $null }
+    if (-not $ReportData.PSObject.Properties['HostInfo'] -or $null -eq $ReportData.HostInfo) { return $null }
+
+    $hostInfo = $ReportData.HostInfo
+    if ($hostInfo.PSObject.Properties['Display'] -and -not [string]::IsNullOrWhiteSpace([string]$hostInfo.Display)) {
+        return [string]$hostInfo.Display
+    }
+
+    $parts = @()
+    if ($hostInfo.PSObject.Properties['Edition'] -and $hostInfo.Edition) { $parts += [string]$hostInfo.Edition }
+    if ($hostInfo.PSObject.Properties['Version'] -and $hostInfo.Version) { $parts += [string]$hostInfo.Version }
+    $text = ($parts -join ' ').Trim()
+    if ($hostInfo.PSObject.Properties['ProcessName'] -and $hostInfo.ProcessName) {
+        $text = "$text [$($hostInfo.ProcessName)]"
+    }
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    return $text
+}
+
+if (-not (Test-IsWindowsHost)) {
     throw "该脚本仅支持 Windows（需要 WPF）。"
 }
 
@@ -61,19 +114,9 @@ function Restart-SelfAsStaIfNeeded {
         }
     }
 
-    $exe = $null
-    try {
-        $p = Get-Process -Id $PID -ErrorAction Stop
-        if ($p.Path) { $exe = $p.Path }
-    } catch {
-        $exe = $null
-    }
+    $exe = Get-CurrentPowerShellExecutablePath
     if (-not $exe) {
-        $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
-        if ($cmd) { $exe = $cmd.Source }
-    }
-    if (-not $exe) {
-        throw "当前线程不是 STA，且无法定位 pwsh。请用以下方式启动：pwsh -NoProfile -Sta -File `"$PSCommandPath`""
+        throw "当前线程不是 STA，且无法定位当前 PowerShell 宿主。请用同一宿主加 -Sta 重新启动。"
     }
 
     & $exe @argList
@@ -123,7 +166,7 @@ function Try-Load-ReportSummary {
 
     if (-not (Test-Path -LiteralPath $ReportPath)) { return $null }
     try {
-        $r = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 30
+        $r = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop | ConvertFrom-Json
         return [PSCustomObject]@{
             CandidateCount = $r.CandidateCount
             AppliedCount   = $r.AppliedCount
@@ -153,7 +196,7 @@ function Select-RoundDialog {
         [PSCustomObject]@{
             Round  = $n
             Label  = "Round $label"
-            Report = if ($sum) { "candidates=$($sum.CandidateCount) applied=$($sum.AppliedCount) skipped=$($sum.SkippedCount)" } else { "(no report)" }
+            Report = if ($sum) { "candidates=$($sum.CandidateCount) applied=$($sum.AppliedCount) skipped=$($sum.SkippedCount)" + $(if ($sum.HostDisplay) { " host=$($sum.HostDisplay)" } else { "" }) } else { "(no report)" }
         }
     }
 
@@ -433,7 +476,7 @@ function Load-Report {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     try {
-        return (Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 50)
+        return (Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json)
     } catch {
         return $null
     }
@@ -1060,7 +1103,8 @@ function Update-ReportUi {
     param($ReportData)
 
     if ($ReportData) {
-        $txtReportSummary.Text = "candidates=$($ReportData.CandidateCount) applied=$($ReportData.AppliedCount) skipped=$($ReportData.SkippedCount)  (Strategy=$($ReportData.OverlapStrategy))"
+        $hostText = Get-ReportHostDisplay -ReportData $ReportData
+        $txtReportSummary.Text = "candidates=$($ReportData.CandidateCount) applied=$($ReportData.AppliedCount) skipped=$($ReportData.SkippedCount)  (Strategy=$($ReportData.OverlapStrategy))" + $(if ($hostText) { "  host=$hostText" } else { "" })
 
         [object[]]$appliedRows = @()
         [object[]]$skippedRows = @()
@@ -1548,7 +1592,12 @@ function Load-SessionIntoUi {
     $script:layout = $newSession.Layout
     $script:checkpoints = $newSession.Checkpoints
 
-    $window.Title = "CFG 执行复盘器 - Round $($files.Label)"
+        $reportHostDisplay = Get-ReportHostDisplay -ReportData $script:report
+    if ($reportHostDisplay) {
+        $window.Title = "CFG 执行复盘器 - Round $($files.Label) [$reportHostDisplay]"
+    } else {
+        $window.Title = "CFG 执行复盘器 - Round $($files.Label)"
+    }
 
     $script:SuppressGrid = $true
     try {
@@ -1648,7 +1697,12 @@ $btnZoomIn.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom + 0.1) })
 $btnZoomReset.Add_Click({ Set-GraphZoom -Zoom 1.0 })
 
 # 初始化
-$window.Title = "CFG 执行复盘器 - Round $($files.Label)"
+    $reportHostDisplay = Get-ReportHostDisplay -ReportData $script:report
+    if ($reportHostDisplay) {
+        $window.Title = "CFG 执行复盘器 - Round $($files.Label) [$reportHostDisplay]"
+    } else {
+        $window.Title = "CFG 执行复盘器 - Round $($files.Label)"
+    }
 Set-GraphZoom -Zoom ($sldZoom.Value / 100.0)
 $framesGrid.SelectedIndex = 0
 Set-CurrentIndex -Index 0 -FromGrid:$false

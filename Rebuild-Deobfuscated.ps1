@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   基于 CFG 遍历执行结果（ResolvableResults）对脚本做片段回写，输出重建后的“解混淆脚本”。
 
@@ -13,7 +13,7 @@
   - 重叠/嵌套替换片段通过 -OverlapStrategy 控制（Outer/Inner）。
 
 .EXAMPLE
-  pwsh .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
+  powershell.exe .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
 
 .EXAMPLE
   pwsh .\Rebuild-Deobfuscated.ps1 -ScriptPath .\sample.ps1 -MaxRounds 10 -OverlapStrategy Inner
@@ -51,10 +51,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw "需要 PowerShell 7+ (pwsh) 运行重建脚本。当前版本: $($PSVersionTable.PSVersion)"
-}
 
 function New-SkipRecord {
     param(
@@ -1388,7 +1384,12 @@ if (-not (Test-Path -LiteralPath $execPath)) { throw "缺少文件: $execPath" }
 . $genPath
 . $execPath
 
+$hostInfo = Get-PowerShellHostInfo
+$hostDisplay = Format-PowerShellHostInfo -HostInfo $hostInfo
+
 Write-Host "=== 重建解混淆脚本（递归迭代）===" -ForegroundColor Cyan
+Write-Host "Host       : $hostDisplay" -ForegroundColor Gray
+if ($hostInfo.ExecutablePath) { Write-Host "HostExe    : $($hostInfo.ExecutablePath)" -ForegroundColor Gray }
 Write-Host "ScriptPath : $scriptFullPath" -ForegroundColor Gray
 Write-Host "OutPath    : $OutPath" -ForegroundColor Gray
 Write-Host "FullOutput : $FullOutput" -ForegroundColor Gray
@@ -1576,6 +1577,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             ExecutionLog    = $roundLogPath
             CfgDotPath      = $roundCfgDotPath
             CfgPngPath      = $roundCfgPngPath
+            HostInfo        = $ctx.HostInfo
             OverlapStrategy = $OverlapStrategy
             VariableConflictPolicy = $VariableConflictPolicy
             MaxIterations   = $MaxIterations

@@ -121,6 +121,95 @@ function New-ExecutionContext {
 }
 
 # 关闭执行上下文
+function Get-PowerShellHostInfo {
+    $processName = $null
+    $exePath = $null
+
+    try {
+        $proc = Get-Process -Id $PID -ErrorAction Stop
+        if ($proc) {
+            $processName = [string]$proc.ProcessName
+            if ($proc.Path) { $exePath = [string]$proc.Path }
+        }
+    } catch {
+        $processName = $null
+        $exePath = $null
+    }
+
+    $version = $null
+    $major = $null
+    if ($PSVersionTable -and $PSVersionTable.ContainsKey('PSVersion') -and $PSVersionTable.PSVersion) {
+        $version = [string]$PSVersionTable.PSVersion
+        $major = [int]$PSVersionTable.PSVersion.Major
+    } elseif ($Host -and $Host.Version) {
+        $version = [string]$Host.Version
+    }
+
+    $edition = if ($PSVersionTable -and $PSVersionTable.ContainsKey('PSEdition') -and $PSVersionTable.PSEdition) {
+        [string]$PSVersionTable.PSEdition
+    } else {
+        'Desktop'
+    }
+
+    $hostName = if ($Host -and $Host.Name) { [string]$Host.Name } else { $null }
+    $displayParts = @()
+    if ($edition) { $displayParts += $edition }
+    if ($version) { $displayParts += $version }
+    $display = ($displayParts -join ' ').Trim()
+    if ($processName) { $display = "$display [$processName]" }
+    if ([string]::IsNullOrWhiteSpace($display)) { $display = 'UnknownHost' }
+
+    return [PSCustomObject]@{
+        Version        = $version
+        Major          = $major
+        Edition        = $edition
+        HostName       = $hostName
+        ProcessName    = $processName
+        ExecutablePath = $exePath
+        Display        = $display
+    }
+}
+
+function Format-PowerShellHostInfo {
+    param($HostInfo)
+
+    if ($null -eq $HostInfo) { return 'UnknownHost' }
+
+    if ($HostInfo.PSObject.Properties['Display'] -and -not [string]::IsNullOrWhiteSpace([string]$HostInfo.Display)) {
+        return [string]$HostInfo.Display
+    }
+
+    $parts = @()
+    if ($HostInfo.PSObject.Properties['Edition'] -and $HostInfo.Edition) { $parts += [string]$HostInfo.Edition }
+    if ($HostInfo.PSObject.Properties['Version'] -and $HostInfo.Version) { $parts += [string]$HostInfo.Version }
+    $text = ($parts -join ' ').Trim()
+    if ($HostInfo.PSObject.Properties['ProcessName'] -and $HostInfo.ProcessName) {
+        $text = "$text [$($HostInfo.ProcessName)]"
+    }
+    if ([string]::IsNullOrWhiteSpace($text)) { return 'UnknownHost' }
+    return $text
+}
+
+function Add-CFGVisitedNodeCount {
+    param(
+        [hashtable]$Context,
+        [int]$NodeId
+    )
+
+    if ($null -eq $Context) { return 0 }
+    if (-not $Context.ContainsKey('VisitedNodes') -or $null -eq $Context.VisitedNodes) {
+        $Context.VisitedNodes = @{}
+    }
+
+    $current = 0
+    if ($Context.VisitedNodes.ContainsKey($NodeId) -and $null -ne $Context.VisitedNodes[$NodeId]) {
+        try { $current = [int]$Context.VisitedNodes[$NodeId] } catch { $current = 0 }
+    }
+
+    $current++
+    $Context.VisitedNodes[$NodeId] = $current
+    return $current
+}
 function Close-ExecutionContext {
     param([hashtable]$ExecContext)
     if ($ExecContext.Runspace) {
@@ -144,7 +233,7 @@ function Invoke-InContext {
         $result = $ps.Invoke()
 
         if ($ps.HadErrors) {
-            $errorMsg = $ps.Streams.Error | ForEach-Object { $_.ToString() } | Join-String -Separator "`n"
+            $errorMsg = (($ps.Streams.Error | ForEach-Object { $_.ToString() }) -join "`n")
             return @{
                 Success = $false
                 Error   = $errorMsg
@@ -239,6 +328,33 @@ function Format-VariableValue {
         return $clean
     }
 
+    function Get-ShallowValueSummary {
+        param(
+            $Item,
+            [int]$TextMaxLen = 80
+        )
+
+        if ($null -eq $Item) {
+            return '$null'
+        }
+        if ($Item -is [BlockedCommandPlaceholder]) {
+            return $script:BlockedPlaceholderMarker
+        }
+        if ($Item -is [string]) {
+            return "`"$(Get-TextPreview -Text $Item -MaxLen $TextMaxLen)`""
+        }
+        if ($Item -is [ValueType]) {
+            return "$Item"
+        }
+        if ($Item -is [char[]]) {
+            return "[Char[]] Count=$($Item.Length)"
+        }
+        if ($Item -is [byte[]]) {
+            return "[Byte[]] Count=$($Item.Length)"
+        }
+        return "[$($Item.GetType().Name)]"
+    }
+
     if ($null -eq $Value) {
         return '$null'
     }
@@ -248,14 +364,12 @@ function Format-VariableValue {
         return $script:BlockedPlaceholderMarker
     }
 
-    $type = $Value.GetType().Name
+    if ($Depth -lt 3 -and $Value -is [string]) {
+        return "`"$(Get-TextPreview -Text $Value -MaxLen 120)`""
+    }
 
-    # 避免深层递归造成过长文本
-    if ($Depth -ge 3) {
-        if ($Value -is [string]) {
-            return "`"$(Get-TextPreview -Text $Value -MaxLen 80)`""
-        }
-        return "[$type]"
+    if ($Depth -lt 3 -and $Value -is [ValueType]) {
+        return "$Value"
     }
 
     # Char[] 展示字符串内容
@@ -276,6 +390,64 @@ function Format-VariableValue {
         $hex = for ($i = 0; $i -lt $max; $i++) { '{0:X2}' -f $Value[$i] }
         $suffix = if ($count -gt $max) { ' ...' } else { '' }
         return "[Byte[]] Count=$count Hex=$($hex -join ' ')$suffix"
+    }
+
+    $type = $Value.GetType().Name
+
+    # 避免深层递归造成过长文本，但保留一层摘要信息
+    if ($Depth -ge 3) {
+        if ($Value -is [string]) {
+            return "`"$(Get-TextPreview -Text $Value -MaxLen 80)`""
+        }
+
+        if ($Value -is [System.Collections.IDictionary]) {
+            $pairs = New-Object System.Collections.Generic.List[string]
+            $maxPairs = 2
+            foreach ($k in $Value.Keys) {
+                if ($pairs.Count -ge $maxPairs) { break }
+                $pairs.Add("$k=$(Get-ShallowValueSummary -Item $Value[$k])")
+            }
+            $suffix = if ($Value.Count -gt $maxPairs) { '; ...' } else { '' }
+            return "[$type] @{ $($pairs -join '; ')$suffix }"
+        }
+
+        if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+            $items = New-Object System.Collections.Generic.List[string]
+            $maxItems = 2
+            $count = $null
+            if ($Value -is [array]) {
+                $count = $Value.Length
+            } elseif ($Value -is [System.Collections.ICollection]) {
+                try { $count = [int]$Value.Count } catch { $count = $null }
+            }
+
+            $idx = 0
+            $hasMore = $false
+            foreach ($item in $Value) {
+                if ($idx -ge $maxItems) {
+                    $hasMore = $true
+                    break
+                }
+                $items.Add((Get-ShallowValueSummary -Item $item))
+                $idx++
+            }
+            if (-not $hasMore -and $null -ne $count -and $count -gt $maxItems) {
+                $hasMore = $true
+            }
+
+            $suffix = if ($hasMore) { ', ...' } else { '' }
+            $itemsText = $items -join ', '
+            if ($null -ne $count) {
+                return "[$type] Count=$count @($itemsText$suffix)"
+            }
+            return "[$type] @($itemsText$suffix)"
+        }
+
+        $objText = [string]$Value
+        if (-not [string]::IsNullOrWhiteSpace($objText) -and $objText -ne $type -and $objText -notmatch '^System\\.') {
+            return "[$type] $(Get-TextPreview -Text $objText -MaxLen 80)"
+        }
+        return "[$type]"
     }
 
     # 字典对象显示 key=value 预览
@@ -348,10 +520,46 @@ function Format-VariableValue {
 }
 
 # 写日志
+function Get-ExecutionLogMessageText {
+    param($Message)
+
+    if ($Message -is [scriptblock]) {
+        return [string](& $Message)
+    }
+
+    if ($null -eq $Message) {
+        return ''
+    }
+
+    return [string]$Message
+}
+
+function Flush-ExecutionLogBuffer {
+    param([hashtable]$Context)
+
+    if ($null -eq $Context -or [string]::IsNullOrWhiteSpace($Context.LogPath)) {
+        return
+    }
+
+    if (-not $Context.ContainsKey('LogBufferBuilder') -or $null -eq $Context.LogBufferBuilder) {
+        return
+    }
+
+    if ($Context.LogBufferBuilder.Length -le 0) {
+        return
+    }
+
+    $text = $Context.LogBufferBuilder.ToString()
+    [System.IO.File]::AppendAllText($Context.LogPath, $text, [System.Text.UTF8Encoding]::new($false))
+    $null = $Context.LogBufferBuilder.Clear()
+    $Context.LogBufferedLines = 0
+    $Context.LogBufferedBytes = 0
+}
+
 function Write-ExecutionLog {
     param(
         [hashtable]$Context,
-        [string]$Message
+        $Message
     )
 
     # 允许禁用日志（用于高性能模式）
@@ -359,14 +567,55 @@ function Write-ExecutionLog {
         return
     }
 
-    $timestamp = Get-Date -Format "HH:mm:ss.fff"
-    $logLine = "[$timestamp] $Message"
+    if (-not $Context.ContainsKey('LogBufferBuilder') -or $null -eq $Context.LogBufferBuilder) {
+        $Context.LogBufferBuilder = [System.Text.StringBuilder]::new()
+    }
+    if (-not $Context.ContainsKey('LogBufferedLines')) {
+        $Context.LogBufferedLines = 0
+    }
+    if (-not $Context.ContainsKey('LogBufferedBytes')) {
+        $Context.LogBufferedBytes = 0
+    }
 
-    # 写入文件
-    Add-Content -Path $Context.LogPath -Value $logLine -Encoding UTF8
+    $lineThreshold = if ($Context.ContainsKey('LogFlushLineThreshold') -and [int]$Context.LogFlushLineThreshold -gt 0) {
+        [int]$Context.LogFlushLineThreshold
+    } else {
+        10
+    }
+    $byteThreshold = if ($Context.ContainsKey('LogFlushByteThreshold') -and [int]$Context.LogFlushByteThreshold -gt 0) {
+        [int]$Context.LogFlushByteThreshold
+    } else {
+        4096
+    }
+
+    $messageText = Get-ExecutionLogMessageText -Message $Message
+    $timestamp = Get-Date -Format "HH:mm:ss.fff"
+    $logLine = "[$timestamp] $messageText"
+    $newline = [System.Environment]::NewLine
+
+    $null = $Context.LogBufferBuilder.Append($logLine)
+    $null = $Context.LogBufferBuilder.Append($newline)
+    $Context.LogBufferedLines = [int]$Context.LogBufferedLines + 1
+    $Context.LogBufferedBytes = [int]$Context.LogBufferedBytes + [System.Text.Encoding]::UTF8.GetByteCount($logLine + $newline)
+
+    if ($Context.LogBufferedLines -ge $lineThreshold -or $Context.LogBufferedBytes -ge $byteThreshold) {
+        Flush-ExecutionLogBuffer -Context $Context
+    }
 
     # 同时输出到控制台（可选）
     # Write-Host $logLine
+}
+
+function Test-ExecutionLogDetailEnabled {
+    param(
+        [hashtable]$Context,
+        [string]$FlagName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FlagName)) { return $true }
+    if ($null -eq $Context) { return $false }
+    if (-not $Context.ContainsKey($FlagName)) { return $true }
+    return [bool]$Context[$FlagName]
 }
 
 # 解析节点 Text（执行期仅以 Node.Text 为准）
@@ -379,22 +628,40 @@ function Get-NodeTextParseInfo {
     if (-not $Context.TextParseCache) {
         $Context.TextParseCache = @{}
     }
+    if (-not $Context.TextParseCacheKeyByNodeId) {
+        $Context.TextParseCacheKeyByNodeId = @{}
+    }
 
+    $nodeId = [int]$Node.Id
     $text = [string]$Node.Text
-    $cacheKey = "$($Node.Id):$text"
+
+    if ($Context.TextParseCacheKeyByNodeId.ContainsKey($nodeId)) {
+        $recentKey = [string]$Context.TextParseCacheKeyByNodeId[$nodeId]
+        if (-not [string]::IsNullOrWhiteSpace($recentKey) -and $Context.TextParseCache.ContainsKey($recentKey)) {
+            $recentResult = $Context.TextParseCache[$recentKey]
+            if ($recentResult -and $recentResult.PSObject.Properties['SourceText'] -and [string]$recentResult.SourceText -ceq $text) {
+                return $recentResult
+            }
+        }
+    }
+
+    $cacheKey = "${nodeId}:$text"
     if ($Context.TextParseCache.ContainsKey($cacheKey)) {
+        $Context.TextParseCacheKeyByNodeId[$nodeId] = $cacheKey
         return $Context.TextParseCache[$cacheKey]
     }
 
     if ([string]::IsNullOrWhiteSpace($text)) {
         $result = [PSCustomObject]@{
-            Success = $false
-            Ast     = $null
-            Tokens  = @()
-            Errors  = @()
-            Error   = "Node.Text is empty"
+            Success    = $false
+            Ast        = $null
+            Tokens     = @()
+            Errors     = @()
+            Error      = "Node.Text is empty"
+            SourceText = $text
         }
         $Context.TextParseCache[$cacheKey] = $result
+        $Context.TextParseCacheKeyByNodeId[$nodeId] = $cacheKey
         return $result
     }
 
@@ -407,14 +674,16 @@ function Get-NodeTextParseInfo {
     $errorText = if ($success) { $null } else { ($parseErrors | ForEach-Object { $_.Message }) -join "; " }
 
     $result = [PSCustomObject]@{
-        Success = $success
-        Ast     = $ast
-        Tokens  = @($tokens)
-        Errors  = $parseErrors
-        Error   = $errorText
+        Success    = $success
+        Ast        = $ast
+        Tokens     = @($tokens)
+        Errors     = $parseErrors
+        Error      = $errorText
+        SourceText = $text
     }
 
     $Context.TextParseCache[$cacheKey] = $result
+    $Context.TextParseCacheKeyByNodeId[$nodeId] = $cacheKey
     return $result
 }
 
@@ -907,13 +1176,295 @@ function Get-NodeTextResolvables {
     }
 }
 
+# CFG 执行期索引
+function Get-CFGExecutionIndexes {
+    param([hashtable]$CFG)
+
+    if ($null -eq $CFG) { return $null }
+
+    if (-not $CFG.ContainsKey('__ExecIndexes') -or $null -eq $CFG['__ExecIndexes']) {
+        $CFG['__ExecIndexes'] = @{
+            NodeById         = @{}
+            EdgesByFrom      = @{}
+            EdgeLabelByPair  = @{}
+            FirstNodeByType  = @{}
+            IndexedNodeCount = -1
+            IndexedEdgeCount = -1
+            LastIndexedNodeCount = -1
+            LastIndexedEdgeCount = -1
+            Generation       = 0
+            FallbackCount    = 0
+            FallbackCountByGeneration = @{}
+            IncrementalUpdateCount = 0
+        }
+    }
+
+    $indexes = $CFG['__ExecIndexes']
+    if (-not $indexes.ContainsKey('NodeById') -or $null -eq $indexes.NodeById) { $indexes.NodeById = @{} }
+    if (-not $indexes.ContainsKey('EdgesByFrom') -or $null -eq $indexes.EdgesByFrom) { $indexes.EdgesByFrom = @{} }
+    if (-not $indexes.ContainsKey('EdgeLabelByPair') -or $null -eq $indexes.EdgeLabelByPair) { $indexes.EdgeLabelByPair = @{} }
+    if (-not $indexes.ContainsKey('FirstNodeByType') -or $null -eq $indexes.FirstNodeByType) { $indexes.FirstNodeByType = @{} }
+    if (-not $indexes.ContainsKey('IndexedNodeCount')) { $indexes.IndexedNodeCount = -1 }
+    if (-not $indexes.ContainsKey('IndexedEdgeCount')) { $indexes.IndexedEdgeCount = -1 }
+    if (-not $indexes.ContainsKey('LastIndexedNodeCount')) { $indexes.LastIndexedNodeCount = [int]$indexes.IndexedNodeCount }
+    if (-not $indexes.ContainsKey('LastIndexedEdgeCount')) { $indexes.LastIndexedEdgeCount = [int]$indexes.IndexedEdgeCount }
+    if (-not $indexes.ContainsKey('Generation')) { $indexes.Generation = 0 }
+    if (-not $indexes.ContainsKey('FallbackCount')) { $indexes.FallbackCount = 0 }
+    if (-not $indexes.ContainsKey('FallbackCountByGeneration') -or $null -eq $indexes.FallbackCountByGeneration) { $indexes.FallbackCountByGeneration = @{} }
+    if (-not $indexes.ContainsKey('IncrementalUpdateCount')) { $indexes.IncrementalUpdateCount = 0 }
+
+    return $indexes
+}
+
+function Add-CFGExecutionIndexFallback {
+    param(
+        [hashtable]$Indexes,
+        [int]$Count = 1
+    )
+
+    if ($null -eq $Indexes) { return }
+
+    $countToAdd = if ($Count -gt 0) { [int]$Count } else { 1 }
+    $Indexes.FallbackCount = [int]$Indexes.FallbackCount + $countToAdd
+
+    $generation = [int]$Indexes.Generation
+    if (-not $Indexes.FallbackCountByGeneration.ContainsKey($generation)) {
+        $Indexes.FallbackCountByGeneration[$generation] = 0
+    }
+    $Indexes.FallbackCountByGeneration[$generation] = [int]$Indexes.FallbackCountByGeneration[$generation] + $countToAdd
+}
+
+function Add-CFGNodeToIndexes {
+    param(
+        [hashtable]$Indexes,
+        $Node
+    )
+
+    if ($null -eq $Indexes -or $null -eq $Node) { return $false }
+
+    $nodeId = [int]$Node.Id
+    if ($Indexes.NodeById.ContainsKey($nodeId)) {
+        if ([object]::ReferenceEquals($Indexes.NodeById[$nodeId], $Node)) {
+            return $true
+        }
+        throw "CFG execution index conflict for NodeId $nodeId"
+    }
+
+    $Indexes.NodeById[$nodeId] = $Node
+    $nodeType = [string]$Node.Type
+    if (-not $Indexes.FirstNodeByType.ContainsKey($nodeType)) {
+        $Indexes.FirstNodeByType[$nodeType] = $Node
+    }
+    return $true
+}
+
+function Add-CFGEdgeToIndexes {
+    param(
+        [hashtable]$Indexes,
+        $Edge
+    )
+
+    if ($null -eq $Indexes -or $null -eq $Edge) { return $false }
+
+    $fromId = [int]$Edge.From
+    if (-not $Indexes.EdgesByFrom.ContainsKey($fromId) -or $null -eq $Indexes.EdgesByFrom[$fromId]) {
+        $Indexes.EdgesByFrom[$fromId] = New-Object System.Collections.ArrayList
+    }
+    $null = $Indexes.EdgesByFrom[$fromId].Add($Edge)
+
+    $pairKey = '{0}->{1}' -f [int]$Edge.From, [int]$Edge.To
+    if (-not $Indexes.EdgeLabelByPair.ContainsKey($pairKey)) {
+        $Indexes.EdgeLabelByPair[$pairKey] = [string]$Edge.Label
+    }
+
+    return $true
+}
+
+function Sync-CFGExecutionIndexesIncremental {
+    param(
+        [hashtable]$CFG,
+        [object[]]$NewNodes = @(),
+        [object[]]$NewEdges = @(),
+        [switch]$ForceRebuild
+    )
+
+    $indexes = Get-CFGExecutionIndexes -CFG $CFG
+    if ($null -eq $indexes) { return $null }
+
+    if ($ForceRebuild) {
+        return Ensure-CFGExecutionIndexes -CFG $CFG
+    }
+
+    $currentNodeCount = if ($null -ne $CFG.Nodes) { @($CFG.Nodes).Count } else { 0 }
+    $currentEdgeCount = if ($null -ne $CFG.Edges) { @($CFG.Edges).Count } else { 0 }
+    $newNodes = @($NewNodes | Where-Object { $null -ne $_ })
+    $newEdges = @($NewEdges | Where-Object { $null -ne $_ })
+
+    $canIncrementallySync = (
+        $indexes.IndexedNodeCount -ge 0 -and
+        $indexes.IndexedEdgeCount -ge 0 -and
+        $null -ne $indexes.NodeById -and
+        $null -ne $indexes.EdgesByFrom -and
+        $null -ne $indexes.EdgeLabelByPair -and
+        $null -ne $indexes.FirstNodeByType
+    )
+
+    $expectedNodeCount = [int]$indexes.IndexedNodeCount + $newNodes.Count
+    $expectedEdgeCount = [int]$indexes.IndexedEdgeCount + $newEdges.Count
+
+    if (-not $canIncrementallySync -or $expectedNodeCount -ne $currentNodeCount -or $expectedEdgeCount -ne $currentEdgeCount) {
+        return Ensure-CFGExecutionIndexes -CFG $CFG
+    }
+
+    foreach ($node in $newNodes) {
+        $null = Add-CFGNodeToIndexes -Indexes $indexes -Node $node
+    }
+    foreach ($edge in $newEdges) {
+        $null = Add-CFGEdgeToIndexes -Indexes $indexes -Edge $edge
+    }
+
+    $indexes.IndexedNodeCount = $currentNodeCount
+    $indexes.IndexedEdgeCount = $currentEdgeCount
+    $indexes.LastIndexedNodeCount = $currentNodeCount
+    $indexes.LastIndexedEdgeCount = $currentEdgeCount
+
+    if ($newNodes.Count -gt 0 -or $newEdges.Count -gt 0) {
+        $indexes.IncrementalUpdateCount = [int]$indexes.IncrementalUpdateCount + 1
+    }
+    if (-not $indexes.FallbackCountByGeneration.ContainsKey([int]$indexes.Generation)) {
+        $indexes.FallbackCountByGeneration[[int]$indexes.Generation] = 0
+    }
+
+    return $indexes
+}
+
+function Ensure-CFGExecutionIndexes {
+    param([hashtable]$CFG)
+
+    $indexes = Get-CFGExecutionIndexes -CFG $CFG
+    if ($null -eq $indexes) { return $null }
+
+    $nodes = if ($null -ne $CFG.Nodes) { @($CFG.Nodes) } else { @() }
+    $edges = if ($null -ne $CFG.Edges) { @($CFG.Edges) } else { @() }
+    $nodeCount = $nodes.Count
+    $edgeCount = $edges.Count
+
+    $needsRebuild = (
+        $indexes.IndexedNodeCount -ne $nodeCount -or
+        $indexes.IndexedEdgeCount -ne $edgeCount -or
+        $null -eq $indexes.NodeById -or
+        $null -eq $indexes.EdgesByFrom -or
+        $null -eq $indexes.EdgeLabelByPair -or
+        $null -eq $indexes.FirstNodeByType
+    )
+
+    if (-not $needsRebuild) {
+        return $indexes
+    }
+
+    $nodeById = @{}
+    $edgesByFrom = @{}
+    $edgeLabelByPair = @{}
+    $firstNodeByType = @{}
+
+    foreach ($node in $nodes) {
+        if ($null -eq $node) { continue }
+        $nodeId = [int]$node.Id
+        $nodeById[$nodeId] = $node
+        $nodeType = [string]$node.Type
+        if (-not $firstNodeByType.ContainsKey($nodeType)) {
+            $firstNodeByType[$nodeType] = $node
+        }
+    }
+
+    foreach ($edge in $edges) {
+        if ($null -eq $edge) { continue }
+        $fromId = [int]$edge.From
+        if (-not $edgesByFrom.ContainsKey($fromId)) {
+            $edgesByFrom[$fromId] = New-Object System.Collections.ArrayList
+        }
+        $null = $edgesByFrom[$fromId].Add($edge)
+
+        $pairKey = '{0}->{1}' -f [int]$edge.From, [int]$edge.To
+        if (-not $edgeLabelByPair.ContainsKey($pairKey)) {
+            $edgeLabelByPair[$pairKey] = [string]$edge.Label
+        }
+    }
+
+    $indexes.NodeById = $nodeById
+    $indexes.EdgesByFrom = $edgesByFrom
+    $indexes.EdgeLabelByPair = $edgeLabelByPair
+    $indexes.FirstNodeByType = $firstNodeByType
+    $indexes.Generation = [int]$indexes.Generation + 1
+    $indexes.IndexedNodeCount = $nodeCount
+    $indexes.IndexedEdgeCount = $edgeCount
+    $indexes.LastIndexedNodeCount = $nodeCount
+    $indexes.LastIndexedEdgeCount = $edgeCount
+    $indexes.FallbackCountByGeneration[[int]$indexes.Generation] = 0
+
+    return $indexes
+}
+
+function Get-CFGOutgoingEdges {
+    param(
+        [hashtable]$CFG,
+        [int]$FromNodeId
+    )
+
+    $indexes = Ensure-CFGExecutionIndexes -CFG $CFG
+    if ($null -eq $indexes) { return @() }
+
+    if ($indexes.EdgesByFrom.ContainsKey($FromNodeId)) {
+        return @($indexes.EdgesByFrom[$FromNodeId])
+    }
+
+    $fallbackEdges = @($CFG.Edges | Where-Object { $_.From -eq $FromNodeId })
+    Add-CFGExecutionIndexFallback -Indexes $indexes
+    $indexes.EdgesByFrom[$FromNodeId] = $fallbackEdges
+    return @($fallbackEdges)
+}
+
+function Get-CFGFirstNodeByType {
+    param(
+        [hashtable]$CFG,
+        [string]$Type
+    )
+
+    $indexes = Ensure-CFGExecutionIndexes -CFG $CFG
+    if ($null -eq $indexes) { return $null }
+
+    if ($indexes.FirstNodeByType.ContainsKey($Type)) {
+        return $indexes.FirstNodeByType[$Type]
+    }
+
+    $node = $CFG.Nodes | Where-Object { $_.Type -eq $Type } | Select-Object -First 1
+    if ($node) {
+        $indexes.FirstNodeByType[$Type] = $node
+    }
+    Add-CFGExecutionIndexFallback -Indexes $indexes
+    return $node
+}
+
 # 根据节点 ID 获取节点
 function Get-NodeById {
     param(
         [hashtable]$CFG,
         [int]$Id
     )
-    return $CFG.Nodes | Where-Object { $_.Id -eq $Id } | Select-Object -First 1
+
+    $indexes = Ensure-CFGExecutionIndexes -CFG $CFG
+    if ($null -eq $indexes) { return $null }
+
+    if ($indexes.NodeById.ContainsKey($Id)) {
+        return $indexes.NodeById[$Id]
+    }
+
+    $node = $CFG.Nodes | Where-Object { $_.Id -eq $Id } | Select-Object -First 1
+    if ($node) {
+        $indexes.NodeById[$Id] = $node
+    }
+    Add-CFGExecutionIndexFallback -Indexes $indexes
+    return $node
 }
 
 # 获取后继节点
@@ -924,7 +1475,7 @@ function Get-NextNodes {
         [hashtable]$Context
     )
 
-    $edges = $CFG.Edges | Where-Object { $_.From -eq $Node.Id }
+    $edges = Get-CFGOutgoingEdges -CFG $CFG -FromNodeId $Node.Id
 
     switch ($Node.Type) {
         # If Condition 入口 - 跟随 Condition 边
@@ -1936,7 +2487,7 @@ function Invoke-ScriptBlockInline {
 
     $result = $Context.LastSubgraphResult
     $Context.LastSubgraphResult = $null
-    Write-ExecutionLog -Context $Context -Message "  [INLINE] Exited ScriptBlock '$BlockName' with result: $(Format-VariableValue $result)"
+    Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Exited ScriptBlock '$BlockName' with result: $(Format-VariableValue $result)" }).GetNewClosure()
     return $result
 }
 
@@ -3023,10 +3574,14 @@ function Invoke-FunctionCall {
                     $argResult.Result
                 }
                 $arguments += $argValue
-                Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)"
+                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
+                    Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                }
             } else {
                 $arguments += $null
-                Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = (eval failed)"
+                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
+                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = (eval failed)"
+                }
             }
         }
     }
@@ -3123,7 +3678,7 @@ function Invoke-FunctionInline {
     # 6. 获取返回值（FuncEnd 处理中会保留 LastSubgraphResult）
     $result = $Context.LastSubgraphResult
     $Context.LastSubgraphResult = $null
-    Write-ExecutionLog -Context $Context -Message "  [INLINE] Exited function '$FuncName' with result: $(Format-VariableValue $result)"
+    Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Exited function '$FuncName' with result: $(Format-VariableValue $result)" }).GetNewClosure()
     return $result
 }
 
@@ -3198,7 +3753,7 @@ function Resolve-EmbeddedFunctionCalls {
             }
         }
 
-        Write-ExecutionLog -Context $Context -Message "  [INLINE] Resolving: $($call.Text) with args: $(($args | ForEach-Object { Format-VariableValue $_ }) -join ', ')"
+        Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Resolving: $($call.Text) with args: $(($args | ForEach-Object { Format-VariableValue $_ }) -join ', ')" }).GetNewClosure()
 
         # 内联执行函数
         $funcResult = Invoke-FunctionInline -FuncName $call.FuncName -Arguments $args -Context $Context
@@ -3228,14 +3783,14 @@ function Resolve-EmbeddedFunctionCalls {
             $Context.VariableReadResults[$inlineKey].Values += (Format-ResolvableValue $funcResult)
         }
 
-        Write-ExecutionLog -Context $Context -Message "  [INLINE] Created temp var `$$tempVar = $(Format-VariableValue $funcResult)"
+        Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Created temp var `$$tempVar = $(Format-VariableValue $funcResult)" }).GetNewClosure()
 
         # 用变量名替换代码
         $relStart = $call.Start - $baseOffset
         $relEnd = $call.End - $baseOffset
         $result = $result.Substring(0, $relStart) + "`$$tempVar" + $result.Substring($relEnd)
 
-        Write-ExecutionLog -Context $Context -Message "  [INLINE] Result: $($call.FuncName) => $(Format-VariableValue $funcResult)"
+        Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Result: $($call.FuncName) => $(Format-VariableValue $funcResult)" }).GetNewClosure()
     }
 
     return $result
@@ -3326,7 +3881,9 @@ function Invoke-ScriptBlockCall {
     if ($null -ne $PreParsedArguments) {
         $arguments = $PreParsedArguments
         for ($i = 0; $i -lt $arguments.Count; $i++) {
-            Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: (pre-parsed) = $(Format-VariableValue $arguments[$i])"
+            if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
+                Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: (pre-parsed) = $(Format-VariableValue $arguments[$i])" }).GetNewClosure()
+            }
         }
     }
     # 否则从 Node.Text 解析参数
@@ -3343,7 +3900,9 @@ function Invoke-ScriptBlockCall {
         } else {
             $arguments = @($argInfo.Arguments)
             for ($i = 0; $i -lt $arguments.Count; $i++) {
-                Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: (text-parsed) = $(Format-VariableValue $arguments[$i])"
+                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
+                    Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: (text-parsed) = $(Format-VariableValue $arguments[$i])" }).GetNewClosure()
+                }
             }
         }
     }
@@ -3499,6 +4058,7 @@ function Handle-DynamicInvoke {
         }
         # 2. 添加从转换节点到当前节点的边
         Add-Edge -cfg $Context.CFG -from $translationNode.Id -to $Node.Id
+        $null = Sync-CFGExecutionIndexesIncremental -CFG $Context.CFG -ForceRebuild
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Inserted translation node before Node $($Node.Id)"
 
         # 执行前置节点：设置 $_dyn_xxx 变量为脚本块
@@ -3605,7 +4165,7 @@ function Handle-DynamicInvoke {
             Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
             foreach ($varInfo in $Node.VarsWritten) {
                 $varValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varInfo.Name
-                Write-ExecutionLog -Context $Context -Message "    `$$($varInfo.Name) = $(Format-VariableValue $varValue)"
+                Write-ExecutionLog -Context $Context -Message ({ "    `$$($varInfo.Name) = $(Format-VariableValue $varValue)" }).GetNewClosure()
             }
         }
 
@@ -3697,7 +4257,7 @@ function Invoke-NodeTraverse {
                             }
                         }
                         $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $returnValue)
-                        Write-ExecutionLog -Context $Context -Message "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)"
+                        Write-ExecutionLog -Context $Context -Message ({ "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     }
 
                     Write-ExecutionLog -Context $Context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
@@ -3706,7 +4266,7 @@ function Invoke-NodeTraverse {
                 } else {
                     # 内联调用（ReturnNodeId=0）：保留 LastSubgraphResult 供调用者获取
                     $Context.LastSubgraphResult = $returnValue
-                    Write-ExecutionLog -Context $Context -Message "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)"
+                    Write-ExecutionLog -Context $Context -Message ({ "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     $currentNode = $null
                 }
             } else {
@@ -3720,7 +4280,7 @@ function Invoke-NodeTraverse {
             Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [Return] ---"
             Write-ExecutionLog -Context $Context -Message "  Code: $($currentNode.Text)"
 
-            $Context.VisitedNodes[$currentNode.Id] = ($Context.VisitedNodes[$currentNode.Id] ?? 0) + 1
+            $null = Add-CFGVisitedNodeCount -Context $Context -NodeId $currentNode.Id
             $Context.TotalVisits++
 
             # 如果在函数/脚本块作用域中
@@ -3751,7 +4311,7 @@ function Invoke-NodeTraverse {
                         } else {
                             $returnValue = $evalResult.Result
                         }
-                        Write-ExecutionLog -Context $Context -Message "  [RETURN] Expression value: $(Format-VariableValue $returnValue)"
+                        Write-ExecutionLog -Context $Context -Message ({ "  [RETURN] Expression value: $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     }
                 }
 
@@ -3813,7 +4373,9 @@ function Invoke-NodeTraverse {
                         $argValue = $currentScope.Arguments[$i]
                         $prefixedName = $currentScope.ScopePrefix + $paramName
                         $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
-                        Write-ExecutionLog -Context $Context -Message "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)"
+                        if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogBindingDetailsEnabled') {
+                            Write-ExecutionLog -Context $Context -Message ({ "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                        }
 
                         # 把参数也加入 LocalVars 以便变量转换
                         if ($paramName -notin $currentScope.LocalVars) {
@@ -3885,7 +4447,7 @@ function Invoke-NodeTraverse {
         # 管道控制流：Break/Continue 在 ForEach-Object 脚本块中用于控制枚举
         if ($Context.OutputCaptureStack -and $Context.OutputCaptureStack.Count -gt 0 -and $currentNode.Type -in @('Break', 'Continue')) {
             $label = $currentNode.Type
-            $edge = $Context.CFG.Edges | Where-Object { $_.From -eq $currentNode.Id -and $_.Label -eq $label } | Select-Object -First 1
+            $edge = Get-CFGOutgoingEdges -CFG $Context.CFG -FromNodeId $currentNode.Id | Where-Object { $_.Label -eq $label } | Select-Object -First 1
             if ($edge) {
                 $targetNode = Get-NodeById -CFG $Context.CFG -Id $edge.To
                 if ($targetNode -and $targetNode.Type -in @('BlockEnd', 'FuncEnd', 'ProcessEnd', 'End', 'MainEnd')) {
@@ -3938,7 +4500,7 @@ function Invoke-NodeTraverse {
 
         if ($execResult.Executed) {
             # 记录读取的变量
-            if ($varsBefore.Count -gt 0) {
+            if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsBefore.Count -gt 0) {
                 Write-ExecutionLog -Context $Context -Message "  VarsRead:"
                 foreach ($kv in $varsBefore.GetEnumerator()) {
                     $formattedValue = Format-VariableValue $kv.Value
@@ -3947,7 +4509,7 @@ function Invoke-NodeTraverse {
             }
 
             # 记录写入的变量
-            if ($varsAfter.Count -gt 0) {
+            if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsAfter.Count -gt 0) {
                 Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
                 foreach ($kv in $varsAfter.GetEnumerator()) {
                     $formattedValue = Format-VariableValue $kv.Value
@@ -3957,8 +4519,11 @@ function Invoke-NodeTraverse {
 
             # 记录执行结果
             if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
-                $formattedResult = Format-VariableValue $execResult.Result
-                Write-ExecutionLog -Context $Context -Message "  Result: $formattedResult"
+                $formattedResult = $null
+                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogResultDetailsEnabled') {
+                    $formattedResult = Format-VariableValue $execResult.Result
+                    Write-ExecutionLog -Context $Context -Message "  Result: $formattedResult"
+                }
 
                 # 如果在函数/脚本块作用域中，更新 LastSubgraphResult 用于返回值
                 if ($Context.ScopeStack.Count -gt 0) {
@@ -4941,6 +5506,7 @@ function Invoke-CFGTraversal {
         CFG                 = $CFG
         ExecContext         = $execContext
         LogPath             = $LogPath
+        HostInfo            = Get-PowerShellHostInfo
         VisitedNodes        = @{}
         MaxIterations       = $MaxIterations
         MaxTotalNodes       = $MaxTotalNodes
@@ -4974,22 +5540,38 @@ function Invoke-CFGTraversal {
         PipelineCurrentStack  = @()          # $_ / $PSItem 绑定栈（用于 ForEach-Object 等嵌套管道上下文）
         OutputCaptureStack    = @()          # 输出捕获栈（用于 ForEach-Object 等逐项执行）
         LastPipelineFlowControl = $null      # "Break" 等（仅用于管道 cmdlet 控制流）
-        TextParseCache        = @{}          # Node.Text 解析缓存（执行期 text-first）
-        TextParseErrors       = @()          # 解析错误记录（非阻塞）
+        TextParseCache            = @{}          # Node.Text 解析缓存（执行期 text-first）
+        TextParseCacheKeyByNodeId = @{}          # Node.Id -> 最近命中的 TextParseCache key
+        TextParseErrors           = @()          # 解析错误记录（非阻塞）
+        LogArgumentDetailsEnabled = $true
+        LogBindingDetailsEnabled  = $true
+        LogVariableDetailsEnabled = $true
+        LogResultDetailsEnabled   = $true
+        LogBufferBuilder          = [System.Text.StringBuilder]::new()
+        LogBufferedLines          = 0
+        LogBufferedBytes          = 0
+        LogFlushLineThreshold     = 100
+        LogFlushByteThreshold     = 16384
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
+    $hostDisplay = Format-PowerShellHostInfo -HostInfo $context.HostInfo
+    Write-ExecutionLog -Context $context -Message "Host: $hostDisplay"
+    if ($context.HostInfo -and $context.HostInfo.ExecutablePath) {
+        Write-ExecutionLog -Context $context -Message "HostExe: $($context.HostInfo.ExecutablePath)"
+    }
     Write-ExecutionLog -Context $context -Message "MaxIterations: $MaxIterations, MaxTotalNodes: $MaxTotalNodes"
     Write-ExecutionLog -Context $context -Message ""
 
     # 初始化子图映射
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
     Initialize-SubgraphMappings -CFG $CFG -Context $context
+    $null = Ensure-CFGExecutionIndexes -CFG $CFG
     Write-ExecutionLog -Context $context -Message ""
 
     try {
         # 找到 Start 节点
-        $startNode = $CFG.Nodes | Where-Object { $_.Type -eq "Start" } | Select-Object -First 1
+        $startNode = Get-CFGFirstNodeByType -CFG $CFG -Type "Start"
 
         if ($null -eq $startNode) {
             Write-ExecutionLog -Context $context -Message "!!! 未找到 Start 节点 !!!"
@@ -5004,6 +5586,7 @@ function Invoke-CFGTraversal {
         Write-ExecutionLog -Context $context -Message "=== 执行统计 ==="
         Write-ExecutionLog -Context $context -Message "Total visits: $($context.TotalVisits)"
         Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
+        Flush-ExecutionLogBuffer -Context $context
 
         # 清理执行上下文
         Close-ExecutionContext -ExecContext $execContext
@@ -5032,6 +5615,7 @@ function New-CFGExecutionSession {
         CFG                 = $CFG
         ExecContext         = $execContext
         LogPath             = $LogPath
+        HostInfo            = Get-PowerShellHostInfo
         VisitedNodes        = @{}
         MaxIterations       = $MaxIterations
         MaxTotalNodes       = $MaxTotalNodes
@@ -5064,22 +5648,39 @@ function New-CFGExecutionSession {
         PipelineCurrentStack   = @()
         OutputCaptureStack     = @()
         LastPipelineFlowControl = $null
-        TextParseCache         = @{}
-        TextParseErrors        = @()
+        TextParseCache            = @{}
+        TextParseCacheKeyByNodeId = @{}
+        TextParseErrors           = @()
+        LogArgumentDetailsEnabled = $true
+        LogBindingDetailsEnabled  = $true
+        LogVariableDetailsEnabled = $true
+        LogResultDetailsEnabled   = $true
+        LogBufferBuilder          = [System.Text.StringBuilder]::new()
+        LogBufferedLines          = 0
+        LogBufferedBytes          = 0
+        LogFlushLineThreshold     = 5
+        LogFlushByteThreshold     = 2048
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 调试会话开始 ==="
+    $hostDisplay = Format-PowerShellHostInfo -HostInfo $context.HostInfo
+    Write-ExecutionLog -Context $context -Message "Host: $hostDisplay"
+    if ($context.HostInfo -and $context.HostInfo.ExecutablePath) {
+        Write-ExecutionLog -Context $context -Message "HostExe: $($context.HostInfo.ExecutablePath)"
+    }
     Write-ExecutionLog -Context $context -Message "MaxIterations: $MaxIterations, MaxTotalNodes: $MaxTotalNodes"
     Write-ExecutionLog -Context $context -Message ""
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
     Initialize-SubgraphMappings -CFG $CFG -Context $context
+    $null = Ensure-CFGExecutionIndexes -CFG $CFG
     Write-ExecutionLog -Context $context -Message ""
 
-    $startNode = $CFG.Nodes | Where-Object { $_.Type -eq "Start" } | Select-Object -First 1
+    $startNode = Get-CFGFirstNodeByType -CFG $CFG -Type "Start"
     $completed = $false
     $stopReason = $null
     if ($null -eq $startNode) {
         Write-ExecutionLog -Context $context -Message "!!! 未找到 Start 节点 !!!"
+        Flush-ExecutionLogBuffer -Context $context
         $completed = $true
         $stopReason = 'NoStartNode'
     }
@@ -5171,6 +5772,7 @@ function Close-CFGExecutionSession {
 
     if ($Session.Closed) { return }
     Write-CFGExecutionSummary -Session $Session
+    Flush-ExecutionLogBuffer -Context $Session.Context
     if ($Session.Context -and $Session.Context.ExecContext) {
         Close-ExecutionContext -ExecContext $Session.Context.ExecContext
     }
@@ -5197,8 +5799,23 @@ function Get-CFGEdgeLabel {
         [Parameter(Mandatory)][int]$ToNodeId
     )
 
-    $edge = $CFG.Edges | Where-Object { $_.From -eq $FromNodeId -and $_.To -eq $ToNodeId } | Select-Object -First 1
-    if ($edge) { return [string]$edge.Label }
+    $indexes = Ensure-CFGExecutionIndexes -CFG $CFG
+    $pairKey = '{0}->{1}' -f $FromNodeId, $ToNodeId
+    if ($indexes -and $indexes.EdgeLabelByPair.ContainsKey($pairKey)) {
+        return [string]$indexes.EdgeLabelByPair[$pairKey]
+    }
+
+    $edge = Get-CFGOutgoingEdges -CFG $CFG -FromNodeId $FromNodeId | Where-Object { $_.To -eq $ToNodeId } | Select-Object -First 1
+    if ($edge) {
+        if ($indexes) {
+            $indexes.EdgeLabelByPair[$pairKey] = [string]$edge.Label
+        }
+        return [string]$edge.Label
+    }
+
+    if ($indexes) {
+        Add-CFGExecutionIndexFallback -Indexes $indexes
+    }
     return $null
 }
 
@@ -5225,6 +5842,7 @@ function Invoke-CFGStep {
     )
 
     if ($Session.IsCompleted) {
+        Flush-ExecutionLogBuffer -Context $Session.Context
         return @{
             Completed   = $true
             StopReason  = $Session.StopReason
@@ -5240,8 +5858,17 @@ function Invoke-CFGStep {
     function Convert-VarMapToRecord {
         param([hashtable]$VarMap)
         $out = [ordered]@{}
-        foreach ($k in @($VarMap.Keys | Sort-Object)) {
-            $out[$k] = Format-VariableValue $VarMap[$k]
+        if ($null -eq $VarMap -or $VarMap.Count -eq 0) {
+            return $out
+        }
+        if ($VarMap.Count -eq 1) {
+            foreach ($entry in $VarMap.GetEnumerator()) {
+                $out[[string]$entry.Key] = Format-VariableValue $entry.Value
+            }
+            return $out
+        }
+        foreach ($entry in @($VarMap.GetEnumerator() | Sort-Object Key)) {
+            $out[[string]$entry.Key] = Format-VariableValue $entry.Value
         }
         return $out
     }
@@ -5325,14 +5952,14 @@ function Invoke-CFGStep {
                             }
                         }
                         $context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $returnValue)
-                        Write-ExecutionLog -Context $context -Message "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)"
+                        Write-ExecutionLog -Context $context -Message ({ "  [RETURN] Set `$$actualVarName = $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     }
 
                     Write-ExecutionLog -Context $context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
                     $nextNode = Get-NodeById -CFG $context.CFG -Id $scope.ReturnNodeId
                 } else {
                     $context.LastSubgraphResult = $returnValue
-                    Write-ExecutionLog -Context $context -Message "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)"
+                    Write-ExecutionLog -Context $context -Message ({ "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)" }).GetNewClosure()
                 }
             }
 
@@ -5372,7 +5999,7 @@ function Invoke-CFGStep {
             Write-ExecutionLog -Context $context -Message "--- Node $($currentNode.Id) [Return] ---"
             Write-ExecutionLog -Context $context -Message "  Code: $($currentNode.Text)"
 
-            $context.VisitedNodes[$currentNode.Id] = ($context.VisitedNodes[$currentNode.Id] ?? 0) + 1
+            $null = Add-CFGVisitedNodeCount -Context $context -NodeId $currentNode.Id
             $context.TotalVisits++
 
             $returnValue = $null
@@ -5396,7 +6023,7 @@ function Invoke-CFGStep {
                         } else {
                             $returnValue = $evalResult.Result
                         }
-                        Write-ExecutionLog -Context $context -Message "  [RETURN] Expression value: $(Format-VariableValue $returnValue)"
+                        Write-ExecutionLog -Context $context -Message ({ "  [RETURN] Expression value: $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     }
                 }
 
@@ -5479,7 +6106,9 @@ function Invoke-CFGStep {
                         $argValue = $currentScope.Arguments[$i]
                         $prefixedName = $currentScope.ScopePrefix + $paramName
                         $context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
-                        Write-ExecutionLog -Context $context -Message "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)"
+                        if (Test-ExecutionLogDetailEnabled -Context $context -FlagName 'LogBindingDetailsEnabled') {
+                            Write-ExecutionLog -Context $context -Message ({ "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                        }
                         if ($paramName -notin $currentScope.LocalVars) {
                             $currentScope.LocalVars += $paramName
                         }
@@ -5543,7 +6172,7 @@ function Invoke-CFGStep {
 
             if ($context.OutputCaptureStack -and $context.OutputCaptureStack.Count -gt 0 -and $currentNode.Type -in @('Break', 'Continue')) {
                 $label = $currentNode.Type
-                $edge = $context.CFG.Edges | Where-Object { $_.From -eq $currentNode.Id -and $_.Label -eq $label } | Select-Object -First 1
+                $edge = Get-CFGOutgoingEdges -CFG $context.CFG -FromNodeId $currentNode.Id | Where-Object { $_.Label -eq $label } | Select-Object -First 1
                 if ($edge) {
                     $targetNode = Get-NodeById -CFG $context.CFG -Id $edge.To
                     if ($targetNode -and $targetNode.Type -in @('BlockEnd', 'FuncEnd', 'ProcessEnd', 'End', 'MainEnd')) {
@@ -5582,20 +6211,22 @@ function Invoke-CFGStep {
             }
 
             if ($execResult.Executed) {
-                if ($varsBefore.Count -gt 0) {
+                if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsBefore.Count -gt 0) {
                     Write-ExecutionLog -Context $context -Message '  VarsRead:'
                     foreach ($kv in $varsBefore.GetEnumerator()) {
-                        Write-ExecutionLog -Context $context -Message "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)"
+                        Write-ExecutionLog -Context $context -Message ({ "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)" }).GetNewClosure()
                     }
                 }
-                if ($varsAfter.Count -gt 0) {
+                if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsAfter.Count -gt 0) {
                     Write-ExecutionLog -Context $context -Message '  VarsWritten:'
                     foreach ($kv in $varsAfter.GetEnumerator()) {
-                        Write-ExecutionLog -Context $context -Message "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)"
+                        Write-ExecutionLog -Context $context -Message ({ "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)" }).GetNewClosure()
                     }
                 }
                 if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
-                    Write-ExecutionLog -Context $context -Message "  Result: $(Format-VariableValue $execResult.Result)"
+                    if (Test-ExecutionLogDetailEnabled -Context $context -FlagName 'LogResultDetailsEnabled') {
+                        Write-ExecutionLog -Context $context -Message ({ "  Result: $(Format-VariableValue $execResult.Result)" }).GetNewClosure()
+                    }
                     if ($context.ScopeStack.Count -gt 0) {
                         if ($execResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
                             if ($execResult.Result.Count -eq 1) { $context.LastSubgraphResult = $execResult.Result[0] }
@@ -5658,6 +6289,7 @@ function Invoke-CFGStep {
             $failureRecord = Add-CFGExecutionFailure -Session $Session -Node $currentNode -Step $Session.StepCounter -Status $status -Action $execResult.Action -Reason $execResult.Reason -Error $execResult.Error -NextNode $nextNode -NextEdgeLabel $nextEdgeLabel -Source $failureSource
             if ($failureRecord) {
                 Write-ExecutionLog -Context $context -Message "  [CONTINUE] Failure recorded (#$($failureRecord.Index)); continuing to next node."
+                Flush-ExecutionLogBuffer -Context $context
             }
         }
 
@@ -5701,6 +6333,7 @@ function Invoke-CFGStep {
         Write-CFGExecutionSummary -Session $Session
     }
 
+    Flush-ExecutionLogBuffer -Context $context
     return @{
         Completed   = $Session.IsCompleted
         StopReason  = $Session.StopReason
@@ -5710,6 +6343,14 @@ function Invoke-CFGStep {
     }
 }
 
+
+
+
+
+
+
+
+
 function Test-CFGInternalVariableName {
     param([string]$Name)
 
@@ -6109,590 +6750,7 @@ function Get-CFGVariableStack {
     $eval = Invoke-InContext -ExecContext $context.ExecContext -Code "Get-Variable | Select-Object Name, Value"
     if (-not $eval.Success -or $null -eq $eval.Result) { return @() }
 
-    $rows = @()
-    foreach ($item in @($eval.Result)) {
-        if ($null -eq $item -or -not $item.PSObject.Properties['Name']) { continue }
-        $actualName = [string]$item.Name
-        if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
-
-        $isInternal = Test-CFGInternalVariableName -Name $actualName
-        $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
-        if (-not (Test-CFGVariableStackTierVisible -Tier $descriptor.Tier -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)) {
-            continue
-        }
-
-        $rows += [PSCustomObject]@{
-            DisplayName       = $descriptor.DisplayName
-            ActualName        = $actualName
-            IsInternal        = $isInternal
-            DisplayTier       = $descriptor.Tier
-            SortBucket        = [int]$descriptor.SortBucket
-            Value             = if ($item.PSObject.Properties['Value']) { $item.Value } else { $null }
-            ValueText         = if ($item.PSObject.Properties['Value']) { Format-CFGVariableStackValue -Value $item.Value -Mode $descriptor.ValueMode } else { '$null' }
-            IsPlaceholder     = $false
-            PlaceholderSource = $null
-        }
-    }
-
-    $existingActualNames = @($rows | ForEach-Object { [string]$_.ActualName })
-    $rows += @(Get-CFGVariableStackPlaceholderRows -Session $Session -ExistingActualNames $existingActualNames -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)
-
-    $uniqueRows = New-Object System.Collections.Generic.List[object]
-    $seenKeys = [System.Collections.Generic.HashSet[string]]::new()
-    foreach ($row in @($rows | Sort-Object SortBucket, DisplayName, ActualName)) {
-        $key = "{0}`0{1}" -f [string]$row.DisplayName, [string]$row.ActualName
-        if ($seenKeys.Add($key)) {
-            [void]$uniqueRows.Add($row)
-        }
-    }
-
-    return $uniqueRows.ToArray()
-}
-
-function Set-CFGVariableValue {
-    param(
-        [Parameter(Mandatory)][hashtable]$Session,
-        [Parameter(Mandatory)][string]$VariableName,
-        [Parameter(Mandatory)][string]$ValueExpression
-    )
-
-    if ([string]::IsNullOrWhiteSpace($VariableName)) {
-        throw "VariableName 不能为空。"
-    }
-    if ([string]::IsNullOrWhiteSpace($ValueExpression)) {
-        throw "ValueExpression 不能为空。"
-    }
-
-    $context = $Session.Context
-    $tokens = $null
-    $errors = $null
-    $exprAst = [System.Management.Automation.Language.Parser]::ParseInput($ValueExpression, [ref]$tokens, [ref]$errors)
-    if ($errors -and $errors.Count -gt 0) {
-        throw "变量值表达式解析失败: $($errors[0].Message)"
-    }
-
-    $cmdAsts = @($exprAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))
-    foreach ($cmdAst in $cmdAsts) {
-        $cmdName = $cmdAst.GetCommandName()
-        if ([string]::IsNullOrWhiteSpace($cmdName)) { continue }
-        if ($context.ForbiddenCommands -contains $cmdName) {
-            throw "变量值表达式包含禁用命令: $cmdName"
-        }
-    }
-
-    $evalResult = Invoke-InContext -ExecContext $context.ExecContext -Code "($ValueExpression)"
-    if (-not $evalResult.Success) {
-        throw "变量值求值失败: $($evalResult.Error)"
-    }
-
-    $valueToSet = $null
-    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-        if ($evalResult.Result.Count -eq 1) {
-            $valueToSet = $evalResult.Result[0]
-        } elseif ($evalResult.Result.Count -gt 1) {
-            $valueToSet = @($evalResult.Result)
-        }
-    } else {
-        $valueToSet = $evalResult.Result
-    }
-
-    $resolvedName = Resolve-CFGVariableStackActualName -Context $context -VariableName $VariableName
-    $targetNames = @($resolvedName)
-    if ($VariableName -in @('_', 'PSItem', 'pipeline.current') -or $resolvedName -in @('_', 'PSItem')) {
-        $targetNames = @('_', 'PSItem')
-    }
-
-    foreach ($targetName in $targetNames) {
-        $context.ExecContext.Runspace.SessionStateProxy.SetVariable($targetName, $valueToSet)
-    }
-
-    return [PSCustomObject]@{
-        Name      = ($targetNames -join ', ')
-        Value     = $valueToSet
-        ValueText = Format-VariableValue $valueToSet
-    }
-}
-
-function Get-CFGNextEdgePreview {
-    param(
-        [Parameter(Mandatory)][hashtable]$Session
-    )
-
-    if ($Session.IsCompleted -or $null -eq $Session.CurrentNode) {
-        return [PSCustomObject]@{
-            HasPreview         = $false
-            NodeId             = $null
-            NodeType           = $null
-            EdgeLabel          = $null
-            ToNodeId           = $null
-            PredictedCondition = $null
-            Error              = $null
-        }
-    }
-
-    $context = $Session.Context
-    $node = $Session.CurrentNode
-    $conditionTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
-
-    if ($node.Type -in $conditionTypes) {
-        $code = Convert-CodeForCurrentScope -Code ([string]$node.Text) -Context $context
-        $eval = Invoke-InContext -ExecContext $context.ExecContext -Code $code
-        if (-not $eval.Success) {
-            return [PSCustomObject]@{
-                HasPreview         = $false
-                NodeId             = $node.Id
-                NodeType           = $node.Type
-                EdgeLabel          = $null
-                ToNodeId           = $null
-                PredictedCondition = $null
-                Error              = $eval.Error
-            }
-        }
-
-        $pred = $false
-        if ($null -ne $eval.Result -and $eval.Result.Count -gt 0) {
-            $pred = [bool]$eval.Result[0]
-        }
-        $label = Get-CFGConditionEdgeLabel -NodeType $node.Type -ConditionValue $pred
-        $edge = $context.CFG.Edges | Where-Object { $_.From -eq $node.Id -and $_.Label -eq $label } | Select-Object -First 1
-        $toNodeId = if ($edge) { [int]$edge.To } else { $null }
-
-        return [PSCustomObject]@{
-            HasPreview         = [bool]$edge
-            NodeId             = $node.Id
-            NodeType           = $node.Type
-            EdgeLabel          = $label
-            ToNodeId           = $toNodeId
-            PredictedCondition = $pred
-            Error              = $null
-        }
-    }
-
-    $nextNodes = Get-NextNodes -CFG $context.CFG -Node $node -Context $context
-    if ($nextNodes.Count -eq 0) {
-        return [PSCustomObject]@{
-            HasPreview         = $false
-            NodeId             = $node.Id
-            NodeType           = $node.Type
-            EdgeLabel          = $null
-            ToNodeId           = $null
-            PredictedCondition = $null
-            Error              = $null
-        }
-    }
-
-    $nextNode = $nextNodes[0]
-    $label = Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $node.Id -ToNodeId $nextNode.Id
-    return [PSCustomObject]@{
-        HasPreview         = $true
-        NodeId             = $node.Id
-        NodeType           = $node.Type
-        EdgeLabel          = $label
-        ToNodeId           = $nextNode.Id
-        PredictedCondition = $null
-        Error              = $null
-    }
-}
-function Test-CFGInternalVariableName {
-    param([string]$Name)
-
-    if ([string]::IsNullOrWhiteSpace($Name)) { return $true }
-    if ($Name -in $script:AutoVariables) { return $true }
-    if ($Name -match '^(_pipe_|_sc_[a-f0-9]{8}_|__|_fe_|_sw_|_foreach_|_where_|_select_|_proc_|_dyn_|_block_)') { return $true }
-    if ($Name -in @('Error','Host','PID','PWD','ShellId','StackTrace','Matches','LastExitCode','PSBoundParameters','PSDefaultParameterValues','MyInvocation','PSScriptRoot','PSCommandPath')) { return $true }
-    if ($Name -match '^PS[A-Z]') { return $true }
-    return $false
-}
-
-function Get-CFGVariableStackShortId {
-    param(
-        [string]$Id,
-        [int]$MaxLength = 8
-    )
-
-    if ([string]::IsNullOrWhiteSpace($Id)) { return '' }
-    if ($Id.Length -le $MaxLength) { return $Id }
-    return $Id.Substring(0, $MaxLength)
-}
-
-function Get-CFGVariableStackDescriptor {
-    param([string]$ActualName)
-
-    if ([string]::IsNullOrWhiteSpace($ActualName)) {
-        return [PSCustomObject]@{
-            Tier       = 'HiddenInternal'
-            DisplayName = $ActualName
-            SortBucket = 99
-            ValueMode  = 'Default'
-        }
-    }
-
-    if ($ActualName -eq '_') {
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = 'pipeline.current'
-            SortBucket  = 10
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -eq 'PSItem') {
-        return [PSCustomObject]@{
-            Tier        = 'HiddenInternal'
-            DisplayName = 'PSItem'
-            SortBucket  = 11
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -eq '__proc_input') {
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = 'process.input'
-            SortBucket  = 30
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^_pipe_([a-f0-9]{8})$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "pipe#$shortId"
-            SortBucket  = 20
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^__prc_([a-f0-9]{12})_idx$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "process.index#$shortId"
-            SortBucket  = 31
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__prc_([a-f0-9]{12})_current$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "process.current#$shortId"
-            SortBucket  = 32
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__prc_([a-f0-9]{12})$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'AdvancedInternal'
-            DisplayName = "process.collection#$shortId"
-            SortBucket  = 70
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^__pfo_in_([a-f0-9]{12})$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'AdvancedInternal'
-            DisplayName = "pfo.input#$shortId"
-            SortBucket  = 71
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^__pfo_([a-f0-9]{12})_idx$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "pfo.index#$shortId"
-            SortBucket  = 40
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__pfo_([a-f0-9]{12})_cur$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "pfo.current#$shortId"
-            SortBucket  = 41
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__pfo_([a-f0-9]{12})_out$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'AdvancedInternal'
-            DisplayName = "pfo.output#$shortId"
-            SortBucket  = 72
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^__sw_([a-f0-9]{12})_idx$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "switch.index#$shortId"
-            SortBucket  = 50
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__sw_([a-f0-9]{12})_current$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "switch.current#$shortId"
-            SortBucket  = 51
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__sw_([a-f0-9]{12})$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'AdvancedInternal'
-            DisplayName = "switch.collection#$shortId"
-            SortBucket  = 73
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^__fe_([a-f0-9]{12})_idx$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'DefaultInternal'
-            DisplayName = "foreach.index#$shortId"
-            SortBucket  = 60
-            ValueMode   = 'Default'
-        }
-    }
-
-    if ($ActualName -match '^__fe_([a-f0-9]{12})$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        return [PSCustomObject]@{
-            Tier        = 'AdvancedInternal'
-            DisplayName = "foreach.collection#$shortId"
-            SortBucket  = 74
-            ValueMode   = 'CollectionSummary'
-        }
-    }
-
-    if ($ActualName -match '^_sc_([a-f0-9]{8})_(.+)$') {
-        $shortId = Get-CFGVariableStackShortId -Id $Matches[1]
-        $logicalName = [string]$Matches[2]
-        return [PSCustomObject]@{
-            Tier        = 'AdvancedInternal'
-            DisplayName = "`$$logicalName @scope#$shortId"
-            SortBucket  = 80
-            ValueMode   = 'Default'
-        }
-    }
-
-    if (Test-CFGInternalVariableName -Name $ActualName) {
-        return [PSCustomObject]@{
-            Tier        = 'HiddenInternal'
-            DisplayName = $ActualName
-            SortBucket  = 90
-            ValueMode   = 'Default'
-        }
-    }
-
-    return [PSCustomObject]@{
-        Tier        = 'User'
-        DisplayName = $ActualName
-        SortBucket  = 0
-        ValueMode   = 'Default'
-    }
-}
-
-function Format-CFGVariableStackValue {
-    param(
-        $Value,
-        [string]$Mode = 'Default'
-    )
-
-    if ($Mode -ne 'CollectionSummary') {
-        return Format-VariableValue $Value
-    }
-
-    if ($null -eq $Value) {
-        return '$null'
-    }
-
-    if ($Value -is [string] -or $Value -isnot [System.Collections.IEnumerable]) {
-        return Format-VariableValue $Value
-    }
-
-    $knownCount = $null
-    if ($Value -is [array]) {
-        $knownCount = $Value.Length
-    } elseif ($Value -is [System.Collections.ICollection]) {
-        try { $knownCount = [int]$Value.Count } catch { $knownCount = $null }
-    }
-
-    $items = New-Object System.Collections.Generic.List[string]
-    $idx = 0
-    $hasMore = $false
-    foreach ($item in $Value) {
-        if ($idx -ge 3) {
-            $hasMore = $true
-            break
-        }
-        $items.Add((Format-VariableValue -Value $item -Depth 1))
-        $idx++
-    }
-
-    if (-not $hasMore -and $null -ne $knownCount -and $knownCount -gt $idx) {
-        $hasMore = $true
-    }
-
-    $typeName = $Value.GetType().Name
-    $itemsText = $items -join ', '
-    $suffix = if ($hasMore) { ', ...' } else { '' }
-    if ($null -ne $knownCount) {
-        return "[$typeName] Count=$knownCount @($itemsText$suffix)"
-    }
-    return "[$typeName] @($itemsText$suffix)"
-}
-function Resolve-CFGVariableStackActualName {
-    param(
-        [hashtable]$Context,
-        [string]$VariableName
-    )
-
-    if ([string]::IsNullOrWhiteSpace($VariableName)) { return $VariableName }
-
-    $name = [string]$VariableName
-    if ($name.StartsWith('$')) {
-        $name = $name.Substring(1)
-    }
-
-    if ($name -eq 'pipeline.current') {
-        return '_'
-    }
-
-    if ($name -match '^_sc_[a-f0-9]{8}_') {
-        return $name
-    }
-
-    if ($Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope.LocalVars -and $name -in $currentScope.LocalVars) {
-            return ($currentScope.ScopePrefix + $name)
-        }
-    }
-
-    return $name
-}
-
-function Test-CFGVariableStackTierVisible {
-    param(
-        [string]$Tier,
-        [switch]$IncludeInternal,
-        [switch]$IncludeAdvancedInternal
-    )
-
-    if ($IncludeInternal) { return $true }
-    if ($Tier -eq 'HiddenInternal') { return $false }
-    if ($Tier -eq 'AdvancedInternal' -and -not $IncludeAdvancedInternal) { return $false }
-    return $true
-}
-
-function Get-CFGVariableStackPlaceholderRows {
-    param(
-        [Parameter(Mandatory)][hashtable]$Session,
-        [string[]]$ExistingActualNames = @(),
-        [switch]$IncludeInternal,
-        [switch]$IncludeAdvancedInternal
-    )
-
-    $context = $Session.Context
     $rows = New-Object System.Collections.Generic.List[object]
-    $seenActualNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($name in @($ExistingActualNames)) {
-        if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
-            $null = $seenActualNames.Add([string]$name)
-        }
-    }
-
-    $addFromNode = {
-        param($Node, [string]$Source)
-
-        if (-not $Node) { return }
-        $varInfos = @($Node.VarsRead) + @($Node.VarsWritten)
-        foreach ($varInfo in @($varInfos)) {
-            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) { continue }
-
-            $actualName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varInfo.Name)
-            if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
-            if ($seenActualNames.Contains($actualName)) { continue }
-
-            $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
-            if (-not (Test-CFGVariableStackTierVisible -Tier $descriptor.Tier -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)) {
-                continue
-            }
-
-            $isInternal = Test-CFGInternalVariableName -Name $actualName
-            $rows.Add([PSCustomObject]@{
-                DisplayName       = $descriptor.DisplayName
-                ActualName        = $actualName
-                IsInternal        = $isInternal
-                DisplayTier       = $descriptor.Tier
-                SortBucket        = [int]$descriptor.SortBucket
-                Value             = $null
-                ValueText         = '(missing; set manually)'
-                IsPlaceholder     = $true
-                PlaceholderSource = $Source
-            }) | Out-Null
-            $null = $seenActualNames.Add($actualName)
-        }
-    }
-
-    if ($Session.CurrentNode) {
-        & $addFromNode $Session.CurrentNode 'CurrentNode'
-    }
-
-    if ($Session.History -and $Session.History.Count -gt 0) {
-        $lastRecord = $Session.History[$Session.History.Count - 1]
-        $hasFailure = $false
-        if ($lastRecord) {
-            if ($lastRecord.PSObject.Properties['Success'] -and -not [bool]$lastRecord.Success) {
-                $hasFailure = $true
-            }
-            if (-not $hasFailure -and $lastRecord.PSObject.Properties['Error'] -and -not [string]::IsNullOrWhiteSpace([string]$lastRecord.Error)) {
-                $hasFailure = $true
-            }
-        }
-        if ($hasFailure -and $lastRecord.PSObject.Properties['NodeId']) {
-            $lastNode = Get-NodeById -CFG $Session.CFG -Id ([int]$lastRecord.NodeId)
-            if ($lastNode) {
-                & $addFromNode $lastNode 'LastFailedNode'
-            }
-        }
-    }
-
-    return $rows.ToArray()
-}
-
-function Get-CFGVariableStack {
-    param(
-        [Parameter(Mandatory)][hashtable]$Session,
-        [switch]$IncludeInternal,
-        [switch]$IncludeAdvancedInternal
-    )
-
-    $context = $Session.Context
-    $eval = Invoke-InContext -ExecContext $context.ExecContext -Code "Get-Variable | Select-Object Name, Value"
-    if (-not $eval.Success -or $null -eq $eval.Result) { return @() }
-
-    $rows = @()
     foreach ($item in @($eval.Result)) {
         if ($null -eq $item -or -not $item.PSObject.Properties['Name']) { continue }
         $actualName = [string]$item.Name
@@ -6704,7 +6762,7 @@ function Get-CFGVariableStack {
             continue
         }
 
-        $rows += [PSCustomObject]@{
+        [void]$rows.Add([PSCustomObject]@{
             DisplayName       = $descriptor.DisplayName
             ActualName        = $actualName
             IsInternal        = $isInternal
@@ -6714,15 +6772,26 @@ function Get-CFGVariableStack {
             ValueText         = if ($item.PSObject.Properties['Value']) { Format-CFGVariableStackValue -Value $item.Value -Mode $descriptor.ValueMode } else { '$null' }
             IsPlaceholder     = $false
             PlaceholderSource = $null
-        }
+        })
     }
 
-    $existingActualNames = @($rows | ForEach-Object { [string]$_.ActualName })
-    $rows += @(Get-CFGVariableStackPlaceholderRows -Session $Session -ExistingActualNames $existingActualNames -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)
+    $existingActualNames = New-Object System.Collections.Generic.List[string]
+    foreach ($row in $rows) {
+        [void]$existingActualNames.Add([string]$row.ActualName)
+    }
+    foreach ($placeholder in @(Get-CFGVariableStackPlaceholderRows -Session $Session -ExistingActualNames $existingActualNames.ToArray() -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)) {
+        [void]$rows.Add($placeholder)
+    }
+
+    $sortedRows = if ($rows.Count -le 1) {
+        @($rows.ToArray())
+    } else {
+        @($rows.ToArray() | Sort-Object SortBucket, DisplayName, ActualName)
+    }
 
     $uniqueRows = New-Object System.Collections.Generic.List[object]
     $seenKeys = [System.Collections.Generic.HashSet[string]]::new()
-    foreach ($row in @($rows | Sort-Object SortBucket, DisplayName, ActualName)) {
+    foreach ($row in $sortedRows) {
         $key = "{0}`0{1}" -f [string]$row.DisplayName, [string]$row.ActualName
         if ($seenKeys.Add($key)) {
             [void]$uniqueRows.Add($row)
@@ -6837,7 +6906,7 @@ function Get-CFGNextEdgePreview {
             $pred = [bool]$eval.Result[0]
         }
         $label = Get-CFGConditionEdgeLabel -NodeType $node.Type -ConditionValue $pred
-        $edge = $context.CFG.Edges | Where-Object { $_.From -eq $node.Id -and $_.Label -eq $label } | Select-Object -First 1
+        $edge = Get-CFGOutgoingEdges -CFG $context.CFG -FromNodeId $node.Id | Where-Object { $_.Label -eq $label } | Select-Object -First 1
         $toNodeId = if ($edge) { [int]$edge.To } else { $null }
 
         return [PSCustomObject]@{
