@@ -1575,7 +1575,7 @@ function Get-NextNodes {
                 $nextNode = Get-NodeById -CFG $CFG -Id $edge.To
                 if ($nextNode) { $nextNodes += $nextNode }
             }
-            return $nextNodes
+            return ,$nextNodes  # 使用逗号操作符强制返回数组
         }
     }
 }
@@ -2009,6 +2009,33 @@ function Invoke-NodeSafe {
 
     # 检测可疑变量名
     Test-SuspiciousVariables -Node $Node -Context $Context
+
+    # 新增：检测危险的 .NET 方法调用
+    $methodCheck = Test-DangerousMethodCall -Node $Node -Context $Context
+    if ($methodCheck.IsDangerous) {
+        Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Dangerous .NET method: $($methodCheck.Type)::$($methodCheck.Method)"
+        Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Full call: $($methodCheck.FullCall)"
+        Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Reason: $($methodCheck.Reason)"
+
+        $placeholder = New-BlockedPlaceholder -Command "$($methodCheck.Type).$($methodCheck.Method)" -Reason $methodCheck.Reason
+
+        if ($Node.VarsWritten) {
+            foreach ($varInfo in $Node.VarsWritten) {
+                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varInfo.Name, $placeholder)
+                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($varInfo.Name) = [BlockedPlaceholder]"
+            }
+        }
+
+        return @{
+            Success   = $true
+            Executed  = $false
+            Result    = $placeholder
+            Error     = $null
+            Action    = "Blocked"
+            Command   = "$($methodCheck.Type).$($methodCheck.Method)"
+            Reason    = $methodCheck.Reason
+        }
+    }
 
     # 2. Phase 1: 还原非 Command 表达式
     $resolvedValues = Resolve-NonCommandExpressions -Node $Node -Context $Context
@@ -4968,6 +4995,165 @@ function Test-CommandSafety {
     return @{ Action = "Execute"; IsForbidden = $false }
 }
 
+# 检测危险的 .NET 方法调用
+function Test-DangerousMethodCall {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Node.Ast) {
+        return @{ IsDangerous = $false }
+    }
+
+    # 危险的 .NET 类型和方法组合
+    $dangerousPatterns = @(
+        # 文件删除（防止删除工具本身）
+        @{ Type = 'System.IO.File'; Methods = @('Delete') },
+        @{ Type = 'System.IO.Directory'; Methods = @('Delete') },
+        @{ Type = 'System.IO.FileInfo'; Methods = @('Delete') },
+        @{ Type = 'System.IO.DirectoryInfo'; Methods = @('Delete') },
+
+        # 文件移动（防止移走工具文件）
+        @{ Type = 'System.IO.File'; Methods = @('Move') },
+        @{ Type = 'System.IO.Directory'; Methods = @('Move') },
+        @{ Type = 'System.IO.FileInfo'; Methods = @('MoveTo') },
+        @{ Type = 'System.IO.DirectoryInfo'; Methods = @('MoveTo') },
+
+        # 网络操作（会悬挂/超时）
+        @{ Type = 'System.Net.WebClient'; Methods = @(
+            'DownloadFile', 'DownloadFileAsync',
+            'DownloadData', 'DownloadDataAsync',
+            'DownloadString', 'DownloadStringAsync',
+            'UploadFile', 'UploadFileAsync',
+            'UploadData', 'UploadDataAsync',
+            'UploadString', 'UploadStringAsync',
+            'UploadValues', 'UploadValuesAsync',
+            'OpenRead', 'OpenReadAsync',
+            'OpenWrite', 'OpenWriteAsync'
+        )},
+        @{ Type = 'System.Net.HttpWebRequest'; Methods = @(
+            'GetResponse', 'GetResponseAsync',
+            'GetRequestStream', 'GetRequestStreamAsync'
+        )},
+        @{ Type = 'System.Net.HttpWebResponse'; Methods = @('GetResponseStream') },
+        @{ Type = 'System.Net.Sockets.TcpClient'; Methods = @('Connect', 'ConnectAsync', 'GetStream') },
+        @{ Type = 'System.Net.Sockets.TcpListener'; Methods = @(
+            'Start', 'AcceptTcpClient', 'AcceptTcpClientAsync',
+            'AcceptSocket', 'AcceptSocketAsync'
+        )},
+        @{ Type = 'System.Net.Sockets.Socket'; Methods = @(
+            'Connect', 'ConnectAsync',
+            'Send', 'SendAsync', 'SendTo', 'SendToAsync',
+            'Receive', 'ReceiveAsync', 'ReceiveFrom', 'ReceiveFromAsync',
+            'Bind', 'Listen', 'Accept', 'AcceptAsync'
+        )},
+        @{ Type = 'System.Net.Sockets.UdpClient'; Methods = @(
+            'Connect', 'Send', 'SendAsync', 'Receive', 'ReceiveAsync'
+        )},
+        @{ Type = 'System.Net.Dns'; Methods = @(
+            'GetHostEntry', 'GetHostEntryAsync',
+            'GetHostAddresses', 'GetHostAddressesAsync'
+        )},
+        @{ Type = 'System.Net.Mail.SmtpClient'; Methods = @('Send', 'SendAsync') },
+
+        # 进程启动（会悬挂/等待）
+        @{ Type = 'System.Diagnostics.Process'; Methods = @('Start', 'WaitForExit', 'WaitForExitAsync') },
+
+        # 线程睡眠（会悬挂）
+        @{ Type = 'System.Threading.Thread'; Methods = @('Sleep', 'Join') },
+
+        # 任务等待（会悬挂）
+        @{ Type = 'System.Threading.Tasks.Task'; Methods = @('Wait', 'WaitAll', 'WaitAny') }
+    )
+
+    # 查找所有方法调用
+    $methodCalls = @($Node.Ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]
+    }, $true))
+
+    foreach ($methodCall in $methodCalls) {
+        $memberName = $null
+        if ($methodCall.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $memberName = $methodCall.Member.Value
+        }
+
+        if (-not $memberName) { continue }
+
+        # 检查是否是静态方法调用 [Type]::Method()
+        if ($methodCall.Expression -is [System.Management.Automation.Language.TypeExpressionAst]) {
+            $typeName = $methodCall.Expression.TypeName.FullName
+
+            foreach ($pattern in $dangerousPatterns) {
+                if ($typeName -like "*$($pattern.Type)" -and $memberName -in $pattern.Methods) {
+                    return @{
+                        IsDangerous = $true
+                        Reason = "Dangerous .NET static method call"
+                        Type = $typeName
+                        Method = $memberName
+                        FullCall = $methodCall.Extent.Text
+                    }
+                }
+            }
+        }
+
+        # 检查是否是实例方法调用 $obj.Method()
+        # 危险的实例方法名列表
+        $dangerousInstanceMethods = @(
+            'Delete', 'MoveTo',
+            'DownloadFile', 'DownloadData', 'DownloadString',
+            'UploadFile', 'UploadData', 'UploadString',
+            'Connect', 'Send', 'Receive', 'GetStream',
+            'Start', 'WaitForExit',
+            'Sleep', 'Join', 'Wait'
+        )
+
+        if ($memberName -in $dangerousInstanceMethods) {
+            # 尝试获取对象类型
+            $objType = $null
+            if ($methodCall.Expression -is [System.Management.Automation.Language.VariableExpressionAst]) {
+                $varName = $methodCall.Expression.VariablePath.UserPath
+                # 尝试从上下文获取变量类型
+                try {
+                    $varValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varName
+                    if ($null -ne $varValue) {
+                        $objType = $varValue.GetType().FullName
+                    }
+                } catch {
+                    # 无法获取变量值
+                }
+            }
+
+            # 如果能确定类型，检查是否匹配危险模式
+            if ($objType) {
+                foreach ($pattern in $dangerousPatterns) {
+                    if ($objType -like "*$($pattern.Type)" -and $memberName -in $pattern.Methods) {
+                        return @{
+                            IsDangerous = $true
+                            Reason = "Dangerous .NET instance method call"
+                            Type = $objType
+                            Method = $memberName
+                            FullCall = $methodCall.Extent.Text
+                        }
+                    }
+                }
+            } else {
+                # 无法确定类型，但方法名危险，标记为可疑
+                return @{
+                    IsDangerous = $true
+                    Reason = "Potentially dangerous method call (type unknown)"
+                    Type = "Unknown"
+                    Method = $memberName
+                    FullCall = $methodCall.Extent.Text
+                }
+            }
+        }
+    }
+
+    return @{ IsDangerous = $false }
+}
+
 # 还原非 Command 类型的表达式
 function Resolve-NonCommandExpressions {
     param(
@@ -5519,16 +5705,69 @@ function Invoke-CFGTraversal {
         ScopeStack            = @()          # 作用域栈 [{ ScopeType; ScopeName; ScopePrefix; ReturnNodeId; LocalVars }]
         CurrentScopePrefix    = ""           # 当前作用域变量前缀
         ForbiddenCommands     = @(           # 违禁命令列表
-            'Remove-Item', 'del', 'rm', 'rmdir', 'rd',
-            'Format-Volume', 'Clear-Disk',
-            'Stop-Process', 'kill', 'spps',
-            'Stop-Computer', 'Restart-Computer',
-            'Set-ExecutionPolicy',
-            'New-Service', 'Remove-Service',
-            'Clear-Content', 'Clear-ItemProperty',
-            'Remove-ItemProperty', 'Clear-RecycleBin',
-            'Start-Process', 'Invoke-WebRequest', 'Invoke-RestMethod',
-            'New-Object', 'Add-Type'  # 危险的 .NET 操作
+            # ========== 文件删除（防止删除工具本身）==========
+            'Remove-Item', 'del', 'rm', 'rmdir', 'rd', 'ri', 'erase',
+            'Clear-Content', 'clc',
+            'Clear-ItemProperty', 'clp',
+            'Remove-ItemProperty', 'rp',
+            'Clear-RecycleBin',
+
+            # ========== 文件移动/重命名（防止移走工具文件）==========
+            'Move-Item', 'move', 'mv', 'mi',
+            'Rename-Item', 'ren', 'rni',
+
+            # ========== 网络操作（会悬挂/超时/超出范围）==========
+            'Invoke-WebRequest', 'iwr', 'curl', 'wget',
+            'Invoke-RestMethod', 'irm',
+            'Start-BitsTransfer',
+            'Add-BitsFile',
+            'Complete-BitsTransfer',
+            'Test-NetConnection',
+            'Test-Connection', 'ping',
+            'Send-MailMessage',
+
+            # ========== 进程启动（会悬挂/等待）==========
+            'Start-Process', 'start', 'saps',
+            'Wait-Process',
+            'Debug-Process',
+
+            # ========== 系统控制（会中断执行）==========
+            'Stop-Computer',
+            'Restart-Computer',
+            'Suspend-Computer',
+            'Checkpoint-Computer',
+            'Restore-Computer',
+
+            # ========== 远程执行（会悬挂）==========
+            'Invoke-Command', 'icm',
+            'Enter-PSSession',
+            'New-PSSession',
+            'Enable-PSRemoting',
+            'Disable-PSRemoting',
+            'Enable-PSSessionConfiguration',
+            'Register-PSSessionConfiguration',
+
+            # ========== 用户交互（会悬挂等待输入）==========
+            'Read-Host',
+            'Get-Credential',
+            'Out-GridView',
+
+            # ========== 长时间等待（会悬挂）==========
+            'Wait-Event',
+            'Wait-Job',
+
+            # ========== 磁盘操作（耗时且超出范围）==========
+            'Format-Volume',
+            'Clear-Disk',
+            'Initialize-Disk',
+            'Set-Disk',
+            'Remove-Partition',
+            'Optimize-Volume',
+
+            # ========== 其他可能悬挂的操作 ==========
+            'Out-Printer',
+            'Start-Transcript',
+            'Stop-Transcript'
         )
         FunctionSubgraphs     = @{}          # 函数名 -> FuncStart 节点 Id
         ScriptBlockSubgraphs  = @{}          # _block_xxx -> BlockStart 节点 Id
@@ -5627,16 +5866,69 @@ function New-CFGExecutionSession {
         ScopeStack            = @()
         CurrentScopePrefix    = ""
         ForbiddenCommands     = @(
-            'Remove-Item', 'del', 'rm', 'rmdir', 'rd',
-            'Format-Volume', 'Clear-Disk',
-            'Stop-Process', 'kill', 'spps',
-            'Stop-Computer', 'Restart-Computer',
-            'Set-ExecutionPolicy',
-            'New-Service', 'Remove-Service',
-            'Clear-Content', 'Clear-ItemProperty',
-            'Remove-ItemProperty', 'Clear-RecycleBin',
-            'Start-Process', 'Invoke-WebRequest', 'Invoke-RestMethod',
-            'New-Object', 'Add-Type'
+            # ========== 文件删除（防止删除工具本身）==========
+            'Remove-Item', 'del', 'rm', 'rmdir', 'rd', 'ri', 'erase',
+            'Clear-Content', 'clc',
+            'Clear-ItemProperty', 'clp',
+            'Remove-ItemProperty', 'rp',
+            'Clear-RecycleBin',
+
+            # ========== 文件移动/重命名（防止移走工具文件）==========
+            'Move-Item', 'move', 'mv', 'mi',
+            'Rename-Item', 'ren', 'rni',
+
+            # ========== 网络操作（会悬挂/超时/超出范围）==========
+            'Invoke-WebRequest', 'iwr', 'curl', 'wget',
+            'Invoke-RestMethod', 'irm',
+            'Start-BitsTransfer',
+            'Add-BitsFile',
+            'Complete-BitsTransfer',
+            'Test-NetConnection',
+            'Test-Connection', 'ping',
+            'Send-MailMessage',
+
+            # ========== 进程启动（会悬挂/等待）==========
+            'Start-Process', 'start', 'saps',
+            'Wait-Process',
+            'Debug-Process',
+
+            # ========== 系统控制（会中断执行）==========
+            'Stop-Computer',
+            'Restart-Computer',
+            'Suspend-Computer',
+            'Checkpoint-Computer',
+            'Restore-Computer',
+
+            # ========== 远程执行（会悬挂）==========
+            'Invoke-Command', 'icm',
+            'Enter-PSSession',
+            'New-PSSession',
+            'Enable-PSRemoting',
+            'Disable-PSRemoting',
+            'Enable-PSSessionConfiguration',
+            'Register-PSSessionConfiguration',
+
+            # ========== 用户交互（会悬挂等待输入）==========
+            'Read-Host',
+            'Get-Credential',
+            'Out-GridView',
+
+            # ========== 长时间等待（会悬挂）==========
+            'Wait-Event',
+            'Wait-Job',
+
+            # ========== 磁盘操作（耗时且超出范围）==========
+            'Format-Volume',
+            'Clear-Disk',
+            'Initialize-Disk',
+            'Set-Disk',
+            'Remove-Partition',
+            'Optimize-Volume',
+
+            # ========== 其他可能悬挂的操作 ==========
+            'Out-Printer',
+            'Start-Transcript',
+            'Stop-Transcript'
         )
         FunctionSubgraphs      = @{}
         ScriptBlockSubgraphs   = @{}
