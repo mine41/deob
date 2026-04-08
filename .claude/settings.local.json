@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(*)",
       "Bash(powershell -Command \"Get-Content -Path ''Generate-CFG.ps1'' -Raw | Select-Object -First 1 | Format-Hex | Select-Object -First 3\")",
       "Bash(powershell -Command \"(Get-Content ''Generate-CFG.ps1'')[1072..1094] | ForEach-Object { $_}\")",
       "Bash(powershell -NoProfile -Command \"$content = Get-Content ''Generate-CFG.ps1'' -Raw; $content = $content -replace ''(?ms)    # 2\\.5 \\r?\\n    #     for \\(\\`$i = 0.*?        \\}\\r?\\n    \\}\\r?\\n\\r?\\n    # 3\\. '', ''    # 3. ''; Set-Content ''Generate-CFG.ps1'' -Value $content -NoNewline\")",
@@ -54,7 +55,9 @@
       "Bash(find:*)",
       "Bash(Select-Object -Last 60)",
       "Bash(. ./Generate-CFG.ps1)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(grep:*)"
     ]
   }
 }

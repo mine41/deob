@@ -576,6 +576,82 @@ function Populate-NodeInvokes {
     $node.Invokes.ScriptBlocks = @($blockVars | Select-Object -Unique)
 }
 
+# 辅助函数：尝试解码 powershell -EncodedCommand 调用
+# 如果是 EncodedCommand 调用，返回解码信息；否则返回 $null
+function Try-DecodeEncodedCommand {
+    param(
+        [Parameter(Mandatory=$true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    # 获取命令名
+    $cmdName = $CommandAst.GetCommandName()
+    # 支持完整路径和简单命令名
+    if ($cmdName -notmatch '(?i)(^|[/\\])powershell(\.exe)?$') {
+        return $null
+    }
+
+    # 遍历参数查找 -EncodedCommand 或 -enc
+    $elements = $CommandAst.CommandElements
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+
+        # 检查是否是 -EncodedCommand 或 -enc 参数
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramName = $elem.ParameterName.ToLower()
+
+            if ($paramName -match '^(encodedcommand|enc|e)$') {
+                # 获取下一个元素（Base64 字符串）
+                if ($i + 1 -lt $elements.Count) {
+                    $valueElem = $elements[$i + 1]
+                    $base64String = $null
+
+                    # 提取 Base64 字符串
+                    if ($valueElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                        $base64String = $valueElem.Value
+                    } elseif ($valueElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+                        $base64String = $valueElem.Value
+                    }
+
+                    if ($base64String) {
+                        try {
+                            # 解码 Base64
+                            $bytes = [Convert]::FromBase64String($base64String)
+
+                            # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
+                            $decoded = [Text.Encoding]::Unicode.GetString($bytes)
+
+                            # 转义解码后的内容中的引号（使用反引号转义）
+                            $escapedDecoded = $decoded.Replace('`', '``').Replace('"', '`"')
+
+                            # 构造替换后的命令文本
+                            # 将 -EncodedCommand <base64> 替换为 -Command "<decoded>"
+                            $originalText = $CommandAst.Extent.Text
+
+                            # 构造新的命令行
+                            # 保留 powershell 及其前面的参数，替换 -EncodedCommand 部分
+                            $beforeParam = $originalText.Substring(0, $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset)
+                            $replacementText = $beforeParam + "-Command `"$escapedDecoded`""
+
+                            return @{
+                                ReplacementText = $replacementText
+                                DecodedContent = $decoded
+                                OriginalBase64 = $base64String
+                            }
+
+                        } catch {
+                            Write-Warning "[EncodedCommand] 解码失败: $_"
+                            return $null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
 # 辅助函数：分析节点中的可还原表达式
 function Populate-NodeResolvables {
     param(
@@ -671,10 +747,21 @@ function Populate-NodeResolvables {
             $ancestor = $ancestor.Parent
         }
 
+        # 检查是否是 powershell -EncodedCommand 调用并解码
+        $textToUse = $expr.Extent.Text
+        if ($type -eq "Command" -and $expr -is [System.Management.Automation.Language.CommandAst]) {
+            $decodedInfo = Try-DecodeEncodedCommand -CommandAst $expr
+            if ($decodedInfo) {
+                # 使用解码后的文本作为 Resolvable
+                $textToUse = $decodedInfo.ReplacementText
+                Write-Verbose "[EncodedCommand] 解码成功: $($decodedInfo.OriginalBase64.Substring(0, [Math]::Min(20, $decodedInfo.OriginalBase64.Length)))... -> $($decodedInfo.DecodedContent.Substring(0, [Math]::Min(50, $decodedInfo.DecodedContent.Length)))..."
+            }
+        }
+
         $node.Resolvables += @{
             Type        = $type
             Ast         = $expr
-            Text        = $expr.Extent.Text
+            Text        = $textToUse
             StartOffset = $expr.Extent.StartOffset  # 原脚本中的起始位置
             EndOffset   = $expr.Extent.EndOffset    # 原脚本中的结束位置
             Depth       = $depth                     # 嵌套深度（0=最外层）

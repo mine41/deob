@@ -543,6 +543,82 @@ function Invoke-StaticConvertOperator {
     }
 }
 
+# 辅助函数：尝试解码 powershell -EncodedCommand 调用
+# 如果是 EncodedCommand 调用，返回解码信息；否则返回 $null
+function Try-DecodeEncodedCommand {
+    param(
+        [Parameter(Mandatory=$true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    # 获取命令名
+    $cmdName = $CommandAst.GetCommandName()
+    # 支持完整路径和简单命令名
+    if ($cmdName -notmatch '(?i)(^|[/\\])powershell(\.exe)?$') {
+        return $null
+    }
+
+    # 遍历参数查找 -EncodedCommand 或 -enc
+    $elements = $CommandAst.CommandElements
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+
+        # 检查是否是 -EncodedCommand 或 -enc 参数
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramName = $elem.ParameterName.ToLower()
+
+            if ($paramName -match '^(encodedcommand|enc|e)$') {
+                # 获取下一个元素（Base64 字符串）
+                if ($i + 1 -lt $elements.Count) {
+                    $valueElem = $elements[$i + 1]
+                    $base64String = $null
+
+                    # 提取 Base64 字符串
+                    if ($valueElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                        $base64String = $valueElem.Value
+                    } elseif ($valueElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+                        $base64String = $valueElem.Value
+                    }
+
+                    if ($base64String) {
+                        try {
+                            # 解码 Base64
+                            $bytes = [Convert]::FromBase64String($base64String)
+
+                            # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
+                            $decoded = [Text.Encoding]::Unicode.GetString($bytes)
+
+                            # 转义解码后的内容中的引号（使用反引号转义）
+                            $escapedDecoded = $decoded.Replace('`', '``').Replace('"', '`"')
+
+                            # 构造替换后的命令文本
+                            # 将 -EncodedCommand <base64> 替换为 -Command "<decoded>"
+                            $originalText = $CommandAst.Extent.Text
+
+                            # 构造新的命令行
+                            # 保留 powershell 及其前面的参数，替换 -EncodedCommand 部分
+                            $beforeParam = $originalText.Substring(0, $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset)
+                            $replacementText = $beforeParam + "-Command `"$escapedDecoded`""
+
+                            return @{
+                                ReplacementText = $replacementText
+                                DecodedContent = $decoded
+                                OriginalBase64 = $base64String
+                            }
+
+                        } catch {
+                            Write-Warning "[EncodedCommand] 解码失败: $_"
+                            return $null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
 function Resolve-StaticAstValue {
     param(
         $Ast,
@@ -721,6 +797,16 @@ function Resolve-StaticAstValue {
         }
         return [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
     }
+    if ($Ast -is [System.Management.Automation.Language.CommandAst]) {
+        # 尝试解码 powershell -EncodedCommand 调用
+        $decodedInfo = Try-DecodeEncodedCommand -CommandAst $Ast
+        if ($decodedInfo) {
+            # 返回解码后的文本作为求值结果
+            return [PSCustomObject]@{ Success = $true; Value = $decodedInfo.ReplacementText; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+        }
+        # 如果不是 EncodedCommand，返回失败
+        return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_command'; Message = 'CommandAst 不是 EncodedCommand 调用' }
+    }
 
     return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_ast'; Message = ('不支持的 AST 类型: ' + $Ast.GetType().Name) }
 }
@@ -793,13 +879,13 @@ function Get-StaticReplacementCandidates {
     }
 
     foreach ($node in $nodes) {
-        if (-not $node -or -not $node.Resolvables) { continue }
-        $nodeId = [int]$node.Id
-        $isVisited = $false
-        if ($Context.VisitedNodes) {
-            $isVisited = ($Context.VisitedNodes.ContainsKey($nodeId) -or $Context.VisitedNodes.ContainsKey([string]$nodeId))
+        if (-not $node -or -not $node.Resolvables) {
+            continue
         }
-        if ($isVisited) { continue }
+        $nodeId = [int]$node.Id
+
+        # 注意：静态求值不应该受节点访问状态影响
+        # 即使节点被执行过，静态可解析的表达式仍然应该被处理
 
         foreach ($r in @($node.Resolvables)) {
             if (-not $r) { continue }

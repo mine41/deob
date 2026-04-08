@@ -218,11 +218,12 @@ function Close-ExecutionContext {
     }
 }
 
-# 在 Runspace 中执行代码
+# 在 Runspace 中执行代码（带超时机制）
 function Invoke-InContext {
     param(
         [hashtable]$ExecContext,
-        [string]$Code
+        [string]$Code,
+        [int]$TimeoutMs = 5000  # 默认 5 秒超时
     )
 
     try {
@@ -230,7 +231,23 @@ function Invoke-InContext {
         $ps.Runspace = $ExecContext.Runspace
         $ps.AddScript($Code) | Out-Null
 
-        $result = $ps.Invoke()
+        # 异步调用，带超时
+        $asyncResult = $ps.BeginInvoke()
+        $completed = $asyncResult.AsyncWaitHandle.WaitOne($TimeoutMs)
+
+        if (-not $completed) {
+            # 超时 - 停止执行
+            $ps.Stop()
+            return @{
+                Success = $false
+                Error   = "Execution timeout after ${TimeoutMs}ms"
+                Result  = $null
+                Timeout = $true
+            }
+        }
+
+        # 获取结果
+        $result = $ps.EndInvoke($asyncResult)
 
         if ($ps.HadErrors) {
             $errorMsg = (($ps.Streams.Error | ForEach-Object { $_.ToString() }) -join "`n")
@@ -238,6 +255,7 @@ function Invoke-InContext {
                 Success = $false
                 Error   = $errorMsg
                 Result  = $null
+                Timeout = $false
             }
         }
 
@@ -245,6 +263,7 @@ function Invoke-InContext {
             Success = $true
             Error   = $null
             Result  = $result
+            Timeout = $false
         }
     }
     catch {
@@ -252,6 +271,7 @@ function Invoke-InContext {
             Success = $false
             Error   = $_.Exception.Message
             Result  = $null
+            Timeout = $false
         }
     }
     finally {
@@ -1690,7 +1710,7 @@ function Evaluate-NodeResolvables {
     )
 
     # 跳过求值的类型（有副作用或不适合求值）
-    $skipEvalTypes = @('Command', 'Unary')  # Command 和 Unary（可能有副作用如 ++/--）
+    $skipEvalTypes = @('Unary')  # 只跳过 Unary（可能有副作用如 ++/--）
 
     $resolved = Get-NodeTextResolvables -Node $Node -Context $Context
     if (-not $resolved.Success) {
@@ -1699,8 +1719,14 @@ function Evaluate-NodeResolvables {
     }
 
     foreach ($resolvable in $resolved.Items) {
-        # 跳过 Command 类型
+        # 跳过有副作用的类型
         if ($resolvable.Type -in $skipEvalTypes) {
+            continue
+        }
+
+        # Command 类型：只求值其中的子表达式（如 ExpandableString），不求值整个命令
+        if ($resolvable.Type -eq 'Command') {
+            # 跳过整个 Command，但会在下面处理其子表达式
             continue
         }
 
@@ -2065,6 +2091,9 @@ function Invoke-NodeSafe {
             }
         }
 
+        # 即使命令被阻止，也尝试求值其中的子表达式（如 ExpandableString）
+        Evaluate-NodeResolvables -Node $Node -Context $Context
+
         return @{
             Success   = $true
             Executed  = $false
@@ -2082,8 +2111,9 @@ function Invoke-NodeSafe {
             # 普通执行
             $result = Invoke-NodeDirect -Node $Node -Context $Context
 
-            # 执行成功后，对 Command 类型的可还原表达式求值
-            if ($result.Success) {
+            # 执行成功或超时后，都尝试求值 Resolvables
+            # 超时时虽然整体执行失败，但部分表达式（如 ExpandableString）可能已经求值
+            if ($result.Success -or $result.Timeout) {
                 Evaluate-NodeResolvables -Node $Node -Context $Context
             }
 
@@ -2114,7 +2144,8 @@ function Invoke-NodeSafe {
             # 默认执行
             $result = Invoke-NodeDirect -Node $Node -Context $Context
 
-            if ($result.Success) {
+            # 执行成功或超时后，都尝试求值 Resolvables
+            if ($result.Success -or $result.Timeout) {
                 Evaluate-NodeResolvables -Node $Node -Context $Context
             }
 
@@ -4913,6 +4944,17 @@ function Test-CommandSafety {
             Action      = "Block"
             IsForbidden = $true
             Reason      = "Forbidden command"
+            Command     = $cmdName
+        }
+    }
+
+    # 1.5. 外部可执行文件检查（防止启动会卡住的外部进程）
+    # 检查是否为 .exe, .com, .bat, .cmd, .vbs, .js, .wsf, .msi, .hta 等可执行文件
+    if ($cmdName -match '\.(exe|com|bat|cmd|vbs|js|wsf|msi|hta)$') {
+        return @{
+            Action      = "Block"
+            IsForbidden = $true
+            Reason      = "External executable blocked"
             Command     = $cmdName
         }
     }
