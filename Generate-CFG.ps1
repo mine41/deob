@@ -44,8 +44,133 @@ public enum VarScope
 }
 "@
 
-# 辅助函数：检测动态执行结构（iex / [ScriptBlock]::Create / NewScriptBlock）
-# 返回值：$null 或 @{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
+# 辅助函数：将文本转成单引号字符串字面量
+function ConvertTo-SingleQuotedStringLiteral {
+    param([string]$Text)
+
+    if ($null -eq $Text) { return "''" }
+    return "'" + $Text.Replace("'", "''") + "'"
+}
+
+function Test-PowerShellHostCommandName {
+    param([string]$CommandName)
+
+    if ([string]::IsNullOrWhiteSpace($CommandName)) { return $false }
+    return ([string]$CommandName) -match '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$'
+}
+
+function Test-PowerShellHostParameterPrefix {
+    param(
+        [string]$ParameterName,
+        [string]$CanonicalName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ParameterName)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($CanonicalName)) { return $false }
+
+    $actual = $ParameterName.ToLowerInvariant()
+    $canonical = $CanonicalName.ToLowerInvariant()
+    if ($actual.Length -gt $canonical.Length) { return $false }
+    return $canonical.StartsWith($actual)
+}
+
+function Get-PowerShellHostPayloadEvaluationCode {
+    param($PayloadAst)
+
+    if ($null -eq $PayloadAst) { return $null }
+
+    if ($PayloadAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $stringType = if ($PayloadAst.PSObject.Properties['StringConstantType']) { [string]$PayloadAst.StringConstantType } else { '' }
+        if ($stringType -eq 'BareWord') {
+            return (ConvertTo-SingleQuotedStringLiteral -Text $PayloadAst.Value)
+        }
+    }
+
+    return [string]$PayloadAst.Extent.Text
+}
+
+function Get-PowerShellHostDynamicInvocationInfo {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    $cmdName = $CommandAst.GetCommandName()
+    if (-not (Test-PowerShellHostCommandName -CommandName $cmdName)) {
+        return $null
+    }
+
+    $elements = @($CommandAst.CommandElements)
+    if ($elements.Count -lt 2) { return $null }
+
+    $sourceText = $CommandAst.Extent.StartScriptPosition.GetFullScript()
+
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+        if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+            continue
+        }
+
+        $paramName = [string]$elem.ParameterName
+        $dynamicType = $null
+        if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'encodedcommand') {
+            $dynamicType = 'EncodedCommand'
+        } elseif (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'command') {
+            $dynamicType = 'PowerShellCommand'
+        }
+
+        if (-not $dynamicType) {
+            continue
+        }
+
+        $payloadAst = $null
+        $payloadText = $null
+        $evaluationCode = $null
+
+        if ($elem.Argument) {
+            $payloadAst = $elem.Argument
+            $payloadText = [string]$payloadAst.Extent.Text
+            $evaluationCode = Get-PowerShellHostPayloadEvaluationCode -PayloadAst $payloadAst
+        } elseif ($i + 1 -lt $elements.Count) {
+            $payloadAst = $elements[$i + 1]
+            $payloadStart = $payloadAst.Extent.StartOffset
+            $payloadEnd = if ($dynamicType -eq 'PowerShellCommand') {
+                $elements[$elements.Count - 1].Extent.EndOffset
+            } else {
+                $payloadAst.Extent.EndOffset
+            }
+
+            if ($payloadEnd -gt $payloadStart) {
+                $payloadText = $sourceText.Substring($payloadStart, $payloadEnd - $payloadStart)
+                if ($dynamicType -eq 'PowerShellCommand') {
+                    $payloadElems = @($elements | Select-Object -Skip ($i + 1))
+                    if ($payloadElems.Count -eq 1 -and $payloadElems[0] -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                        $evaluationCode = Get-PowerShellHostPayloadEvaluationCode -PayloadAst $payloadElems[0]
+                    } else {
+                        $evaluationCode = ConvertTo-SingleQuotedStringLiteral -Text $payloadText
+                    }
+                } else {
+                    $evaluationCode = Get-PowerShellHostPayloadEvaluationCode -PayloadAst $payloadAst
+                }
+            }
+        }
+
+        return [PSCustomObject]@{
+            HostCommandName = $cmdName
+            DynamicType     = $dynamicType
+            ParameterName   = $paramName
+            ParameterAst    = $elem
+            ArgumentAst     = $payloadAst
+            PayloadText     = $payloadText
+            EvaluationCode  = $evaluationCode
+        }
+    }
+
+    return $null
+}
+
+# 辅助函数：检测动态执行结构（iex / powershell -command / [ScriptBlock]::Create / NewScriptBlock）
+# 返回值：$null 或 @{ Type = "IEX"|"PowerShellCommand"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
 function Get-DynamicInvokeInfo {
     param(
         [Parameter(Mandatory = $true)]
@@ -75,6 +200,14 @@ function Get-DynamicInvokeInfo {
             $results += @{
                 Type   = "IEX"
                 ArgAst = $argAst
+            }
+        }
+
+        $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
+        if ($hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
+            $results += @{
+                Type   = 'PowerShellCommand'
+                ArgAst = $hostDynamicInfo.ArgumentAst
             }
         }
     }
@@ -173,7 +306,7 @@ function Add-Node {
         TextEndOffset   = if ($null -ne $ast) { $ast.Extent.EndOffset } else { $null }    # 节点文本在原始脚本中的结束位置
         VarsRead        = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
         VarsWritten     = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
-        DynamicInvoke   = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
+        DynamicInvoke   = $null  # 动态执行标记：@{ Type = "IEX"|"PowerShellCommand"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
         Invokes         = @{ Functions = @(); ScriptBlocks = @() }  # 调用的函数和脚本块
         Resolvables     = @()  # 可还原表达式列表
         AliasesUsed     = @()  # 使用的别名列表 @{ Name; Target; Ast }
@@ -586,75 +719,53 @@ function Try-DecodeEncodedCommand {
         [System.Management.Automation.Language.CommandAst]$CommandAst
     )
 
-    # 获取命令名
-    $cmdName = $CommandAst.GetCommandName()
-    # 支持完整路径和简单命令名
-    if ($cmdName -notmatch '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$') {
+    $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $CommandAst
+    if (-not $hostDynamicInfo -or $hostDynamicInfo.DynamicType -ne 'EncodedCommand') {
         return $null
     }
 
-    # 遍历参数查找 -EncodedCommand 或 -enc
-    $elements = $CommandAst.CommandElements
-    for ($i = 1; $i -lt $elements.Count; $i++) {
-        $elem = $elements[$i]
-
-        # 检查是否是 -EncodedCommand 或其缩写形式
-        # PowerShell 支持参数前缀匹配，只要前缀唯一即可
-        # 支持：-EncodedCommand, -EncodedComman, -EncodedComma, -Encoded, -Encode, -Encod, -Enco, -Enc, -En, -E
-        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
-            $paramName = $elem.ParameterName.ToLower()
-
-            # 匹配 encodedcommand 的任意前缀（至少 1 个字符）
-            if ($paramName -match '^e(n(c(o(d(e(d(c(o(m(m(a(nd?)?)?)?)?)?)?)?)?)?)?)?)?$') {
-                # 获取下一个元素（Base64 字符串）
-                if ($i + 1 -lt $elements.Count) {
-                    $valueElem = $elements[$i + 1]
-                    $base64String = $null
-
-                    # 提取 Base64 字符串
-                    if ($valueElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
-                        $base64String = $valueElem.Value
-                    } elseif ($valueElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
-                        $base64String = $valueElem.Value
-                    }
-
-                    if ($base64String) {
-                        try {
-                            # 解码 Base64
-                            $bytes = [Convert]::FromBase64String($base64String)
-
-                            # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
-                            $decoded = [Text.Encoding]::Unicode.GetString($bytes)
-
-                            # 转义解码后的内容中的引号（使用反引号转义）
-                            $escapedDecoded = $decoded.Replace('`', '``').Replace('"', '`"')
-
-                            # 构造替换后的命令文本
-                            # 将 -EncodedCommand <base64> 替换为 -Command "<decoded>"
-                            $originalText = $CommandAst.Extent.Text
-
-                            # 构造新的命令行
-                            # 保留 powershell 及其前面的参数，替换 -EncodedCommand 部分
-                            $beforeParam = $originalText.Substring(0, $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset)
-                            $replacementText = $beforeParam + "-Command `"$escapedDecoded`""
-
-                            return @{
-                                ReplacementText = $replacementText
-                                DecodedContent = $decoded
-                                OriginalBase64 = $base64String
-                            }
-
-                        } catch {
-                            Write-Warning "[EncodedCommand] 解码失败: $_"
-                            return $null
-                        }
-                    }
-                }
-            }
-        }
+    $valueElem = $hostDynamicInfo.ArgumentAst
+    $base64String = $null
+    if ($valueElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $base64String = $valueElem.Value
+    } elseif ($valueElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+        $base64String = $valueElem.Value
     }
 
-    return $null
+    if (-not $base64String) {
+        return $null
+    }
+
+    try {
+        # 解码 Base64
+        $bytes = [Convert]::FromBase64String($base64String)
+
+        # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
+        $decoded = [Text.Encoding]::Unicode.GetString($bytes)
+
+        # 转义解码后的内容中的引号（使用反引号转义）
+        $escapedDecoded = $decoded.Replace('`', '``').Replace('"', '`"')
+
+        # 构造替换后的命令文本
+        # 将 -EncodedCommand <base64> 替换为 -Command "<decoded>"
+        $originalText = $CommandAst.Extent.Text
+
+        # 构造新的命令行
+        # 保留 powershell 及其前面的参数，替换 -EncodedCommand 部分
+        $elem = $hostDynamicInfo.ParameterAst
+        $beforeParam = $originalText.Substring(0, $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset)
+        $replacementText = $beforeParam + "-Command `"$escapedDecoded`""
+
+        return @{
+            ReplacementText = $replacementText
+            DecodedContent = $decoded
+            OriginalBase64 = $base64String
+        }
+
+    } catch {
+        Write-Warning "[EncodedCommand] 解码失败: $_"
+        return $null
+    }
 }
 
 # 辅助函数：分析节点中的可还原表达式

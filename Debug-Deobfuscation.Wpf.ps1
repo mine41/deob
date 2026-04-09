@@ -2829,7 +2829,15 @@ function Reset-DebugSession {
     if ($script:DebugState.Session) {
         Close-CFGExecutionSession -Session $script:DebugState.Session
     }
+
+    $freshCfg = Get-ScriptControlFlow -ScriptPath $script:DebugState.ScriptPath
+    if (-not $freshCfg) {
+        throw "重置失败：无法重新生成 CFG: $($script:DebugState.ScriptPath)"
+    }
+
     Clear-HoldState
+    $script:DebugState.Cfg = $freshCfg
+    $script:DebugState.Layout = $null
     $script:DebugState.Session = New-CFGExecutionSession -CFG $script:DebugState.Cfg -LogPath $script:DebugState.LogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
     $script:DebugState.Steps = New-Object System.Collections.ArrayList
     $script:DebugState.UserSelection = @{}

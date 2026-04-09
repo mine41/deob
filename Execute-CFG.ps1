@@ -1072,6 +1072,7 @@ function Get-DynamicArgumentCodeFromNodeText {
 
     $scriptAst = $parseInfo.Ast
     $argCode = $null
+    $displayCode = $null
 
     if ($DynamicType -in @("ScriptBlockCreate", "NewScriptBlock")) {
         $invokeAsts = @($scriptAst.FindAll({
@@ -1088,11 +1089,13 @@ function Get-DynamicArgumentCodeFromNodeText {
             if ($DynamicType -eq "ScriptBlockCreate") {
                 if ($invokeAst.Static -and $memberName -eq "Create" -and $invokeAst.Arguments -and $invokeAst.Arguments.Count -gt 0) {
                     $argCode = $invokeAst.Arguments[0].Extent.Text
+                    $displayCode = $argCode
                     break
                 }
             } elseif ($DynamicType -eq "NewScriptBlock") {
                 if (-not $invokeAst.Static -and $memberName -eq "NewScriptBlock" -and $invokeAst.Arguments -and $invokeAst.Arguments.Count -gt 0) {
                     $argCode = $invokeAst.Arguments[0].Extent.Text
+                    $displayCode = $argCode
                     break
                 }
             }
@@ -1105,17 +1108,23 @@ function Get-DynamicArgumentCodeFromNodeText {
             $cmdName = $cmdAst.GetCommandName()
             $isIex = $cmdName -in @("Invoke-Expression", "iex")
             $isScriptBlockCreateCommand = $cmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$'
+            $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
             if (($DynamicType -eq "IEX" -and $isIex) -or
                 ($DynamicType -eq "ScriptBlockCreate" -and $isScriptBlockCreateCommand)) {
                 $argCode = $cmdAst.CommandElements[1].Extent.Text
+                $displayCode = $argCode
+            } elseif ($DynamicType -eq 'PowerShellCommand' -and $hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
+                $argCode = $hostDynamicInfo.EvaluationCode
+                $displayCode = $hostDynamicInfo.PayloadText
             }
         }
     }
 
     return [PSCustomObject]@{
-        Success = $true
-        Error   = $null
-        Code    = $argCode
+        Success     = $true
+        Error       = $null
+        Code        = $argCode
+        DisplayCode = $displayCode
     }
 }
 
@@ -4076,12 +4085,12 @@ function Register-RuntimeSubgraph {
     return $info
 }
 
-# 处理动态执行（iex / ScriptBlockCreate / NewScriptBlock）- 创建 CFG 子图
+# 处理动态执行（iex / powershell -command / ScriptBlockCreate / NewScriptBlock）- 创建 CFG 子图
 function Handle-DynamicInvoke {
     param(
         $Node,
         [hashtable]$Context,
-        $CommandInfo = $null,         # IEX / ScriptBlockCreate 命令名类型时由 Test-CommandSafety 传入
+        $CommandInfo = $null,         # IEX / PowerShellCommand / ScriptBlockCreate 命令名类型时由 Test-CommandSafety 传入
         $DynamicInfo = $null,         # ScriptBlockCreate / NewScriptBlock AST 类型时由 Invoke-NodeSafe 传入
         $DynamicTypeFromCommand = $null  # 从 Test-CommandSafety 传入的动态类型标记
     )
@@ -4093,11 +4102,13 @@ function Handle-DynamicInvoke {
     $isScriptBlockCreateFromCommand = $false  # 标记是否为命令名形式的 ScriptBlockCreate
 
     # 判断类型：DynamicInfo 类型 > 命令名类型 > IEX
-    if ($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock")) {
+    if ($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock", "PowerShellCommand")) {
         $dynType = $DynamicInfo.Type
     } elseif ($DynamicTypeFromCommand -eq "ScriptBlockCreate") {
         $dynType = "ScriptBlockCreate"
         $isScriptBlockCreateFromCommand = $true
+    } elseif ($DynamicTypeFromCommand -eq 'PowerShellCommand') {
+        $dynType = 'PowerShellCommand'
     } else {
         $dynType = "IEX"
     }
@@ -4114,6 +4125,11 @@ function Handle-DynamicInvoke {
         }
     }
     $argCode = $argCodeInfo.Code
+    $displayArgCode = if ($argCodeInfo.PSObject.Properties['DisplayCode'] -and -not [string]::IsNullOrWhiteSpace([string]$argCodeInfo.DisplayCode)) {
+        [string]$argCodeInfo.DisplayCode
+    } else {
+        $argCode
+    }
 
     if ($argCode) {
         $evalCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
@@ -4127,7 +4143,7 @@ function Handle-DynamicInvoke {
     $dynamicRecord = @{
         NodeId        = $Node.Id
         Command       = $dynType
-        ArgumentCode  = $argCode
+        ArgumentCode  = $displayArgCode
         ArgumentValue = $argumentValue
         Timestamp     = Get-Date
     }
@@ -4176,7 +4192,7 @@ function Handle-DynamicInvoke {
 
         # 注册子图
         $Context.ScriptBlockSubgraphs[$blockName] = $subgraphResult.BlockStartId
-        $runtimeInfo = Register-RuntimeSubgraph -Context $Context -BlockName $blockName -BlockStartId $subgraphResult.BlockStartId -BlockEndId $subgraphResult.BlockEndId -NewNodeIds $subgraphResult.NewNodeIds -CallerNode $Node -DynamicType $dynType -ArgumentCode $argCode -ArgumentValue $argumentValue
+        $runtimeInfo = Register-RuntimeSubgraph -Context $Context -BlockName $blockName -BlockStartId $subgraphResult.BlockStartId -BlockEndId $subgraphResult.BlockEndId -NewNodeIds $subgraphResult.NewNodeIds -CallerNode $Node -DynamicType $dynType -ArgumentCode $displayArgCode -ArgumentValue $argumentValue
         $dynamicRecord.BlockName = $blockName
         $dynamicRecord.BlockStartId = $subgraphResult.BlockStartId
         $dynamicRecord.BlockEndId = $subgraphResult.BlockEndId
@@ -4321,7 +4337,7 @@ function Handle-DynamicInvoke {
         }
         return $result
     } else {
-        # IEX：创建子图并跳转执行（保持原有逻辑）
+        # IEX / PowerShellCommand：创建子图并跳转执行（保持同一条动态子图逻辑）
         $subgraphResult = New-RuntimeSubgraph -cfg $Context.CFG -Code $argumentValue
 
         if (-not $subgraphResult.Success) {
@@ -4337,7 +4353,7 @@ function Handle-DynamicInvoke {
 
         $blockName = $subgraphResult.BlockName
         $Context.ScriptBlockSubgraphs[$blockName] = $subgraphResult.BlockStartId
-        $runtimeInfo = Register-RuntimeSubgraph -Context $Context -BlockName $blockName -BlockStartId $subgraphResult.BlockStartId -BlockEndId $subgraphResult.BlockEndId -NewNodeIds $subgraphResult.NewNodeIds -CallerNode $Node -DynamicType $dynType -ArgumentCode $argCode -ArgumentValue $argumentValue
+        $runtimeInfo = Register-RuntimeSubgraph -Context $Context -BlockName $blockName -BlockStartId $subgraphResult.BlockStartId -BlockEndId $subgraphResult.BlockEndId -NewNodeIds $subgraphResult.NewNodeIds -CallerNode $Node -DynamicType $dynType -ArgumentCode $displayArgCode -ArgumentValue $argumentValue
         $dynamicRecord.BlockName = $blockName
         $dynamicRecord.BlockStartId = $subgraphResult.BlockStartId
         $dynamicRecord.BlockEndId = $subgraphResult.BlockEndId
@@ -4345,7 +4361,7 @@ function Handle-DynamicInvoke {
 
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created subgraph: $blockName (Nodes $($subgraphResult.BlockStartId)-$($subgraphResult.BlockEndId))"
 
-        # IEX：用 & $_dyn_xxx 替换整个 iex 调用
+        # IEX / PowerShellCommand：用 & $_dyn_xxx 替换整个动态调用
         $blockVarRef = "`$$blockName"
         $Node.Text = "& $blockVarRef"
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Node text replaced: & $blockVarRef"
@@ -5009,6 +5025,21 @@ function Test-CommandSafety {
             IsForbidden = $true
             Reason      = "Forbidden command"
             Command     = $cmdName
+        }
+    }
+
+    $hostDynamicInfo = $null
+    if ($CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $CommandInfo.Ast
+    }
+
+    # 1.25. powershell/pwsh -Command 视为和 IEX 同类的动态执行入口
+    if ($hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
+        return @{
+            Action      = "DynamicInvoke"
+            IsForbidden = $false
+            Target      = $cmdName
+            DynamicType = 'PowerShellCommand'
         }
     }
 
