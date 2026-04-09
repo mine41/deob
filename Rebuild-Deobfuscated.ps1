@@ -47,6 +47,10 @@ param(
 
     [int]$MaxTotalNodes = 50000,
 
+    [int]$GlobalTimeBudgetMs = 120000,
+
+    [int]$DynamicTimeBudgetMs = 60000,
+
     [switch]$DryRun
 )
 
@@ -908,6 +912,8 @@ function Get-DynamicInvokeReplacementCandidates {
             UsedEmptyFallback = $false
             ResultType  = 'String'
             Executed    = $true
+            DynamicStopReason = if ($rec -is [hashtable]) { [string]$rec['StopReason'] } else { [string]$rec.StopReason }
+            DynamicStopMessage = if ($rec -is [hashtable]) { [string]$rec['StopMessage'] } else { [string]$rec.StopMessage }
         }
     }
 
@@ -1643,6 +1649,7 @@ if ($FullOutput) {
 Write-Host "Strategy   : $OverlapStrategy" -ForegroundColor Gray
 Write-Host "VarPolicy  : $VariableConflictPolicy" -ForegroundColor Gray
 Write-Host "MaxRounds  : $MaxRounds" -ForegroundColor Gray
+Write-Host "TimeBudget : Global=${GlobalTimeBudgetMs}ms Dynamic=${DynamicTimeBudgetMs}ms" -ForegroundColor Gray
 Write-Host "DryRun     : $DryRun" -ForegroundColor Gray
 Write-Host ""
 
@@ -1651,8 +1658,16 @@ $currentText = $null
 $finalRound = 0
 $finalRoundOutPath = $null
 $terminatedBy = $null
+$globalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 for ($round = 1; $round -le $MaxRounds; $round++) {
+    $remainingGlobalBudgetMs = if ($GlobalTimeBudgetMs -gt 0) { [int]($GlobalTimeBudgetMs - $globalStopwatch.ElapsedMilliseconds) } else { 0 }
+    if ($GlobalTimeBudgetMs -gt 0 -and $remainingGlobalBudgetMs -le 0) {
+        $terminatedBy = 'global_time_budget'
+        $finalRound = [Math]::Max(0, $round - 1)
+        break
+    }
+
     $roundLabel = '{0:d2}' -f $round
     $roundInPath = $null
     $roundOutPath = $null
@@ -1677,7 +1692,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             throw "CFG 生成失败: $roundInPath"
         }
 
-        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs
 
         $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
         $currentText = $scriptText
@@ -1696,7 +1711,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         }
 
         # fast mode：禁用 execution.log（避免文件 IO）
-        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs
 
         $scriptText = $currentText
     }
@@ -1809,6 +1824,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 UsedEmptyFallback = if ($a.PSObject.Properties['UsedEmptyFallback']) { [bool]$a.UsedEmptyFallback } else { $false }
                 Executed          = if ($a.PSObject.Properties['Executed']) { [bool]$a.Executed } else { $true }
                 ResultType        = if ($a.PSObject.Properties['ResultType']) { $a.ResultType } else { $null }
+                DynamicStopReason = if ($a.PSObject.Properties['DynamicStopReason']) { $a.DynamicStopReason } else { $null }
+                DynamicStopMessage = if ($a.PSObject.Properties['DynamicStopMessage']) { $a.DynamicStopMessage } else { $null }
             }
         }
 
@@ -1829,6 +1846,9 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             VariableConflictPolicy = $VariableConflictPolicy
             MaxIterations   = $MaxIterations
             MaxTotalNodes   = $MaxTotalNodes
+            GlobalTimeBudgetMs = $GlobalTimeBudgetMs
+            DynamicTimeBudgetMs = $DynamicTimeBudgetMs
+            ExecutionStopReason = if ($ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
             CandidateCount  = $candidates.Count
             DynamicCount    = $dynamicCount
             StaticHighCount = $staticHigh
@@ -1865,6 +1885,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     $finalRound = $round
 
+    if (($GlobalTimeBudgetMs -gt 0 -and $globalStopwatch.ElapsedMilliseconds -ge $GlobalTimeBudgetMs) -or ($ctx -and $ctx.ContainsKey('StopReason') -and [string]$ctx.StopReason -eq 'GlobalTimeBudgetExceeded')) {
+        $terminatedBy = 'global_time_budget'
+        break
+    }
+
     # 下一轮输入
     if ($FullOutput) {
         # 下一轮输入 = 本轮输出文件
@@ -1876,7 +1901,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 }
 
 if ($FullOutput -and -not $finalRoundOutPath) {
+    if ($terminatedBy -eq 'global_time_budget') {
+        $finalRoundOutPath = $currentPath
+    } else {
     throw "未产生任何轮次输出，无法生成最终脚本。"
+    }
 }
 
 if ($null -eq $terminatedBy) {

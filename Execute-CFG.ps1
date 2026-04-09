@@ -599,7 +599,11 @@ function Get-ExecutionLogMessageText {
     param($Message)
 
     if ($Message -is [scriptblock]) {
-        return [string](& $Message)
+        try {
+            return [string](& $Message)
+        } catch {
+            return "[LogMessageEvalError] $($_.Exception.Message)"
+        }
     }
 
     if ($null -eq $Message) {
@@ -775,6 +779,189 @@ function Convert-CodeForCurrentScope {
         }
     }
     return $Code
+}
+
+function Ensure-ContextStopwatch {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$PropertyName,
+        [switch]$Start
+    )
+
+    if (-not $Context.ContainsKey($PropertyName) -or $null -eq $Context[$PropertyName]) {
+        $Context[$PropertyName] = [System.Diagnostics.Stopwatch]::new()
+    }
+
+    $stopwatch = $Context[$PropertyName]
+    if ($Start -and -not $stopwatch.IsRunning) {
+        $stopwatch.Start()
+    }
+
+    return $stopwatch
+}
+
+function Get-ContextBudgetStatus {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$BudgetPropertyName,
+        [Parameter(Mandatory)][string]$StopwatchPropertyName,
+        [Parameter(Mandatory)][string]$StopReason,
+        [switch]$StartStopwatch
+    )
+
+    $budgetMs = 0
+    if ($Context.ContainsKey($BudgetPropertyName) -and $null -ne $Context[$BudgetPropertyName]) {
+        $budgetMs = [int]$Context[$BudgetPropertyName]
+    }
+
+    $stopwatch = Ensure-ContextStopwatch -Context $Context -PropertyName $StopwatchPropertyName -Start:$StartStopwatch
+    $elapsedMs = if ($stopwatch) { [int64]$stopwatch.ElapsedMilliseconds } else { 0 }
+    $remainingMs = if ($budgetMs -gt 0) { [int64]($budgetMs - $elapsedMs) } else { $null }
+
+    return [PSCustomObject]@{
+        Enabled     = ($budgetMs -gt 0)
+        BudgetMs    = $budgetMs
+        ElapsedMs   = $elapsedMs
+        RemainingMs = $remainingMs
+        Exceeded    = ($budgetMs -gt 0 -and $elapsedMs -ge $budgetMs)
+        StopReason  = $StopReason
+    }
+}
+
+function Normalize-LoopConditionText {
+    param([string]$ConditionText)
+
+    if ([string]::IsNullOrWhiteSpace($ConditionText)) { return '' }
+
+    $normalized = ($ConditionText -replace '\s+', '')
+    while ($normalized.Length -ge 2 -and $normalized.StartsWith('(') -and $normalized.EndsWith(')')) {
+        $normalized = $normalized.Substring(1, $normalized.Length - 2)
+    }
+
+    return $normalized
+}
+
+function Test-LoopConditionLiteral {
+    param(
+        [string]$ConditionText,
+        [ValidateSet('True', 'False')][string]$Expected = 'True'
+    )
+
+    $normalized = Normalize-LoopConditionText -ConditionText $ConditionText
+    if ([string]::IsNullOrWhiteSpace($normalized)) { return $false }
+
+    $truthy = @('$true', '1', '[int]1', '[int32]1', '[uint32]1', '[long]1', '[int64]1', '[bool]1')
+    $falsy = @('$false', '0', '[int]0', '[int32]0', '[uint32]0', '[long]0', '[int64]0', '[bool]0')
+
+    if ($Expected -eq 'True') {
+        return ($normalized -in $truthy)
+    }
+
+    return ($normalized -in $falsy)
+}
+
+function Test-DynamicPayloadShouldStopRecursing {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $result = [ordered]@{
+        ShouldStop      = $false
+        StopReason      = $null
+        Message         = $null
+        FeatureSummary  = $null
+        Features        = @()
+        ParseSucceeded  = $false
+        AnalysisText    = $ScriptText
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return [PSCustomObject]$result
+    }
+
+    $analysisText = $ScriptText
+    $topLevelLoopDetected = $false
+
+    try {
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+        $result.ParseSucceeded = ($null -ne $ast)
+
+        if ($ast) {
+            $topLevelStatements = New-Object System.Collections.Generic.List[object]
+            foreach ($block in @($ast.BeginBlock, $ast.ProcessBlock, $ast.EndBlock)) {
+                if ($null -eq $block -or -not $block.Statements) { continue }
+                foreach ($statement in @($block.Statements)) {
+                    if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { continue }
+                    $topLevelStatements.Add($statement) | Out-Null
+
+                    if ($statement -is [System.Management.Automation.Language.WhileStatementAst]) {
+                        if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'True') {
+                            $topLevelLoopDetected = $true
+                        }
+                    } elseif ($statement -is [System.Management.Automation.Language.DoWhileStatementAst]) {
+                        if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'True') {
+                            $topLevelLoopDetected = $true
+                        }
+                    } elseif ($statement -is [System.Management.Automation.Language.DoUntilStatementAst]) {
+                        if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'False') {
+                            $topLevelLoopDetected = $true
+                        }
+                    } elseif ($statement -is [System.Management.Automation.Language.ForStatementAst]) {
+                        $conditionText = if ($statement.Condition) { $statement.Condition.Extent.Text } else { '' }
+                        if ([string]::IsNullOrWhiteSpace($conditionText) -or (Test-LoopConditionLiteral -ConditionText $conditionText -Expected 'True')) {
+                            $topLevelLoopDetected = $true
+                        }
+                    }
+                }
+            }
+
+            if ($topLevelStatements.Count -gt 0) {
+                $analysisText = (($topLevelStatements | ForEach-Object { $_.Extent.Text }) -join [Environment]::NewLine)
+            }
+        }
+    } catch {
+        $result.ParseSucceeded = $false
+    }
+
+    $hasInfiniteLoop = $topLevelLoopDetected -or ($analysisText -match '(?is)\bwhile\s*\(\s*(?:\$true|1|\(+\s*\[int(?:32|64)?\]\s*1\s*\)+)\s*\)') -or ($analysisText -match '(?is)\bfor\s*\(\s*;\s*;\s*\)') -or ($analysisText -match '(?is)\bdo\b[\s\S]*?\bwhile\s*\(\s*(?:\$true|1|\(+\s*\[int(?:32|64)?\]\s*1\s*\)+)\s*\)') -or ($analysisText -match '(?is)\bdo\b[\s\S]*?\buntil\s*\(\s*(?:\$false|0|\(+\s*\[int(?:32|64)?\]\s*0\s*\)+)\s*\)')
+    $hasStartSleep = ($analysisText -match '(?i)\b(?:Start-Sleep|sleep)\b')
+    $hasInvokeExpression = ($analysisText -match '(?i)\b(?:Invoke-Expression|iex)\b')
+    $hasNetwork = ($analysisText -match '(?i)\b(?:Invoke-WebRequest|iwr|curl|wget|Invoke-RestMethod|irm|Start-BitsTransfer|DownloadFile|DownloadData|DownloadString|UploadData|UploadString|GetResponse|WebClient|WebRequest|HttpClient)\b')
+
+    $features = New-Object System.Collections.Generic.List[string]
+    if ($hasInfiniteLoop) { $features.Add('InfiniteLoop') | Out-Null }
+    if ($hasStartSleep) { $features.Add('StartSleep') | Out-Null }
+    if ($hasNetwork) { $features.Add('Network') | Out-Null }
+    if ($hasInvokeExpression) { $features.Add('InvokeExpression') | Out-Null }
+
+    $result.Features = @($features)
+    $result.FeatureSummary = if ($features.Count -gt 0) { ($features -join ', ') } else { $null }
+    $result.AnalysisText = $analysisText
+
+    if ($hasInfiniteLoop) {
+        $result.ShouldStop = $true
+        $result.StopReason = 'DynamicPayloadInfiniteLoop'
+        $result.Message = '检测到顶层无限循环特征，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
+
+    if ($hasNetwork -and $hasInvokeExpression) {
+        $result.ShouldStop = $true
+        $result.StopReason = 'DynamicPayloadNetworkInvokeExpression'
+        $result.Message = '检测到网络获取与动态执行组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
+
+    if ($hasNetwork -and $hasStartSleep) {
+        $result.ShouldStop = $true
+        $result.StopReason = 'DynamicPayloadNetworkSleep'
+        $result.Message = '检测到网络轮询与休眠组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
+
+    return [PSCustomObject]$result
 }
 
 function Get-FirstStatementFromScriptAst {
@@ -4146,6 +4333,9 @@ function Handle-DynamicInvoke {
         ArgumentCode  = $displayArgCode
         ArgumentValue = $argumentValue
         Timestamp     = Get-Date
+        RecursionStopped = $false
+        StopReason    = $null
+        StopMessage   = $null
     }
     $Context.DynamicInvokeResults += $dynamicRecord
 
@@ -4165,6 +4355,48 @@ function Handle-DynamicInvoke {
 
     $codePreview = if ($argumentValue.Length -gt 100) { $argumentValue.Substring(0, 100) + "..." } else { $argumentValue }
     Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Code to execute: $codePreview"
+
+    $dynamicBudgetStatus = Get-ContextBudgetStatus -Context $Context -BudgetPropertyName 'DynamicTimeBudgetMs' -StopwatchPropertyName 'DynamicBudgetStopwatch' -StopReason 'DynamicTimeBudgetExceeded' -StartStopwatch
+    if ($dynamicBudgetStatus.Exceeded) {
+        $dynamicRecord.RecursionStopped = $true
+        $dynamicRecord.StopReason = $dynamicBudgetStatus.StopReason
+        $dynamicRecord.StopMessage = "动态递归预算已耗尽（Elapsed=${0}ms, Budget=${1}ms），停止继续深入，直接回写当前脚本内容。" -f $dynamicBudgetStatus.ElapsedMs, $dynamicBudgetStatus.BudgetMs
+        $dynamicRecord.DynamicElapsedMs = $dynamicBudgetStatus.ElapsedMs
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
+
+        return @{
+            Success       = $true
+            Executed      = $true
+            Result        = $argumentValue
+            Error         = $null
+            Action        = "DynamicInvoke"
+            DynamicRecord = $dynamicRecord
+            StopReason    = $dynamicRecord.StopReason
+        }
+    }
+
+    $payloadStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $argumentValue
+    if ($payloadStop.ShouldStop) {
+        $dynamicRecord.RecursionStopped = $true
+        $dynamicRecord.StopReason = $payloadStop.StopReason
+        $dynamicRecord.StopMessage = $payloadStop.Message
+        $dynamicRecord.StopFeatures = @($payloadStop.Features)
+        $dynamicRecord.StopFeatureSummary = $payloadStop.FeatureSummary
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($payloadStop.Message)"
+        if ($payloadStop.FeatureSummary) {
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Features: $($payloadStop.FeatureSummary)"
+        }
+
+        return @{
+            Success       = $true
+            Executed      = $true
+            Result        = $argumentValue
+            Error         = $null
+            Action        = "DynamicInvoke"
+            DynamicRecord = $dynamicRecord
+            StopReason    = $dynamicRecord.StopReason
+        }
+    }
 
     # 3. 根据类型选择不同的处理方式
     if (($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock")) -or $isScriptBlockCreateFromCommand) {
@@ -4385,6 +4617,13 @@ function Invoke-NodeTraverse {
     $currentNode = $Node
 
     while ($null -ne $currentNode) {
+        $globalBudgetStatus = Get-ContextBudgetStatus -Context $Context -BudgetPropertyName 'GlobalTimeBudgetMs' -StopwatchPropertyName 'ExecutionStopwatch' -StopReason 'GlobalTimeBudgetExceeded'
+        if ($globalBudgetStatus.Exceeded) {
+            Write-ExecutionLog -Context $Context -Message "!!! 执行总时长超限 ($($globalBudgetStatus.ElapsedMs)ms / $($globalBudgetStatus.BudgetMs)ms) !!!"
+            $Context.StopReason = $globalBudgetStatus.StopReason
+            break
+        }
+
         # 终止条件
         if ($currentNode.Type -eq "End") {
             Write-ExecutionLog -Context $Context -Message "=== 执行结束 ==="
@@ -5811,7 +6050,9 @@ function Invoke-CFGTraversal {
         [hashtable]$CFG,
         [string]$LogPath = "execution.log",
         [int]$MaxIterations = 1000,
-        [int]$MaxTotalNodes = 50000
+        [int]$MaxTotalNodes = 50000,
+        [int]$GlobalTimeBudgetMs = 0,
+        [int]$DynamicTimeBudgetMs = 60000
     )
 
     # 创建/清空日志文件（允许 LogPath=$null 以禁用日志）
@@ -5830,7 +6071,10 @@ function Invoke-CFGTraversal {
         VisitedNodes        = @{}
         MaxIterations       = $MaxIterations
         MaxTotalNodes       = $MaxTotalNodes
+        GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
+        DynamicTimeBudgetMs = $DynamicTimeBudgetMs
         TotalVisits         = 0
+        StopReason          = $null
         LastConditionResult = $true
         ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
         VariableReadResults = @{}  # Key: "StartOffset:EndOffset", Value: @{ VarInfo; Values }
@@ -5927,6 +6171,8 @@ function Invoke-CFGTraversal {
         LogBufferedBytes          = 0
         LogFlushLineThreshold     = 100
         LogFlushByteThreshold     = 16384
+        ExecutionStopwatch        = [System.Diagnostics.Stopwatch]::StartNew()
+        DynamicBudgetStopwatch    = [System.Diagnostics.Stopwatch]::new()
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
@@ -5936,6 +6182,9 @@ function Invoke-CFGTraversal {
         Write-ExecutionLog -Context $context -Message "HostExe: $($context.HostInfo.ExecutablePath)"
     }
     Write-ExecutionLog -Context $context -Message "MaxIterations: $MaxIterations, MaxTotalNodes: $MaxTotalNodes"
+    if ($GlobalTimeBudgetMs -gt 0 -or $DynamicTimeBudgetMs -gt 0) {
+        Write-ExecutionLog -Context $context -Message "TimeBudget: Global=${GlobalTimeBudgetMs}ms, Dynamic=${DynamicTimeBudgetMs}ms"
+    }
     Write-ExecutionLog -Context $context -Message ""
 
     # 初始化子图映射
@@ -5961,6 +6210,9 @@ function Invoke-CFGTraversal {
         Write-ExecutionLog -Context $context -Message "=== 执行统计 ==="
         Write-ExecutionLog -Context $context -Message "Total visits: $($context.TotalVisits)"
         Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
+        if ($context.StopReason) {
+            Write-ExecutionLog -Context $context -Message "StopReason: $($context.StopReason)"
+        }
         Flush-ExecutionLogBuffer -Context $context
 
         # 清理执行上下文
@@ -5978,7 +6230,9 @@ function New-CFGExecutionSession {
         [hashtable]$CFG,
         [string]$LogPath = "execution.log",
         [int]$MaxIterations = 1000,
-        [int]$MaxTotalNodes = 50000
+        [int]$MaxTotalNodes = 50000,
+        [int]$GlobalTimeBudgetMs = 0,
+        [int]$DynamicTimeBudgetMs = 60000
     )
 
     if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
@@ -5994,7 +6248,10 @@ function New-CFGExecutionSession {
         VisitedNodes        = @{}
         MaxIterations       = $MaxIterations
         MaxTotalNodes       = $MaxTotalNodes
+        GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
+        DynamicTimeBudgetMs = $DynamicTimeBudgetMs
         TotalVisits         = 0
+        StopReason          = $null
         LastConditionResult = $true
         ResolvableResults   = @{}
         VariableReadResults = @{}
@@ -6090,6 +6347,8 @@ function New-CFGExecutionSession {
         LogBufferedBytes          = 0
         LogFlushLineThreshold     = 5
         LogFlushByteThreshold     = 2048
+        ExecutionStopwatch        = [System.Diagnostics.Stopwatch]::StartNew()
+        DynamicBudgetStopwatch    = [System.Diagnostics.Stopwatch]::new()
     }
 
     Write-ExecutionLog -Context $context -Message "=== CFG 调试会话开始 ==="
@@ -6099,6 +6358,9 @@ function New-CFGExecutionSession {
         Write-ExecutionLog -Context $context -Message "HostExe: $($context.HostInfo.ExecutablePath)"
     }
     Write-ExecutionLog -Context $context -Message "MaxIterations: $MaxIterations, MaxTotalNodes: $MaxTotalNodes"
+    if ($GlobalTimeBudgetMs -gt 0 -or $DynamicTimeBudgetMs -gt 0) {
+        Write-ExecutionLog -Context $context -Message "TimeBudget: Global=${GlobalTimeBudgetMs}ms, Dynamic=${DynamicTimeBudgetMs}ms"
+    }
     Write-ExecutionLog -Context $context -Message ""
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
     Initialize-SubgraphMappings -CFG $CFG -Context $context
@@ -6330,6 +6592,15 @@ function Invoke-CFGStep {
         if ($null -eq $currentNode) {
             $Session.IsCompleted = $true
             if (-not $Session.StopReason) { $Session.StopReason = 'NoNextNode' }
+            break
+        }
+
+        $globalBudgetStatus = Get-ContextBudgetStatus -Context $context -BudgetPropertyName 'GlobalTimeBudgetMs' -StopwatchPropertyName 'ExecutionStopwatch' -StopReason 'GlobalTimeBudgetExceeded'
+        if ($globalBudgetStatus.Exceeded) {
+            Write-ExecutionLog -Context $context -Message "!!! 执行总时长超限 ($($globalBudgetStatus.ElapsedMs)ms / $($globalBudgetStatus.BudgetMs)ms) !!!"
+            $Session.IsCompleted = $true
+            $Session.StopReason = $globalBudgetStatus.StopReason
+            $context.StopReason = $globalBudgetStatus.StopReason
             break
         }
 

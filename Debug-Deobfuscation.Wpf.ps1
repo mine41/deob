@@ -21,6 +21,7 @@ param(
 
     [int]$MaxIterations = 1000,
     [int]$MaxTotalNodes = 50000,
+    [int]$DynamicTimeBudgetMs = 60000,
 
     [switch]$NoUI
 )
@@ -861,6 +862,8 @@ function Get-DynamicInvokeReplacementCandidates {
             IsSimpleVariable = $false
             IsValueChanged = $false
             ObservedValueCount = 1
+            DynamicStopReason = if ($rec -is [hashtable]) { [string]$rec['StopReason'] } else { [string]$rec.StopReason }
+            DynamicStopMessage = if ($rec -is [hashtable]) { [string]$rec['StopMessage'] } else { [string]$rec.StopMessage }
         }
     }
 
@@ -1548,6 +1551,8 @@ function Build-DebugPreview {
             IsSimpleVariable = if ($cand.PSObject.Properties['IsSimpleVariable']) { [bool]$cand.IsSimpleVariable } else { $false }
             IsValueChanged = if ($cand.PSObject.Properties['IsValueChanged']) { [bool]$cand.IsValueChanged } else { $false }
             ObservedValueCount = if ($cand.PSObject.Properties['ObservedValueCount']) { [int]$cand.ObservedValueCount } else { 1 }
+            DynamicStopReason = if ($cand.PSObject.Properties['DynamicStopReason']) { [string]$cand.DynamicStopReason } else { $null }
+            DynamicStopMessage = if ($cand.PSObject.Properties['DynamicStopMessage']) { [string]$cand.DynamicStopMessage } else { $null }
             Key         = (Get-ReplacementKey -Candidate $cand)
             IsSelected  = $false
             IsManual    = $false
@@ -1804,6 +1809,12 @@ function Get-RuntimeSubgraphDetailText {
     if ($info -and $info.ArgumentValue) {
         $lines.Add("Code      : $([string]$info.ArgumentValue)") | Out-Null
     }
+    if ($info -and $info.PSObject.Properties['StopReason'] -and $info.StopReason) {
+        $lines.Add("StopReason: $([string]$info.StopReason)") | Out-Null
+    }
+    if ($info -and $info.PSObject.Properties['StopMessage'] -and $info.StopMessage) {
+        $lines.Add("StopMsg   : $([string]$info.StopMessage)") | Out-Null
+    }
     if ($info -and $info.BlockStartId) {
         $lines.Add("Range     : $($info.BlockStartId) -> $($info.BlockEndId)") | Out-Null
     }
@@ -1838,7 +1849,7 @@ try {
 }
 $layout = Get-DotPlainLayout -DotPath $cfgDotPath
 $scriptText = Get-FullScriptTextFromFile -Path $scriptPathFull
-$session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+$session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs
 $currentHostDisplay = Format-PowerShellHostInfo -HostInfo $session.Context.HostInfo
 $script:CurrentHostDisplay = $currentHostDisplay
 $preview = Build-DebugPreview -Context $session.Context -ScriptText $scriptText -Strategy $OverlapStrategy
@@ -2776,6 +2787,16 @@ function Update-CurrentNodeUi {
             }
             $txtNodeMeta.Text += $metaSuffix
         }
+        $dynamicRecord = @($sessionNow.Context.DynamicInvokeResults | Where-Object { [int]$_.NodeId -eq [int]$curNode.Id } | Select-Object -Last 1)
+        $dynamicStopReason = if ($dynamicRecord -is [hashtable]) { [string]$dynamicRecord['StopReason'] } elseif ($dynamicRecord) { [string]$dynamicRecord.StopReason } else { $null }
+        $dynamicStopMessage = if ($dynamicRecord -is [hashtable]) { [string]$dynamicRecord['StopMessage'] } elseif ($dynamicRecord) { [string]$dynamicRecord.StopMessage } else { $null }
+        if (-not [string]::IsNullOrWhiteSpace($dynamicStopReason)) {
+            $stopText = " 动态递归已停止: $dynamicStopReason。"
+            if (-not [string]::IsNullOrWhiteSpace($dynamicStopMessage)) {
+                $stopText += " $dynamicStopMessage"
+            }
+            $txtNodeMeta.Text += $stopText
+        }
         $txtNodeCode.Text = [string]$curNode.Text
 
         if ($holdHere) {
@@ -2838,7 +2859,7 @@ function Reset-DebugSession {
     Clear-HoldState
     $script:DebugState.Cfg = $freshCfg
     $script:DebugState.Layout = $null
-    $script:DebugState.Session = New-CFGExecutionSession -CFG $script:DebugState.Cfg -LogPath $script:DebugState.LogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
+    $script:DebugState.Session = New-CFGExecutionSession -CFG $script:DebugState.Cfg -LogPath $script:DebugState.LogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs
     $script:DebugState.Steps = New-Object System.Collections.ArrayList
     $script:DebugState.UserSelection = @{}
     $script:DebugState.SelectionVersion = 0
@@ -2896,6 +2917,8 @@ function Export-DebugResult {
                 SourceKind        = $_.SourceKind
                 Confidence        = $_.Confidence
                 UsedEmptyFallback = $_.UsedEmptyFallback
+                DynamicStopReason = if ($_.PSObject.Properties['DynamicStopReason']) { $_.DynamicStopReason } else { $null }
+                DynamicStopMessage = if ($_.PSObject.Properties['DynamicStopMessage']) { $_.DynamicStopMessage } else { $null }
                 Executed          = $_.Executed
                 ResultType        = $_.ResultType
             }
