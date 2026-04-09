@@ -4013,6 +4013,69 @@ function Invoke-ScriptBlockCall {
     }
 }
 
+function Register-RuntimeSubgraph {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$BlockName,
+        [Parameter(Mandatory)][int]$BlockStartId,
+        [Parameter(Mandatory)][int]$BlockEndId,
+        [int[]]$NewNodeIds = @(),
+        $CallerNode,
+        [string]$DynamicType,
+        [string]$ArgumentCode,
+        [string]$ArgumentValue
+    )
+
+    if (-not $Context.ContainsKey('RuntimeSubgraphs') -or $null -eq $Context.RuntimeSubgraphs) {
+        $Context.RuntimeSubgraphs = @{}
+    }
+    if (-not $Context.ContainsKey('RuntimeSubgraphOrder') -or $null -eq $Context.RuntimeSubgraphOrder) {
+        $Context.RuntimeSubgraphOrder = @()
+    }
+
+    $callerNodeId = if ($CallerNode) { [int]$CallerNode.Id } else { $null }
+    $callerText = if ($CallerNode) { [string]$CallerNode.Text } else { $null }
+    $callerStartOffset = if ($CallerNode -and $CallerNode.PSObject.Properties['TextStartOffset']) { $CallerNode.TextStartOffset } else { $null }
+    $callerEndOffset = if ($CallerNode -and $CallerNode.PSObject.Properties['TextEndOffset']) { $CallerNode.TextEndOffset } else { $null }
+    $parentBlockName = if ($CallerNode -and $CallerNode.PSObject.Properties['RuntimeBlockName']) { [string]$CallerNode.RuntimeBlockName } else { $null }
+    $createdIndex = @($Context.RuntimeSubgraphOrder).Count + 1
+
+    $info = [PSCustomObject]@{
+        BlockName          = $BlockName
+        BlockStartId       = $BlockStartId
+        BlockEndId         = $BlockEndId
+        CallerNodeId       = $callerNodeId
+        CallerText         = $callerText
+        CallerStartOffset  = $callerStartOffset
+        CallerEndOffset    = $callerEndOffset
+        ParentBlockName    = $parentBlockName
+        DynamicType        = $DynamicType
+        ArgumentCode       = $ArgumentCode
+        ArgumentValue      = $ArgumentValue
+        CreatedVisit       = if ($Context.ContainsKey('TotalVisits')) { [int]$Context.TotalVisits } else { 0 }
+        CreatedIndex       = $createdIndex
+        NewNodeIds         = @($NewNodeIds)
+    }
+
+    $Context.RuntimeSubgraphs[$BlockName] = $info
+    $Context.RuntimeSubgraphOrder += @($BlockName)
+
+    foreach ($nodeId in @($NewNodeIds)) {
+        $runtimeNode = Get-NodeById -CFG $Context.CFG -Id $nodeId
+        if (-not $runtimeNode) { continue }
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeGenerated' -NotePropertyValue $true -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeBlockName' -NotePropertyValue $BlockName -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeCallerNodeId' -NotePropertyValue $callerNodeId -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeCallerText' -NotePropertyValue $callerText -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeCallerStartOffset' -NotePropertyValue $callerStartOffset -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeCallerEndOffset' -NotePropertyValue $callerEndOffset -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeDynamicType' -NotePropertyValue $DynamicType -Force
+        $runtimeNode | Add-Member -NotePropertyName 'RuntimeParentBlockName' -NotePropertyValue $parentBlockName -Force
+    }
+
+    return $info
+}
+
 # 处理动态执行（iex / ScriptBlockCreate / NewScriptBlock）- 创建 CFG 子图
 function Handle-DynamicInvoke {
     param(
@@ -4113,6 +4176,11 @@ function Handle-DynamicInvoke {
 
         # 注册子图
         $Context.ScriptBlockSubgraphs[$blockName] = $subgraphResult.BlockStartId
+        $runtimeInfo = Register-RuntimeSubgraph -Context $Context -BlockName $blockName -BlockStartId $subgraphResult.BlockStartId -BlockEndId $subgraphResult.BlockEndId -NewNodeIds $subgraphResult.NewNodeIds -CallerNode $Node -DynamicType $dynType -ArgumentCode $argCode -ArgumentValue $argumentValue
+        $dynamicRecord.BlockName = $blockName
+        $dynamicRecord.BlockStartId = $subgraphResult.BlockStartId
+        $dynamicRecord.BlockEndId = $subgraphResult.BlockEndId
+        $dynamicRecord.ParentBlockName = $runtimeInfo.ParentBlockName
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created subgraph: $blockName (Nodes $($subgraphResult.BlockStartId)-$($subgraphResult.BlockEndId))"
 
         # 创建前置转换节点（显示 $_dyn_xxx = {xxx}）
@@ -4269,6 +4337,11 @@ function Handle-DynamicInvoke {
 
         $blockName = $subgraphResult.BlockName
         $Context.ScriptBlockSubgraphs[$blockName] = $subgraphResult.BlockStartId
+        $runtimeInfo = Register-RuntimeSubgraph -Context $Context -BlockName $blockName -BlockStartId $subgraphResult.BlockStartId -BlockEndId $subgraphResult.BlockEndId -NewNodeIds $subgraphResult.NewNodeIds -CallerNode $Node -DynamicType $dynType -ArgumentCode $argCode -ArgumentValue $argumentValue
+        $dynamicRecord.BlockName = $blockName
+        $dynamicRecord.BlockStartId = $subgraphResult.BlockStartId
+        $dynamicRecord.BlockEndId = $subgraphResult.BlockEndId
+        $dynamicRecord.ParentBlockName = $runtimeInfo.ParentBlockName
 
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created subgraph: $blockName (Nodes $($subgraphResult.BlockStartId)-$($subgraphResult.BlockEndId))"
 
@@ -5802,6 +5875,8 @@ function Invoke-CFGTraversal {
         FunctionSubgraphs     = @{}          # 函数名 -> FuncStart 节点 Id
         ScriptBlockSubgraphs  = @{}          # _block_xxx -> BlockStart 节点 Id
         VarToBlockMapping     = @{}          # 变量名 -> 块名 映射（用于动态创建的脚本块跟踪）
+        RuntimeSubgraphs      = @{}          # _dyn_xxx -> 运行时子图元数据
+        RuntimeSubgraphOrder  = @()          # 运行时子图创建顺序
         CallStack             = @()          # 调用栈 [{ Type; Name; ReturnNodeId }]
         MaxCallDepth          = 100          # 最大调用深度
         DynamicInvokeResults  = @()          # 动态执行记录 [{ NodeId; Command; ArgumentValue }]
@@ -5963,6 +6038,8 @@ function New-CFGExecutionSession {
         FunctionSubgraphs      = @{}
         ScriptBlockSubgraphs   = @{}
         VarToBlockMapping      = @{}
+        RuntimeSubgraphs       = @{}
+        RuntimeSubgraphOrder   = @()
         CallStack              = @()
         MaxCallDepth           = 100
         DynamicInvokeResults   = @()
@@ -6197,6 +6274,16 @@ function Invoke-CFGStep {
 
     function Add-Record {
         param($Record)
+        if ($null -eq $Record.PSObject.Properties['RuntimeBlockName']) {
+            $runtimeBlockName = $null
+            if ($Record.PSObject.Properties['NodeId'] -and $null -ne $Record.NodeId) {
+                $recordNode = Get-NodeById -CFG $context.CFG -Id ([int]$Record.NodeId)
+                if ($recordNode -and $recordNode.PSObject.Properties['RuntimeBlockName']) {
+                    $runtimeBlockName = [string]$recordNode.RuntimeBlockName
+                }
+            }
+            $Record | Add-Member -NotePropertyName RuntimeBlockName -NotePropertyValue $runtimeBlockName -Force
+        }
         if ($null -eq $Record.PSObject.Properties['Step']) {
             $Record | Add-Member -NotePropertyName Step -NotePropertyValue $Session.StepCounter -Force
         } else {

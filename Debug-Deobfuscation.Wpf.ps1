@@ -777,8 +777,98 @@ function Get-ReplacementCandidatePriority {
         if ($Candidate.PSObject.Properties['UsedEmptyFallback'] -and [bool]$Candidate.UsedEmptyFallback) { return 100 }
         return 200
     }
+    if ($sourceKind -eq 'DynamicInvoke') { return 400 }
     if ($sourceKind -eq 'VariableRead') { return 350 }
     return 300
+}
+
+function Get-DynamicInvokeReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.DynamicInvokeResults -or $Context.DynamicInvokeResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in $Context.DynamicInvokeResults) {
+        if (-not $rec) { continue }
+
+        $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
+        $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+        $replacementValue = if ($rec -is [hashtable]) { $rec['ArgumentValue'] } else { $rec.ArgumentValue }
+        $replacement = if ($null -ne $replacementValue) { [string]$replacementValue } else { $null }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = if ($node) { $node.TextStartOffset } else { $null }
+            EndOffset   = if ($node) { $node.TextEndOffset } else { $null }
+            Type        = 'DynamicInvoke'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        if (-not $node) {
+            $skipped += New-SkipRecord -Reason 'dynamic_node_missing' -Message "DynamicInvoke 节点不存在: NodeId=$nodeId" -Item $baseItem
+            continue
+        }
+        if ($node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+            $skipped += New-SkipRecord -Reason 'dynamic_runtime_node' -Message '运行时子图中的 DynamicInvoke 不直接回写原脚本' -Item $baseItem
+            continue
+        }
+
+        $start = $node.TextStartOffset
+        $end = $node.TextEndOffset
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'dynamic_no_offset' -Message 'DynamicInvoke 无原始 offset，跳过' -Item $baseItem
+            continue
+        }
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'dynamic_out_of_range' -Message 'DynamicInvoke offset 越界' -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement)) {
+            $skipped += New-SkipRecord -Reason 'dynamic_empty' -Message 'DynamicInvoke 解析结果为空，跳过' -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring($start, $end - $start)
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'no_change' -Message 'DynamicInvoke replacement 与原片段一致' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'DynamicInvoke'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'DynamicInvoke'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'String'
+            Executed    = $true
+            VariableName = $null
+            IsSimpleVariable = $false
+            IsValueChanged = $false
+            ObservedValueCount = 1
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
 }
 
 function Merge-ReplacementCandidatesByRange {
@@ -822,6 +912,54 @@ function Merge-ReplacementCandidatesByRange {
     }
 }
 
+function Filter-CandidatesPreferDynamicInvoke {
+    param([array]$Candidates)
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -eq 'DynamicInvoke' })
+    if ($dynamicCandidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @($Candidates)
+            Skipped    = @()
+        }
+    }
+
+    $kept = @()
+    $skipped = @()
+
+    foreach ($cand in $Candidates) {
+        if (-not $cand) { continue }
+        if ([string]$cand.SourceKind -eq 'DynamicInvoke') {
+            $kept += $cand
+            continue
+        }
+
+        $coveringDynamic = $dynamicCandidates | Where-Object {
+            $_.StartOffset -le $cand.StartOffset -and
+            $_.EndOffset -ge $cand.EndOffset -and
+            (Get-ReplacementCandidatePriority -Candidate $_) -gt (Get-ReplacementCandidatePriority -Candidate $cand)
+        } | Sort-Object StartOffset, @{ Expression = { $_.EndOffset - $_.StartOffset } } | Select-Object -First 1
+
+        if ($coveringDynamic) {
+            $skipped += New-SkipRecord -Reason 'prefer_dynamic_invoke' -Message '内层候选被更高优先级的 DynamicInvoke 候选覆盖，优先保留整条动态代码替换' -Item $cand
+            continue
+        }
+
+        $kept += $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($kept)
+        Skipped    = @($skipped)
+    }
+}
+
 function Get-StaticReplacementCandidates {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -838,6 +976,7 @@ function Get-StaticReplacementCandidates {
     foreach ($node in $nodes) {
         if (-not $node -or -not $node.Resolvables) { continue }
         $nodeId = [int]$node.Id
+        if ($node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) { continue }
         $isVisited = $false
         if ($Context.VisitedNodes) {
             $isVisited = ($Context.VisitedNodes.ContainsKey($nodeId) -or $Context.VisitedNodes.ContainsKey([string]$nodeId))
@@ -942,6 +1081,12 @@ function Get-ReplacementsFromResolvableResults {
             NodeId      = $rec.NodeId
         }
 
+        $node = if ($Context.CFG -and $rec.NodeId) { Get-NodeById -CFG $Context.CFG -Id $rec.NodeId } else { $null }
+        if ($node -and $node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+            $skipped += New-SkipRecord -Reason 'runtime_generated' -Message '运行时子图的 Resolvable 不直接回写原脚本' -Item $baseItem
+            continue
+        }
+
         if ($null -eq $start -or $null -eq $end) {
             $skipped += New-SkipRecord -Reason 'no_offset' -Message '无 offset' -Item $baseItem
             continue
@@ -1024,6 +1169,12 @@ function Get-ReplacementsFromResolvableResults {
                 Type        = $type
                 Depth       = $null
                 NodeId      = $nodeId
+            }
+
+            $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+            if ($node -and $node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+                $skipped += New-SkipRecord -Reason 'runtime_generated' -Message '运行时子图的变量读取不直接回写原脚本' -Item $baseItem
+                continue
             }
 
             if ($null -eq $start -or $null -eq $end) {
@@ -1366,12 +1517,14 @@ function Build-DebugPreview {
         [hashtable]$ManualSelection
     )
 
+    $dynamic = Get-DynamicInvokeReplacementCandidates -Context $Context -ScriptText $ScriptText
     $base = Get-ReplacementsFromResolvableResults -Context $Context -ScriptText $ScriptText
     $static = Get-StaticReplacementCandidates -Context $Context -ScriptText $ScriptText
-    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($base.Candidates) + @($static.Candidates))
+    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($base.Candidates) + @($static.Candidates))
+    $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($merged.Candidates)
 
     $candidates = @()
-    foreach ($cand in @($merged.Candidates)) {
+    foreach ($cand in @($preferred.Candidates)) {
         $sourceKind = if ($cand.PSObject.Properties['SourceKind']) { [string]$cand.SourceKind } else { 'Resolvable' }
         $confidence = if ($cand.PSObject.Properties['Confidence']) { [string]$cand.Confidence } elseif ($sourceKind -eq 'Static') { 'High' } else { $null }
         $usedEmptyFallback = if ($cand.PSObject.Properties['UsedEmptyFallback']) { [bool]$cand.UsedEmptyFallback } else { $false }
@@ -1438,7 +1591,7 @@ function Build-DebugPreview {
     return [PSCustomObject]@{
         Candidates = @($candidates)
         Selected   = @($finalSelected)
-        Skipped    = @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($resolved.Skipped) + @($syntaxGuard.Skipped)
+        Skipped    = @($dynamic.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped) + @($resolved.Skipped) + @($syntaxGuard.Skipped)
         Rebuilt    = $newText
     }
 }
@@ -1490,6 +1643,177 @@ function Get-DotPlainLayout {
     }
 }
 
+function Get-ContextRuntimeSubgraphs {
+    param([hashtable]$Context)
+
+    if ($null -eq $Context -or -not $Context.ContainsKey('RuntimeSubgraphs') -or $null -eq $Context.RuntimeSubgraphs) {
+        return @()
+    }
+
+    $ordered = New-Object System.Collections.Generic.List[object]
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    if ($Context.ContainsKey('RuntimeSubgraphOrder') -and $null -ne $Context.RuntimeSubgraphOrder) {
+        foreach ($name in @($Context.RuntimeSubgraphOrder)) {
+            if ([string]::IsNullOrWhiteSpace([string]$name)) { continue }
+            if (-not $Context.RuntimeSubgraphs.ContainsKey($name)) { continue }
+            $ordered.Add($Context.RuntimeSubgraphs[$name]) | Out-Null
+            $seen.Add([string]$name) | Out-Null
+        }
+    }
+
+    foreach ($entry in @($Context.RuntimeSubgraphs.Values | Sort-Object CreatedIndex, BlockName)) {
+        if (-not $entry) { continue }
+        $name = [string]$entry.BlockName
+        if ($seen.Contains($name)) { continue }
+        $ordered.Add($entry) | Out-Null
+    }
+
+    return @($ordered.ToArray())
+}
+
+function Get-RuntimeSubgraphInfoForNode {
+    param(
+        [hashtable]$Context,
+        $Node
+    )
+
+    if ($null -eq $Context -or $null -eq $Node) { return $null }
+    if (-not $Node.PSObject.Properties['RuntimeBlockName']) { return $null }
+
+    $blockName = [string]$Node.RuntimeBlockName
+    if ([string]::IsNullOrWhiteSpace($blockName)) { return $null }
+    if (-not $Context.ContainsKey('RuntimeSubgraphs') -or $null -eq $Context.RuntimeSubgraphs) { return $null }
+    if (-not $Context.RuntimeSubgraphs.ContainsKey($blockName)) { return $null }
+    return $Context.RuntimeSubgraphs[$blockName]
+}
+
+function Get-GraphNodeIdForDisplay {
+    param(
+        [hashtable]$Context,
+        $Node
+    )
+
+    if ($null -eq $Node) { return 0 }
+    $nodeId = [int]$Node.Id
+
+    if ($script:DebugState -and $script:DebugState.Layout -and $script:DebugState.Layout.Nodes -and $script:DebugState.Layout.Nodes.ContainsKey([string]$nodeId)) {
+        return $nodeId
+    }
+
+    $runtimeInfo = Get-RuntimeSubgraphInfoForNode -Context $Context -Node $Node
+    if ($runtimeInfo -and $runtimeInfo.CallerNodeId) {
+        return [int]$runtimeInfo.CallerNodeId
+    }
+
+    return $nodeId
+}
+
+function Get-ReplacementOwnerNodeId {
+    param(
+        [hashtable]$Context,
+        $Node
+    )
+
+    if ($null -eq $Node) { return $null }
+
+    $runtimeInfo = Get-RuntimeSubgraphInfoForNode -Context $Context -Node $Node
+    if ($runtimeInfo -and $runtimeInfo.CallerNodeId) {
+        return [int]$runtimeInfo.CallerNodeId
+    }
+
+    return [int]$Node.Id
+}
+
+function Build-RuntimeSubgraphRows {
+    param(
+        [hashtable]$Context,
+        $CurrentNode
+    )
+
+    $entries = Get-ContextRuntimeSubgraphs -Context $Context
+    if (-not $entries -or $entries.Count -eq 0) { return @() }
+
+    $activeBlockNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if ($Context.ScopeStack) {
+        foreach ($scope in @($Context.ScopeStack)) {
+            if (-not $scope -or [string]$scope.ScopeType -ne 'ScriptBlock') { continue }
+            $null = $activeBlockNames.Add([string]$scope.ScopeName)
+        }
+    }
+
+    $currentRuntimeBlock = $null
+    if ($CurrentNode -and $CurrentNode.PSObject.Properties['RuntimeBlockName']) {
+        $currentRuntimeBlock = [string]$CurrentNode.RuntimeBlockName
+    }
+
+    $rows = @()
+    foreach ($info in $entries) {
+        $isCurrent = (-not [string]::IsNullOrWhiteSpace($currentRuntimeBlock) -and $currentRuntimeBlock -eq [string]$info.BlockName)
+        $status = if ($isCurrent) {
+            'Current'
+        } elseif ($activeBlockNames.Contains([string]$info.BlockName)) {
+            'Open'
+        } else {
+            'Returned'
+        }
+
+        $rows += [PSCustomObject]@{
+            BlockName        = [string]$info.BlockName
+            DynamicType      = [string]$info.DynamicType
+            Status           = $status
+            CallerNodeId     = if ($info.CallerNodeId) { [int]$info.CallerNodeId } else { $null }
+            CallerText       = ConvertTo-PreviewText -Text ([string]$info.CallerText) -MaxLen 90
+            ParentBlockName  = [string]$info.ParentBlockName
+            CurrentNodeId    = if ($isCurrent -and $CurrentNode) { [int]$CurrentNode.Id } else { $null }
+            CodePreview      = ConvertTo-PreviewText -Text ([string]$info.ArgumentValue) -MaxLen 120
+            CreatedIndex     = if ($info.CreatedIndex) { [int]$info.CreatedIndex } else { 0 }
+            BlockStartId     = if ($info.BlockStartId) { [int]$info.BlockStartId } else { $null }
+            BlockEndId       = if ($info.BlockEndId) { [int]$info.BlockEndId } else { $null }
+        }
+    }
+
+    return @($rows | Sort-Object CreatedIndex, BlockName)
+}
+
+function Get-RuntimeSubgraphDetailText {
+    param(
+        [hashtable]$Context,
+        $Row
+    )
+
+    if ($null -eq $Row) { return '' }
+
+    $info = $null
+    if ($Context -and $Context.ContainsKey('RuntimeSubgraphs') -and $Context.RuntimeSubgraphs -and $Context.RuntimeSubgraphs.ContainsKey([string]$Row.BlockName)) {
+        $info = $Context.RuntimeSubgraphs[[string]$Row.BlockName]
+    }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("BlockName : $($Row.BlockName)") | Out-Null
+    $lines.Add("Type      : $($Row.DynamicType)") | Out-Null
+    $lines.Add("Status    : $($Row.Status)") | Out-Null
+    if ($Row.ParentBlockName) { $lines.Add("Parent    : $($Row.ParentBlockName)") | Out-Null }
+    if ($Row.CallerNodeId) { $lines.Add("Caller    : Node $($Row.CallerNodeId)") | Out-Null }
+    if ($info -and $info.CallerText) {
+        $lines.Add("CallerText: $([string]$info.CallerText)") | Out-Null
+    }
+    if ($info -and $info.ArgumentCode) {
+        $lines.Add("ArgCode   : $([string]$info.ArgumentCode)") | Out-Null
+    }
+    if ($info -and $info.ArgumentValue) {
+        $lines.Add("Code      : $([string]$info.ArgumentValue)") | Out-Null
+    }
+    if ($info -and $info.BlockStartId) {
+        $lines.Add("Range     : $($info.BlockStartId) -> $($info.BlockEndId)") | Out-Null
+    }
+    if ($Row.CurrentNodeId) {
+        $lines.Add("Current   : Node $($Row.CurrentNodeId)") | Out-Null
+    }
+
+    return ($lines -join [Environment]::NewLine)
+}
+
 $scriptPathFull = (Resolve-Path -LiteralPath $ScriptPath).ProviderPath
 if ([string]::IsNullOrWhiteSpace($WorkDir)) {
     $WorkDir = $scriptPathFull + '.debug.work'
@@ -1516,6 +1840,7 @@ $layout = Get-DotPlainLayout -DotPath $cfgDotPath
 $scriptText = Get-FullScriptTextFromFile -Path $scriptPathFull
 $session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes
 $currentHostDisplay = Format-PowerShellHostInfo -HostInfo $session.Context.HostInfo
+$script:CurrentHostDisplay = $currentHostDisplay
 $preview = Build-DebugPreview -Context $session.Context -ScriptText $scriptText -Strategy $OverlapStrategy
 
 if ($NoUI) {
@@ -1526,6 +1851,7 @@ if ($NoUI) {
         Nodes        = $cfg.Nodes.Count
         Steps        = $session.StepCounter
         HasGraphPng  = [bool](Test-Path -LiteralPath $cfgPngPath)
+        RuntimeSubgraphs = if ($session.Context.ContainsKey('RuntimeSubgraphs') -and $session.Context.RuntimeSubgraphs) { [int]$session.Context.RuntimeSubgraphs.Count } else { 0 }
         Candidates   = $preview.Candidates.Count
         Selected     = $preview.Selected.Count
         Skipped      = $preview.Skipped.Count
@@ -1579,6 +1905,7 @@ if ($NoUI) {
         <DataGrid.Columns>
           <DataGridTextColumn Header="Step" Binding="{Binding Step}" Width="60"/>
           <DataGridTextColumn Header="Node" Binding="{Binding NodeId}" Width="65"/>
+          <DataGridTextColumn Header="域" Binding="{Binding Scope}" Width="80"/>
           <DataGridTextColumn Header="Type" Binding="{Binding NodeType}" Width="130"/>
           <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90"/>
           <DataGridTextColumn Header="Next" Binding="{Binding NextText}" Width="*"/>
@@ -1711,6 +2038,38 @@ if ($NoUI) {
                        AcceptsReturn="True"/>
             </Grid>
           </TabItem>
+
+          <TabItem Header="动态子图">
+            <Grid Margin="10">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="170" MinHeight="120"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <TextBlock Name="TxtDynamicSummary" Foreground="#555" TextWrapping="Wrap"/>
+              <DataGrid Name="DynamicGrid" Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False"
+                        IsReadOnly="True" EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12"
+                        Margin="0,8,0,0" SelectionMode="Single" SelectionUnit="FullRow">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="#" Binding="{Binding CreatedIndex}" Width="45"/>
+                  <DataGridTextColumn Header="Block" Binding="{Binding BlockName}" Width="135"/>
+                  <DataGridTextColumn Header="Type" Binding="{Binding DynamicType}" Width="110"/>
+                  <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
+                  <DataGridTextColumn Header="Caller" Binding="{Binding CallerNodeId}" Width="70"/>
+                  <DataGridTextColumn Header="Parent" Binding="{Binding ParentBlockName}" Width="120"/>
+                  <DataGridTextColumn Header="Current" Binding="{Binding CurrentNodeId}" Width="70"/>
+                  <DataGridTextColumn Header="Code" Binding="{Binding CodePreview}" Width="*"/>
+                </DataGrid.Columns>
+              </DataGrid>
+              <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                            ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
+                            ShowsPreview="True" Background="#E0E0E0"/>
+              <TextBox Name="TxtDynamicDetail" Grid.Row="3" FontFamily="Consolas" FontSize="12" IsReadOnly="True"
+                       VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                       TextWrapping="Wrap" AcceptsReturn="True"/>
+            </Grid>
+          </TabItem>
         </TabControl>
       </Grid>
     </Grid>
@@ -1750,6 +2109,9 @@ $btnRefreshVar = $window.FindName('BtnRefreshVar')
 $chkVarAdvanced = $window.FindName('ChkVarAdvanced')
 $txtPreviewSummary = $window.FindName('TxtPreviewSummary')
 $txtRebuiltPreview = $window.FindName('TxtRebuiltPreview')
+$txtDynamicSummary = $window.FindName('TxtDynamicSummary')
+$dynamicGrid = $window.FindName('DynamicGrid')
+$txtDynamicDetail = $window.FindName('TxtDynamicDetail')
 
 $script:DebugState = @{
     ScriptPath     = $scriptPathFull
@@ -1774,6 +2136,8 @@ $script:DebugState = @{
     HoldPendingNextNodeId = $null
     HoldAfterNodeId = $null
     Preview        = $preview
+    SelectedRuntimeBlockName = $null
+    LastGraphSignature = ''
 }
 
 $script:NodeRectsDip = @{}
@@ -1816,6 +2180,26 @@ function Set-GraphPlaceholder {
     $graphOverlay.Children.Add($tb) | Out-Null
 }
 
+function Get-GraphStateSignature {
+    param([hashtable]$Context)
+
+    $nodeCount = if ($script:DebugState.Cfg -and $script:DebugState.Cfg.Nodes) { @($script:DebugState.Cfg.Nodes).Count } else { 0 }
+    $edgeCount = if ($script:DebugState.Cfg -and $script:DebugState.Cfg.Edges) { @($script:DebugState.Cfg.Edges).Count } else { 0 }
+    $runtimeCount = 0
+    $dynamicCount = 0
+
+    if ($Context) {
+        if ($Context.ContainsKey('RuntimeSubgraphs') -and $Context.RuntimeSubgraphs) {
+            $runtimeCount = [int]$Context.RuntimeSubgraphs.Count
+        }
+        if ($Context.ContainsKey('DynamicInvokeResults') -and $Context.DynamicInvokeResults) {
+            $dynamicCount = [int]$Context.DynamicInvokeResults.Count
+        }
+    }
+
+    return "$nodeCount|$edgeCount|$runtimeCount|$dynamicCount"
+}
+
 function Ensure-GraphLoaded {
     Reset-GraphOverlay
     if (-not (Test-Path -LiteralPath $script:DebugState.PngPath)) {
@@ -1823,14 +2207,46 @@ function Ensure-GraphLoaded {
         return
     }
     try {
+        $pngPath = (Resolve-Path -LiteralPath $script:DebugState.PngPath).ProviderPath
         $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
         $bmp.BeginInit()
         $bmp.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
-        $bmp.UriSource = [Uri](Resolve-Path -LiteralPath $script:DebugState.PngPath).ProviderPath
+        $bmp.CreateOptions = [System.Windows.Media.Imaging.BitmapCreateOptions]::IgnoreImageCache
+        $bmp.UriSource = [Uri]$pngPath
         $bmp.EndInit()
+        $bmp.Freeze()
         $graphImage.Source = $bmp
     } catch {
         Set-GraphPlaceholder -Message "(加载 cfg.png 失败: $_)"
+    }
+}
+
+function Refresh-LiveGraphArtifacts {
+    param(
+        [switch]$Force,
+        [string]$Reason
+    )
+
+    $ctx = if ($script:DebugState.Session) { $script:DebugState.Session.Context } else { $null }
+    $newSignature = Get-GraphStateSignature -Context $ctx
+    if (-not $Force -and $newSignature -eq [string]$script:DebugState.LastGraphSignature) {
+        return $false
+    }
+
+    try {
+        Export-CfgToDot -finalCFG $script:DebugState.Cfg -outputPath $script:DebugState.DotPath | Out-Null
+        $newLayout = Get-DotPlainLayout -DotPath $script:DebugState.DotPath
+        if ($newLayout) {
+            $script:DebugState.Layout = $newLayout
+        }
+        Ensure-GraphLoaded
+        Apply-GraphZoom
+        $script:DebugState.LastGraphSignature = $newSignature
+        return $true
+    } catch {
+        $msg = if ([string]::IsNullOrWhiteSpace($Reason)) { "动态刷新 CFG 图失败: $($_.Exception.Message)" } else { "动态刷新 CFG 图失败($Reason): $($_.Exception.Message)" }
+        Update-StatusBar -Suffix $msg
+        return $false
     }
 }
 
@@ -1923,7 +2339,9 @@ function Apply-GraphZoom {
     $graphOverlay.Width = $targetW
     $graphOverlay.Height = $targetH
     Rebuild-GraphHotspots
-    $nid = if ($script:DebugState.Session.CurrentNode) { [int]$script:DebugState.Session.CurrentNode.Id } else { 0 }
+    $nid = if ($script:DebugState.Session.CurrentNode) {
+        Get-GraphNodeIdForDisplay -Context $script:DebugState.Session.Context -Node $script:DebugState.Session.CurrentNode
+    } else { 0 }
     Update-Highlight -NodeId $nid
 }
 
@@ -1951,6 +2369,8 @@ function Get-PreviewContextSignature {
     $valCount = 0
     $varRecCount = 0
     $varValCount = 0
+    $dynRecCount = 0
+    $runtimeBlockCount = 0
     $visitedCount = 0
     $totalVisits = 0
     if ($Context.ResolvableResults) {
@@ -1969,18 +2389,28 @@ function Get-PreviewContextSignature {
             }
         }
     }
+    if ($Context.DynamicInvokeResults) {
+        $dynRecCount = [int]$Context.DynamicInvokeResults.Count
+    }
+    if ($Context.ContainsKey('RuntimeSubgraphs') -and $Context.RuntimeSubgraphs) {
+        $runtimeBlockCount = [int]$Context.RuntimeSubgraphs.Count
+    }
     if ($Context.VisitedNodes) {
         $visitedCount = [int]$Context.VisitedNodes.Count
     }
     if ($Context.ContainsKey('TotalVisits')) {
         $totalVisits = [int]$Context.TotalVisits
     }
-    return "$recCount|$valCount|$varRecCount|$varValCount|$visitedCount|$totalVisits"
+    return "$recCount|$valCount|$varRecCount|$varValCount|$dynRecCount|$runtimeBlockCount|$visitedCount|$totalVisits"
 }
 function Update-StatusBar {
     param([string]$Suffix)
     $sessionNow = $script:DebugState.Session
-    $base = "Script=$($script:DebugState.ScriptPath) | Steps=$($script:DebugState.Steps.Count) | Visits=$($sessionNow.Context.TotalVisits) | Completed=$($sessionNow.IsCompleted)"
+    $runtimeCount = 0
+    if ($sessionNow.Context.ContainsKey('RuntimeSubgraphs') -and $sessionNow.Context.RuntimeSubgraphs) {
+        $runtimeCount = [int]$sessionNow.Context.RuntimeSubgraphs.Count
+    }
+    $base = "Script=$($script:DebugState.ScriptPath) | Steps=$($script:DebugState.Steps.Count) | Visits=$($sessionNow.Context.TotalVisits) | Runtime=$runtimeCount | Completed=$($sessionNow.IsCompleted)"
     if ($script:DebugState.HoldPendingNextNodeId) {
         $base = "$base | Hold=$($script:DebugState.HoldAfterNodeId)->$($script:DebugState.HoldPendingNextNodeId)"
     }
@@ -2117,6 +2547,47 @@ function Update-PreviewUi {
     $txtPreviewSummary.Text = $summary
     $txtRebuiltPreview.Text = [string]$p.Rebuilt
 }
+
+function Update-DynamicSubgraphUi {
+    $rows = Build-RuntimeSubgraphRows -Context $script:DebugState.Session.Context -CurrentNode $script:DebugState.Session.CurrentNode
+    $dynamicGrid.ItemsSource = @($rows)
+
+    if (-not $rows -or $rows.Count -eq 0) {
+        $txtDynamicSummary.Text = "运行时动态子图: 0"
+        $txtDynamicDetail.Text = "当前尚未触发运行时动态子图。"
+        $script:DebugState.SelectedRuntimeBlockName = $null
+        return
+    }
+
+    $currentBlockName = $null
+    if ($script:DebugState.Session.CurrentNode -and $script:DebugState.Session.CurrentNode.PSObject.Properties['RuntimeBlockName']) {
+        $currentBlockName = [string]$script:DebugState.Session.CurrentNode.RuntimeBlockName
+    }
+
+    $targetRow = $null
+    if (-not [string]::IsNullOrWhiteSpace($currentBlockName)) {
+        $targetRow = @($rows | Where-Object { [string]$_.BlockName -eq $currentBlockName } | Select-Object -First 1)
+    }
+    if (-not $targetRow -and -not [string]::IsNullOrWhiteSpace([string]$script:DebugState.SelectedRuntimeBlockName)) {
+        $targetRow = @($rows | Where-Object { [string]$_.BlockName -eq [string]$script:DebugState.SelectedRuntimeBlockName } | Select-Object -First 1)
+    }
+    if (-not $targetRow) {
+        $targetRow = @($rows | Select-Object -Last 1)
+    }
+    if ($targetRow -and $targetRow.Count -gt 0) {
+        $targetRow = $targetRow[0]
+        $dynamicGrid.SelectedItem = $targetRow
+        $script:DebugState.SelectedRuntimeBlockName = [string]$targetRow.BlockName
+        $txtDynamicDetail.Text = Get-RuntimeSubgraphDetailText -Context $script:DebugState.Session.Context -Row $targetRow
+    } else {
+        $txtDynamicDetail.Text = ''
+    }
+
+    $activeCount = @($rows | Where-Object { $_.Status -in @('Current', 'Open') }).Count
+    $hostDisplay = if ([string]::IsNullOrWhiteSpace([string]$script:CurrentHostDisplay)) { '' } else { [string]$script:CurrentHostDisplay }
+    $txtDynamicSummary.Text = "运行时动态子图: $($rows.Count) | 活动中: $activeCount | 当前宿主: $hostDisplay"
+}
+
 function Set-CandidateSelection {
     param(
         [Parameter(Mandatory)][string]$Key,
@@ -2164,12 +2635,14 @@ function Update-NodeReplacementUi {
         return
     }
 
-    $cacheKey = "$([int]$script:DebugState.PreviewStamp):$([int]$CurrentNode.Id)"
+    $ownerNodeId = Get-ReplacementOwnerNodeId -Context $script:DebugState.Session.Context -Node $CurrentNode
+    $isRuntimeNode = ($ownerNodeId -ne [int]$CurrentNode.Id)
+    $cacheKey = "$([int]$script:DebugState.PreviewStamp):$ownerNodeId"
     if ($script:DebugState.NodeRowsCache.ContainsKey($cacheKey)) {
         $nodeItems = @($script:DebugState.NodeRowsCache[$cacheKey])
     } else {
         $nodeItems = @($script:DebugState.Preview.Candidates |
-                Where-Object { [int]$_.NodeId -eq [int]$CurrentNode.Id } |
+                Where-Object { [int]$_.NodeId -eq $ownerNodeId } |
                 Sort-Object StartOffset, EndOffset |
                 ForEach-Object {
                     [PSCustomObject]@{
@@ -2200,9 +2673,12 @@ function Update-NodeReplacementUi {
     $changedNames = @($changedRows | ForEach-Object {
             if ([string]::IsNullOrWhiteSpace([string]$_.VariableName)) { [string]$_.Original } else { '$' + [string]$_.VariableName }
         } | Select-Object -Unique)
-    $staticHigh = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq [int]$CurrentNode.Id -and $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'High' }).Count
-    $staticLow = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq [int]$CurrentNode.Id -and $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'Low' }).Count
+    $staticHigh = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq $ownerNodeId -and $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'High' }).Count
+    $staticLow = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq $ownerNodeId -and $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'Low' }).Count
     $summary = "当前节点可替换片段: $($nodeItems.Count) | 已选择: $selectedCount | 静态高: $staticHigh | 静态低: $staticLow"
+    if ($isRuntimeNode) {
+        $summary = "$summary | 显示来源节点 Node $ownerNodeId 的候选"
+    }
     if ($changedRows.Count -gt 0) {
         $summary = "$summary | 值变化变量: $($changedNames -join ', ')"
     }
@@ -2250,6 +2726,7 @@ function Append-StepRecords {
         $row = [PSCustomObject]@{
             Step     = $r.Step
             NodeId   = $r.NodeId
+            Scope    = if ($r.PSObject.Properties['RuntimeBlockName'] -and -not [string]::IsNullOrWhiteSpace([string]$r.RuntimeBlockName)) { 'Runtime' } else { 'Static' }
             NodeType = $r.NodeType
             Status   = $r.Status
             NextText = $nextText
@@ -2265,6 +2742,7 @@ function Append-StepRecords {
 
 function Update-CurrentNodeUi {
     $sessionNow = $script:DebugState.Session
+    $graphRefreshed = Refresh-LiveGraphArtifacts -Reason 'UpdateCurrentNodeUi'
     $curNode = $sessionNow.CurrentNode
     if ($sessionNow.IsCompleted -or $null -eq $curNode) {
         $txtNodeHeader.Text = "(执行结束)"
@@ -2274,12 +2752,29 @@ function Update-CurrentNodeUi {
         Update-NodeReplacementUi -CurrentNode $null
         Update-Highlight -NodeId 0
     } else {
-        $txtNodeHeader.Text = "Node $($curNode.Id) [$($curNode.Type)]"
+        $runtimeInfo = Get-RuntimeSubgraphInfoForNode -Context $sessionNow.Context -Node $curNode
+        if ($runtimeInfo) {
+            $txtNodeHeader.Text = "Node $($curNode.Id) [$($curNode.Type)] | Runtime $($runtimeInfo.BlockName)"
+        } else {
+            $txtNodeHeader.Text = "Node $($curNode.Id) [$($curNode.Type)]"
+        }
         $holdHere = ($script:DebugState.HoldPendingNextNodeId -and ([int]$script:DebugState.HoldAfterNodeId -eq [int]$curNode.Id))
         if ($holdHere) {
             $txtNodeMeta.Text = "该节点已执行并产生可替换片段。请勾选替换项，再次点击 '下一步' 进入后继节点。"
         } else {
             $txtNodeMeta.Text = "当前尚未执行该节点。点击 '下一步' 执行。"
+        }
+        if ($runtimeInfo) {
+            $metaSuffix = " 当前位于运行时子图 $($runtimeInfo.BlockName)"
+            if ($runtimeInfo.CallerNodeId) {
+                $metaSuffix += "，来源调用节点为 Node $($runtimeInfo.CallerNodeId)。"
+            } else {
+                $metaSuffix += '。'
+            }
+            if ($runtimeInfo.ArgumentValue) {
+                $metaSuffix += " 动态代码: $(ConvertTo-PreviewText -Text ([string]$runtimeInfo.ArgumentValue) -MaxLen 120)"
+            }
+            $txtNodeMeta.Text += $metaSuffix
         }
         $txtNodeCode.Text = [string]$curNode.Text
 
@@ -2309,14 +2804,23 @@ function Update-CurrentNodeUi {
             }
         }
         Update-NodeReplacementUi -CurrentNode $curNode
-        Update-Highlight -NodeId ([int]$curNode.Id)
+        $graphNodeId = Get-GraphNodeIdForDisplay -Context $sessionNow.Context -Node $curNode
+        Update-Highlight -NodeId $graphNodeId
     }
 
     $suffix = $null
     if (-not [string]::IsNullOrWhiteSpace([string]$script:DebugState.LastAutoUncheckMessage)) {
         $suffix = [string]$script:DebugState.LastAutoUncheckMessage
     }
+    if ($graphRefreshed) {
+        if ([string]::IsNullOrWhiteSpace([string]$suffix)) {
+            $suffix = 'CFG 图已按当前运行时子图刷新'
+        } else {
+            $suffix = "$suffix | CFG 图已按当前运行时子图刷新"
+        }
+    }
     Update-StatusBar -Suffix $suffix
+    Update-DynamicSubgraphUi
     $btnNext.IsEnabled = (-not $sessionNow.IsCompleted)
     $btnRunAll.IsEnabled = (-not $sessionNow.IsCompleted)
 }
@@ -2335,10 +2839,13 @@ function Reset-DebugSession {
     $script:DebugState.PreviewStamp = 0
     $script:DebugState.NodeRowsCache = @{}
     $script:DebugState.LastAutoUncheckMessage = $null
+    $script:DebugState.SelectedRuntimeBlockName = $null
+    $script:DebugState.LastGraphSignature = ''
     $stepsGrid.ItemsSource = @()
     $txtVarName.Text = ""
     $txtVarExpr.Text = ""
     Refresh-VarGrid
+    Refresh-LiveGraphArtifacts -Force -Reason 'Reset-DebugSession' | Out-Null
     Update-PreviewUi -Force
     Update-CurrentNodeUi
 }
@@ -2365,8 +2872,10 @@ function Export-DebugResult {
         CandidateCount  = $p.Candidates.Count
         SelectedCount   = $p.Selected.Count
         SkippedCount    = $p.Skipped.Count
+        RuntimeSubgraphCount = if ($script:DebugState.Session.Context.ContainsKey('RuntimeSubgraphs') -and $script:DebugState.Session.Context.RuntimeSubgraphs) { [int]$script:DebugState.Session.Context.RuntimeSubgraphs.Count } else { 0 }
         StaticHighCount = $staticHigh
         StaticLowCount  = $staticLow
+        RuntimeSubgraphs = @(Get-ContextRuntimeSubgraphs -Context $script:DebugState.Session.Context)
         Selected        = @($p.Selected | ForEach-Object {
             [PSCustomObject]@{
                 Start             = $_.StartOffset
@@ -2394,7 +2903,7 @@ function Export-DebugResult {
         "Information"
     ) | Out-Null
 }
-Ensure-GraphLoaded
+Refresh-LiveGraphArtifacts -Force -Reason 'InitialLoad' | Out-Null
 Set-GraphZoom -Zoom 1.0
 Refresh-VarGrid
 Update-PreviewUi
@@ -2402,6 +2911,14 @@ Update-CurrentNodeUi
 
 $graphImage.Add_Loaded({ Rebuild-GraphHotspots; Update-CurrentNodeUi })
 $graphImage.Add_SizeChanged({ Rebuild-GraphHotspots; Update-CurrentNodeUi })
+
+$dynamicGrid.Add_SelectionChanged({
+    $row = $dynamicGrid.SelectedItem
+    if ($row) {
+        $script:DebugState.SelectedRuntimeBlockName = [string]$row.BlockName
+        $txtDynamicDetail.Text = Get-RuntimeSubgraphDetailText -Context $script:DebugState.Session.Context -Row $row
+    }
+})
 
 $btnNext.Add_Click({
     if (Try-AdvanceFromHold) {

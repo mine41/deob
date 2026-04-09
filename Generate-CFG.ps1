@@ -5216,6 +5216,7 @@ function New-RuntimeSubgraph {
         BlockName = $blockName
         BlockStartId = $blockStart.Id
         BlockEndId = $blockEnd.Id
+        NewNodeIds = @($newNodes | ForEach-Object { [int]$_.Id })
     }
 }
 

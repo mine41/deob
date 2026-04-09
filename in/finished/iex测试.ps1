@@ -15,3 +15,7 @@
 
 # $x = $ExecutionContext.InvokeCommand.NewScriptBlock(‘Write-Host "Hello"’)
 # & $x
+# iex套iex
+# $a = "Write-Output ''inner-ok''"
+# $b = "iex `$a"
+# iex $a
