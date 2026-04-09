@@ -219,6 +219,13 @@ function Get-VariableAccessKindMapFromScriptText {
         }
         if ([string]::IsNullOrWhiteSpace([string]$kind)) { continue }
 
+        $parent = $vAst.Parent
+        if (($parent -is [System.Management.Automation.Language.MemberExpressionAst] -or
+             $parent -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) -and
+            $parent.Expression -eq $vAst) {
+            $kind = 'MemberTarget'
+        }
+
         $key = "$start`:$end"
         if (-not $map.ContainsKey($key)) {
             $map[$key] = $kind
@@ -875,8 +882,91 @@ function Get-ReplacementCandidatePriority {
         return 200
     }
     if ($sourceKind -eq 'DynamicInvoke') { return 400 }
+    if ($sourceKind -eq 'LiteralizedCommand') { return 380 }
     if ($sourceKind -eq 'VariableRead') { return 350 }
     return 300
+}
+
+function Get-LiteralizedCommandReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.ContainsKey('LiteralizedCommandResults') -or -not $Context.LiteralizedCommandResults -or $Context.LiteralizedCommandResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in @($Context.LiteralizedCommandResults)) {
+        if (-not $rec) { continue }
+
+        $start = if ($rec.PSObject.Properties['StartOffset']) { $rec.StartOffset } else { $null }
+        $end = if ($rec.PSObject.Properties['EndOffset']) { $rec.EndOffset } else { $null }
+        $replacement = if ($rec.PSObject.Properties['ReplacementText']) { [string]$rec.ReplacementText } else { $null }
+        $nodeId = if ($rec.PSObject.Properties['NodeId']) { $rec.NodeId } else { $null }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'LiteralizedCommand'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+        if ($node -and $node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+            $skipped += New-SkipRecord -Reason 'literalized_runtime_node' -Message '运行时子图中的安全命令折叠结果不直接回写原脚本' -Item $baseItem
+            continue
+        }
+
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'literalized_no_offset' -Message '安全命令折叠结果无 offset，跳过' -Item $baseItem
+            continue
+        }
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'literalized_out_of_range' -Message "安全命令折叠 offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement)) {
+            $skipped += New-SkipRecord -Reason 'literalized_empty' -Message '安全命令折叠 replacement 为空，跳过' -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring($start, $end - $start)
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'literalized_no_change' -Message '安全命令折叠 replacement 与原片段一致' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'LiteralizedCommand'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'LiteralizedCommand'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'String'
+            Executed    = $true
+            VariableName = if ($rec.PSObject.Properties['VariableName']) { $rec.VariableName } else { $null }
+            Pattern      = if ($rec.PSObject.Properties['Pattern']) { $rec.Pattern } else { $null }
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
 }
 
 function Get-DynamicInvokeReplacementCandidates {
@@ -1610,6 +1700,356 @@ function Ensure-SyntaxSafeReplacements {
     }
 }
 
+function Get-ScriptParseInfo {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+
+    return [PSCustomObject]@{
+        Ast      = $ast
+        Tokens   = $tokens
+        Errors   = $errors
+        IsValid  = (-not $errors -or $errors.Count -eq 0)
+        FirstError = if ($errors -and $errors.Count -gt 0) { [string]$errors[0].Message } else { $null }
+    }
+}
+
+function Get-SingleTopLevelCommandAst {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) { return $null }
+
+    $ast = $parse.Ast
+    $statements = @()
+    if ($ast.BeginBlock -and $ast.BeginBlock.Statements) { $statements += @($ast.BeginBlock.Statements) }
+    if ($ast.ProcessBlock -and $ast.ProcessBlock.Statements) { $statements += @($ast.ProcessBlock.Statements) }
+    if ($ast.EndBlock -and $ast.EndBlock.Statements) { $statements += @($ast.EndBlock.Statements) }
+
+    if ($statements.Count -ne 1) { return $null }
+
+    $statement = $statements[0]
+    if ($statement -is [System.Management.Automation.Language.CommandAst]) {
+        return $statement
+    }
+    if ($statement -is [System.Management.Automation.Language.PipelineAst] -and
+        $statement.PipelineElements -and
+        $statement.PipelineElements.Count -eq 1 -and
+        $statement.PipelineElements[0] -is [System.Management.Automation.Language.CommandAst]) {
+        return $statement.PipelineElements[0]
+    }
+
+    return $null
+}
+
+function Try-GetWholeScriptHostPayloadInfo {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $cmdAst = Get-SingleTopLevelCommandAst -ScriptText $ScriptText
+    if (-not $cmdAst) { return $null }
+
+    $decodedInfo = $null
+    try {
+        $decodedInfo = Try-DecodeEncodedCommand -CommandAst $cmdAst
+    } catch {
+        $decodedInfo = $null
+    }
+
+    if ($decodedInfo -and -not [string]::IsNullOrWhiteSpace([string]$decodedInfo.DecodedContent)) {
+        return [PSCustomObject]@{
+            CommandAst  = $cmdAst
+            DynamicType = 'EncodedCommand'
+            PayloadText = [string]$decodedInfo.DecodedContent
+        }
+    }
+
+    if (-not (Get-Command Get-PowerShellHostDynamicInvocationInfo -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+
+    $hostInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
+    if (-not $hostInfo -or $hostInfo.DynamicType -ne 'PowerShellCommand') {
+        return $null
+    }
+
+    $payloadText = $null
+    if ($hostInfo.ArgumentAst -and $hostInfo.ArgumentAst.PSObject.Properties['Value']) {
+        $payloadText = [string]$hostInfo.ArgumentAst.Value
+    } elseif (-not [string]::IsNullOrWhiteSpace([string]$hostInfo.PayloadText)) {
+        $payloadText = [string]$hostInfo.PayloadText
+    }
+
+    if ([string]::IsNullOrWhiteSpace($payloadText)) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        CommandAst  = $cmdAst
+        DynamicType = 'PowerShellCommand'
+        PayloadText = $payloadText
+    }
+}
+
+function Invoke-CanonicalizeKnownCommandAliases {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $aliasMap = @{
+        'start' = 'Start-Process'
+        'saps'  = 'Start-Process'
+        'gp'    = 'Get-ItemProperty'
+        'gc'    = 'Get-Content'
+        'rd'    = 'Remove-Item'
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $replacements = @()
+    $commandAsts = @($parse.Ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.CommandAst]
+        }, $true))
+
+    foreach ($cmdAst in $commandAsts) {
+        if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -eq 0) { continue }
+        $cmdName = $cmdAst.GetCommandName()
+        if ([string]::IsNullOrWhiteSpace($cmdName)) { continue }
+
+        $canonical = $aliasMap[$cmdName.ToLowerInvariant()]
+        if ([string]::IsNullOrWhiteSpace($canonical)) { continue }
+
+        $nameAst = $cmdAst.CommandElements[0]
+        if (-not $nameAst.Extent) { continue }
+
+        $replacements += [PSCustomObject]@{
+            Start = $nameAst.Extent.StartOffset
+            End   = $nameAst.Extent.EndOffset
+            Text  = $canonical
+        }
+    }
+
+    if ($replacements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $result = $ScriptText
+    foreach ($r in @($replacements | Sort-Object Start -Descending)) {
+        $result = $result.Substring(0, $r.Start) + $r.Text + $result.Substring($r.End)
+    }
+
+    $check = Test-PowerShellSyntax -ScriptText $result
+    if ($check.IsValid) {
+        return $result
+    }
+
+    return $ScriptText
+}
+
+function Format-PowerShellScriptReadable {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    if ($ScriptText -match '(?m)^[ \t]*@["'']') {
+        return $ScriptText
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    $indent = 0
+    $lineStart = $true
+    $pendingIndent = $false
+    $state = 'Normal'
+
+    function Append-NewLine([System.Text.StringBuilder]$Builder, [ref]$LineStart, [ref]$PendingIndent) {
+        if ($Builder.Length -eq 0 -or $Builder[$Builder.Length - 1] -ne "`n") {
+            [void]$Builder.Append("`r`n")
+        }
+        $LineStart.Value = $true
+        $PendingIndent.Value = $true
+    }
+
+    function Ensure-Indent([System.Text.StringBuilder]$Builder, [int]$Level, [ref]$LineStart, [ref]$PendingIndent) {
+        if (-not $PendingIndent.Value) { return }
+        for ($j = 0; $j -lt $Level; $j++) {
+            [void]$Builder.Append('    ')
+        }
+        $PendingIndent.Value = $false
+        $LineStart.Value = $false
+    }
+
+    for ($i = 0; $i -lt $ScriptText.Length; $i++) {
+        $ch = $ScriptText[$i]
+        $next = if ($i + 1 -lt $ScriptText.Length) { $ScriptText[$i + 1] } else { [char]0 }
+
+        switch ($state) {
+            'Single' {
+                [void]$sb.Append($ch)
+                if ($ch -eq "'") { $state = 'Normal' }
+                $lineStart = ($ch -eq "`n")
+                continue
+            }
+            'Double' {
+                [void]$sb.Append($ch)
+                if ($ch -eq '`' -and $i + 1 -lt $ScriptText.Length) {
+                    $i++
+                    [void]$sb.Append($ScriptText[$i])
+                    $lineStart = ($ScriptText[$i] -eq "`n")
+                    continue
+                }
+                if ($ch -eq '"') { $state = 'Normal' }
+                $lineStart = ($ch -eq "`n")
+                continue
+            }
+            'Comment' {
+                [void]$sb.Append($ch)
+                if ($ch -eq "`n") {
+                    $state = 'Normal'
+                    $lineStart = $true
+                    $pendingIndent = $true
+                }
+                continue
+            }
+        }
+
+        if ($ch -eq "`r") { continue }
+        if ($ch -eq "`n") {
+            Append-NewLine -Builder $sb -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+            continue
+        }
+
+        if ($lineStart -and ($ch -eq ' ' -or $ch -eq "`t")) {
+            continue
+        }
+
+        switch ($ch) {
+            "'" {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append($ch)
+                $state = 'Single'
+                $lineStart = $false
+                continue
+            }
+            '"' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append($ch)
+                $state = 'Double'
+                $lineStart = $false
+                continue
+            }
+            '#' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append($ch)
+                $state = 'Comment'
+                $lineStart = $false
+                continue
+            }
+            ';' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append(';')
+                Append-NewLine -Builder $sb -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                continue
+            }
+            '{' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append('{')
+                $indent++
+                Append-NewLine -Builder $sb -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                continue
+            }
+            '}' {
+                if (-not $lineStart) {
+                    Append-NewLine -Builder $sb -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                }
+                $indent = [Math]::Max(0, $indent - 1)
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append('}')
+                $lineStart = $false
+                continue
+            }
+            default {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append($ch)
+                $lineStart = $false
+            }
+        }
+    }
+
+    $formatted = $sb.ToString()
+    $formatted = [regex]::Replace($formatted, '(?m)[ \t]+$', '')
+    $filteredLines = New-Object System.Collections.Generic.List[string]
+    foreach ($line in @($formatted -split "\r?\n")) {
+        if ($line -match "^\s*'(?:[^']|'')*'\s*;?\s*$") {
+            continue
+        }
+        $filteredLines.Add($line)
+    }
+    $formatted = ($filteredLines -join "`r`n")
+    $formatted = [regex]::Replace($formatted, "(\r?\n){3,}", "`r`n`r`n")
+    $formatted = $formatted.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($formatted)) {
+        return $ScriptText
+    }
+
+    return ($formatted + "`r`n")
+}
+
+function Invoke-NormalizePlainScriptText {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $working = $ScriptText
+    $working = Invoke-CanonicalizeKnownCommandAliases -ScriptText $working
+
+    if ($working -notmatch "[`r`n]" -and $working.Contains(';')) {
+        $lineBroken = ($working -replace ';', ";`r`n")
+        $lineBreakCheck = Test-PowerShellSyntax -ScriptText $lineBroken
+        if ($lineBreakCheck.IsValid) {
+            $working = $lineBroken
+        }
+    }
+
+    $formatted = Format-PowerShellScriptReadable -ScriptText $working
+    $check = Test-PowerShellSyntax -ScriptText $formatted
+    if ($check.IsValid) {
+        $working = $formatted
+    }
+
+    return $working
+}
+
+function Invoke-PostProcessDeobfuscatedScriptText {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $working = $ScriptText
+
+    while ($true) {
+        $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $working
+        if (-not $payloadInfo) { break }
+
+        $payloadText = [string]$payloadInfo.PayloadText
+        if ([string]::IsNullOrWhiteSpace($payloadText)) { break }
+
+        $payloadParse = Get-ScriptParseInfo -ScriptText $payloadText
+        if (-not $payloadParse.IsValid) { break }
+
+        $working = $payloadText
+    }
+
+    $normalized = Invoke-NormalizePlainScriptText -ScriptText $working
+    $check = Test-PowerShellSyntax -ScriptText $normalized
+    if ($check.IsValid) {
+        return $normalized
+    }
+
+    return $working
+}
+
 function Write-JsonFile {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -1764,13 +2204,14 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
     $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
+    $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
     $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText
-    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($base.Candidates) + @($static.Candidates))
+    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
 
     $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($merged.Candidates)
 
     $candidates = @($preferred.Candidates)
-    $skipped = @($dynamic.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped)
+    $skipped = @($dynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped)
 
     $lowConfidence = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.UsedEmptyFallback })
     foreach ($cand in $lowConfidence) {
@@ -1787,6 +2228,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $skipped += @($syntaxGuard.Skipped)
 
     $newText = Apply-ReplacementsToText -Text $scriptText -Replacements $selected
+    $postProcessedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $newText
+    $postProcessChanged = ($postProcessedText -ne $newText)
+    if ($postProcessChanged) {
+        $newText = $postProcessedText
+    }
     if ($syntaxGuard.BaselineIsValid) {
         $roundSyntax = Test-PowerShellSyntax -ScriptText $newText
         if (-not $roundSyntax.IsValid) {
@@ -1794,9 +2240,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         }
     }
 
+    $appliedCount = $selected.Count + $(if ($postProcessChanged) { 1 } else { 0 })
+
     # 无替换：本轮不落盘任何 round 产物，直接收敛退出
-    if ($selected.Count -eq 0) {
-        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
+    if ($selected.Count -eq 0 -and -not $postProcessChanged) {
+        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
 
         if ($FullOutput) {
             # 清理本轮可能已创建的临时文件（in/log）；其余文件本轮不会生成
@@ -1877,7 +2325,9 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
         $staticHigh = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'High' }).Count
         $staticLow = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'Low' }).Count
-        $dynamicCount = @($candidates | Where-Object { $_.SourceKind -ne 'Static' }).Count
+        $dynamicCount = @($candidates | Where-Object { $_.SourceKind -eq 'DynamicInvoke' }).Count
+        $literalizedCount = @($candidates | Where-Object { $_.SourceKind -eq 'LiteralizedCommand' }).Count
+        $otherExecutedCount = @($candidates | Where-Object { $_.SourceKind -notin @('Static', 'DynamicInvoke', 'LiteralizedCommand') }).Count
 
         $report = [ordered]@{
             Round           = $round
@@ -1897,10 +2347,13 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             ExecutionStopReason = if ($ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
             CandidateCount  = $candidates.Count
             DynamicCount    = $dynamicCount
+            LiteralizedCommandCount = $literalizedCount
+            OtherExecutedCount = $otherExecutedCount
             StaticHighCount = $staticHigh
             StaticLowCount  = $staticLow
             SelectedCount   = $selected.Count
-            AppliedCount    = $selected.Count
+            AppliedCount    = $appliedCount
+            PostProcessChanged = $postProcessChanged
             SkippedCount    = $skipped.Count
             SkippedByReason = $skipReasonCounts
             AppliedNodeIds  = $appliedNodeIds
@@ -1913,7 +2366,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
         Set-Content -LiteralPath $roundOutPath -Value $newText -Encoding UTF8
 
-        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
+        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
         Write-Host ("  in    : {0}" -f $roundInPath) -ForegroundColor Gray
         Write-Host ("  out   : {0}" -f $roundOutPath) -ForegroundColor Gray
         Write-Host ("  log   : {0}" -f $roundLogPath) -ForegroundColor Gray
@@ -1925,7 +2378,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         $currentPath = $roundOutPath
         $currentText = $newText
     } else {
-        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $selected.Count, $skipped.Count) -ForegroundColor Gray
+        Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
         $currentText = $newText
     }
 

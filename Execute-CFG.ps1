@@ -789,6 +789,127 @@ function ConvertTo-SingleQuotedHereStringLiteral {
     return "@'`r`n$content`r`n'@"
 }
 
+function Format-LiteralizedCommandValue {
+    param($Value)
+
+    if ($Value -is [string] -and $Value -match "[`r`n]") {
+        return (ConvertTo-SingleQuotedHereStringLiteral -Text $Value)
+    }
+
+    return (Format-ResolvableValue $Value)
+}
+
+function Test-SafeLiteralizableAssignmentAst {
+    param($StatementAst)
+
+    if ($null -eq $StatementAst -or $StatementAst -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return $null
+    }
+
+    if ($StatementAst.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
+        return $null
+    }
+
+    if ($null -eq $StatementAst.Right -or -not $StatementAst.Right.Extent) {
+        return $null
+    }
+
+    $normalized = [regex]::Replace([string]$StatementAst.Right.Extent.Text, '\s+', ' ').Trim().ToLowerInvariant()
+    $pattern = $null
+
+    switch -Regex ($normalized) {
+        '^whoami$' {
+            $pattern = 'whoami'
+            break
+        }
+        '^hostname$' {
+            $pattern = 'hostname'
+            break
+        }
+        '^ipconfig /all \| out-string$' {
+            $pattern = 'ipconfig_all_out_string'
+            break
+        }
+        '^(get-wmiobject|gwmi) -class win32_computersystem \| out-string$' {
+            $pattern = 'wmi_computersystem_out_string'
+            break
+        }
+    }
+
+    if (-not $pattern) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        Pattern      = $pattern
+        VariableName = [string]$StatementAst.Left.VariablePath.UserPath
+        StartOffset  = $StatementAst.Right.Extent.StartOffset
+        EndOffset    = $StatementAst.Right.Extent.EndOffset
+        OriginalText = [string]$StatementAst.Right.Extent.Text
+    }
+}
+
+function Resolve-AssignmentActualVariableName {
+    param(
+        [hashtable]$Context,
+        [string]$VariableName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VariableName)) {
+        return $VariableName
+    }
+
+    if ($Context.ScopeStack.Count -gt 0) {
+        $currentScope = $Context.ScopeStack[-1]
+        if ($currentScope -and $currentScope.LocalVars -and $VariableName -in $currentScope.LocalVars) {
+            return $currentScope.ScopePrefix + $VariableName
+        }
+    }
+
+    return $VariableName
+}
+
+function Record-LiteralizedCommandResult {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Node -or $null -eq $Context -or $null -eq $Node.Ast) {
+        return
+    }
+
+    if ($Node.PSObject.Properties['RuntimeGenerated'] -and [bool]$Node.RuntimeGenerated) {
+        return
+    }
+
+    $info = Test-SafeLiteralizableAssignmentAst -StatementAst $Node.Ast
+    if (-not $info) {
+        return
+    }
+
+    $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName $info.VariableName
+    $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
+
+    if (-not $Context.ContainsKey('LiteralizedCommandResults') -or $null -eq $Context.LiteralizedCommandResults) {
+        $Context.LiteralizedCommandResults = @()
+    }
+
+    $Context.LiteralizedCommandResults += [PSCustomObject]@{
+        NodeId           = $Node.Id
+        VariableName     = $info.VariableName
+        ActualVariable   = $actualVarName
+        Pattern          = $info.Pattern
+        StartOffset      = $info.StartOffset
+        EndOffset        = $info.EndOffset
+        OriginalText     = $info.OriginalText
+        ReplacementText  = (Format-LiteralizedCommandValue -Value $value)
+        Timestamp        = Get-Date
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [LITERALIZE] Safe command folded for `$${0}: {1}" -f $info.VariableName, $info.Pattern
+}
+
 function ConvertTo-CanonicalPowerShellHostCommandText {
     param(
         [Parameter(Mandatory = $true)]
@@ -2376,6 +2497,9 @@ function Invoke-NodeSafe {
             if ($result.Success -or $result.Timeout) {
                 Evaluate-NodeResolvables -Node $Node -Context $Context
             }
+            if ($result.Success) {
+                Record-LiteralizedCommandResult -Node $Node -Context $Context
+            }
 
             return $result
         }
@@ -2407,6 +2531,9 @@ function Invoke-NodeSafe {
             # 执行成功或超时后，都尝试求值 Resolvables
             if ($result.Success -or $result.Timeout) {
                 Evaluate-NodeResolvables -Node $Node -Context $Context
+            }
+            if ($result.Success) {
+                Record-LiteralizedCommandResult -Node $Node -Context $Context
             }
 
             return $result
@@ -6121,6 +6248,7 @@ function Invoke-CFGTraversal {
         LastConditionResult = $true
         ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
         VariableReadResults = @{}  # Key: "StartOffset:EndOffset", Value: @{ VarInfo; Values }
+        LiteralizedCommandResults = @()
 
         # 新增字段 - 安全执行与作用域管理
         ScopeStack            = @()          # 作用域栈 [{ ScopeType; ScopeName; ScopePrefix; ReturnNodeId; LocalVars }]
@@ -6298,6 +6426,7 @@ function New-CFGExecutionSession {
         LastConditionResult = $true
         ResolvableResults   = @{}
         VariableReadResults = @{}
+        LiteralizedCommandResults = @()
 
         ScopeStack            = @()
         CurrentScopePrefix    = ""
