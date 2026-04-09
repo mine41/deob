@@ -279,6 +279,61 @@ function Invoke-InContext {
     }
 }
 
+function Test-ExecutionResultSequenceContainer {
+    param($Value)
+
+    if ($null -eq $Value) { return $false }
+
+    if ($Value -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
+        return $true
+    }
+
+    if ($Value -is [System.Management.Automation.PSDataCollection[System.Management.Automation.PSObject]]) {
+        return $true
+    }
+
+    return $false
+}
+
+function Get-ExecutionResultItems {
+    param(
+        $Value,
+        [switch]$TreatArraysAsSequence
+    )
+
+    if ($null -eq $Value) { return @() }
+
+    $isSequence = (Test-ExecutionResultSequenceContainer -Value $Value) -or
+        ($TreatArraysAsSequence -and $Value -is [array])
+
+    if ($isSequence) {
+        return @($Value)
+    }
+
+    return @($Value)
+}
+
+function Normalize-ExecutionResultValue {
+    param(
+        $Value,
+        [switch]$TreatArraysAsSequence
+    )
+
+    if ($null -eq $Value) { return $null }
+
+    $isSequence = (Test-ExecutionResultSequenceContainer -Value $Value) -or
+        ($TreatArraysAsSequence -and $Value -is [array])
+
+    if (-not $isSequence) {
+        return $Value
+    }
+
+    $items = @($Value)
+    if ($items.Count -eq 0) { return @() }
+    if ($items.Count -eq 1) { return $items[0] }
+    return @($items)
+}
+
 # 从 Runspace 获取变量值
 function Get-VariableFromContext {
     param(
@@ -875,11 +930,7 @@ function Get-NodeTextScriptBlockArguments {
             $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
             $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
             if ($argResult.Success) {
-                $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
-                    $argResult.Result[0]
-                } else {
-                    $argResult.Result
-                }
+                $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
                 $arguments += $argValue
             } else {
                 $arguments += $null
@@ -954,11 +1005,7 @@ function Get-NodeTextScriptBlockArguments {
         $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
         $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
         if ($argResult.Success) {
-            $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
-                $argResult.Result[0]
-            } else {
-                $argResult.Result
-            }
+            $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
             $arguments += $argValue
         } else {
             $arguments += $null
@@ -1611,25 +1658,8 @@ function Format-ResolvableValue {
         return $script:BlockedPlaceholderMarker
     }
 
-    # 处理 PSObject Collection（Invoke-InContext 返回类型）
-    if ($Value -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-        if ($Value.Count -eq 0) { return '$null' }
-        # 检查是否包含占位符
-        if ($Value.Count -eq 1) {
-            if ($Value[0] -is [BlockedCommandPlaceholder]) {
-                return $script:BlockedPlaceholderMarker
-            }
-            return ConvertTo-Expression -Object $Value[0] -Expand -1
-        }
-        # 多元素：逐个序列化
-        $items = $Value | ForEach-Object {
-            if ($_ -is [BlockedCommandPlaceholder]) {
-                $script:BlockedPlaceholderMarker
-            } else {
-                ConvertTo-Expression -Object $_ -Expand -1
-            }
-        }
-        return '@(' + ($items -join ', ') + ')'
+    if (Test-ExecutionResultSequenceContainer -Value $Value) {
+        $Value = Normalize-ExecutionResultValue -Value $Value
     }
 
     # 处理普通数组
@@ -1660,13 +1690,8 @@ function Test-ResolvableValue {
 
     if ($null -eq $Value) { return $true }
 
-    # PSObject Collection —— 检查内部元素
-    if ($Value -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-        if ($Value.Count -eq 0) { return $true }
-        foreach ($item in $Value) {
-            if (-not (Test-ResolvableValue $item)) { return $false }
-        }
-        return $true
+    if (Test-ExecutionResultSequenceContainer -Value $Value) {
+        $Value = Normalize-ExecutionResultValue -Value $Value
     }
 
     # 普通数组 —— 检查每个元素
@@ -1843,8 +1868,14 @@ function Invoke-NodeDirect {
     # 条件节点记录结果
     $conditionTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
     if ($Node.Type -in $conditionTypes) {
-        if ($execResult.Success -and $null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
-            $Context.LastConditionResult = [bool]$execResult.Result[0]
+        $conditionItems = if ($execResult.Success) {
+            @(Get-ExecutionResultItems -Value $execResult.Result -TreatArraysAsSequence)
+        } else {
+            @()
+        }
+
+        if ($conditionItems.Count -gt 0) {
+            $Context.LastConditionResult = [bool]$conditionItems[0]
         } else {
             $Context.LastConditionResult = $false
         }
@@ -2337,19 +2368,13 @@ function Add-OutputsToCurrentCapture {
         $frame.Outputs = @()
     }
 
-    # Invoke-InContext 返回 Collection[PSObject]；也兼容数组/标量
-    if ($Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-        foreach ($item in $Result) {
-            if ($null -ne $item) { $frame.Outputs += $item }
-        }
+    $items = Get-ExecutionResultItems -Value $Result -TreatArraysAsSequence
+    if ($items.Count -eq 0) {
+        return
     }
-    elseif ($Result -is [array]) {
-        foreach ($item in $Result) {
-            if ($null -ne $item) { $frame.Outputs += $item }
-        }
-    }
-    else {
-        $frame.Outputs += $Result
+
+    foreach ($item in $items) {
+        if ($null -ne $item) { $frame.Outputs += $item }
     }
 }
 
@@ -3626,11 +3651,7 @@ function Invoke-FunctionCall {
 
             $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
             if ($argResult.Success) {
-                $argValue = if ($argResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $argResult.Result.Count -eq 1) {
-                    $argResult.Result[0]
-                } else {
-                    $argResult.Result
-                }
+                $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
                 $arguments += $argValue
                 if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
                     Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)" }).GetNewClosure()
@@ -3801,9 +3822,7 @@ function Resolve-EmbeddedFunctionCalls {
 
                 $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
                 if ($evalResult.Success) {
-                    $argValue = if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $evalResult.Result.Count -eq 1) {
-                        $evalResult.Result[0]
-                    } else { $evalResult.Result }
+                    $argValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
                     $args += $argValue
                 } else {
                     $args += $null
@@ -4037,13 +4056,7 @@ function Handle-DynamicInvoke {
         $evalCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
         $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $evalCode
         if ($evalResult.Success -and $null -ne $evalResult.Result) {
-            if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                if ($evalResult.Result.Count -gt 0) { $argumentValue = $evalResult.Result[0] }
-            } elseif ($evalResult.Result -is [array] -and $evalResult.Result.Count -eq 1) {
-                $argumentValue = $evalResult.Result[0]
-            } else {
-                $argumentValue = $evalResult.Result
-            }
+            $argumentValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
         }
     }
 
@@ -4123,7 +4136,8 @@ function Handle-DynamicInvoke {
         $sbCode = "[ScriptBlock]::Create('$($argumentValue.Replace("'", "''"))')"
         $sbResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $sbCode
         if ($sbResult.Success) {
-            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($blockName, $sbResult.Result)
+            $blockValue = Normalize-ExecutionResultValue -Value $sbResult.Result -TreatArraysAsSequence
+            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($blockName, $blockValue)
             Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Set `$$blockName = [ScriptBlock]"
         }
 
@@ -4359,16 +4373,7 @@ function Invoke-NodeTraverse {
                             Add-OutputsToCurrentCapture -Context $Context -Result $evalResult.Result
                         }
 
-                        # 解包 PSObject Collection
-                        if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                            if ($evalResult.Result.Count -eq 1) {
-                                $returnValue = $evalResult.Result[0]
-                            } elseif ($evalResult.Result.Count -gt 1) {
-                                $returnValue = $evalResult.Result
-                            }
-                        } else {
-                            $returnValue = $evalResult.Result
-                        }
+                        $returnValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
                         Write-ExecutionLog -Context $Context -Message ({ "  [RETURN] Expression value: $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     }
                 }
@@ -4585,16 +4590,7 @@ function Invoke-NodeTraverse {
 
                 # 如果在函数/脚本块作用域中，更新 LastSubgraphResult 用于返回值
                 if ($Context.ScopeStack.Count -gt 0) {
-                    # 解包 PSObject Collection
-                    if ($execResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                        if ($execResult.Result.Count -eq 1) {
-                            $Context.LastSubgraphResult = $execResult.Result[0]
-                        } else {
-                            $Context.LastSubgraphResult = $execResult.Result
-                        }
-                    } else {
-                        $Context.LastSubgraphResult = $execResult.Result
-                    }
+                    $Context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execResult.Result -TreatArraysAsSequence
                 }
             }
 
@@ -4866,12 +4862,7 @@ function Get-ResolvedCommandInfo {
             $nameCode = Convert-CodeForCurrentScope -Code $firstElement.Extent.Text -Context $Context
             $nameEval = Invoke-InContext -ExecContext $Context.ExecContext -Code $nameCode
             if ($nameEval.Success) {
-                $nameValue = $nameEval.Result
-                if ($nameValue -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                    if ($nameValue.Count -gt 0) { $nameValue = $nameValue[0] } else { $nameValue = $null }
-                } elseif ($nameValue -is [array] -and $nameValue.Count -eq 1) {
-                    $nameValue = $nameValue[0]
-                }
+                $nameValue = Normalize-ExecutionResultValue -Value $nameEval.Result -TreatArraysAsSequence
                 if ($null -ne $nameValue) {
                     $cmdName = [string]$nameValue
                 }
@@ -5575,10 +5566,7 @@ function Get-AstValue {
 
     $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
     if ($evalResult.Success) {
-        if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]] -and $evalResult.Result.Count -eq 1) {
-            return $evalResult.Result[0]
-        }
-        return $evalResult.Result
+        return (Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence)
     }
 
     return $null
@@ -6351,12 +6339,7 @@ function Invoke-CFGStep {
                         if ($context.OutputCaptureStack -and $context.OutputCaptureStack.Count -gt 0) {
                             Add-OutputsToCurrentCapture -Context $context -Result $evalResult.Result
                         }
-                        if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                            if ($evalResult.Result.Count -eq 1) { $returnValue = $evalResult.Result[0] }
-                            elseif ($evalResult.Result.Count -gt 1) { $returnValue = $evalResult.Result }
-                        } else {
-                            $returnValue = $evalResult.Result
-                        }
+                        $returnValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
                         Write-ExecutionLog -Context $context -Message ({ "  [RETURN] Expression value: $(Format-VariableValue $returnValue)" }).GetNewClosure()
                     }
                 }
@@ -6562,12 +6545,7 @@ function Invoke-CFGStep {
                         Write-ExecutionLog -Context $context -Message ({ "  Result: $(Format-VariableValue $execResult.Result)" }).GetNewClosure()
                     }
                     if ($context.ScopeStack.Count -gt 0) {
-                        if ($execResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-                            if ($execResult.Result.Count -eq 1) { $context.LastSubgraphResult = $execResult.Result[0] }
-                            else { $context.LastSubgraphResult = $execResult.Result }
-                        } else {
-                            $context.LastSubgraphResult = $execResult.Result
-                        }
+                        $context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execResult.Result -TreatArraysAsSequence
                     }
                 }
                 if (-not $execResult.Success -and $execResult.Error) {
@@ -7171,16 +7149,7 @@ function Set-CFGVariableValue {
         throw "变量值求值失败: $($evalResult.Error)"
     }
 
-    $valueToSet = $null
-    if ($evalResult.Result -is [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]) {
-        if ($evalResult.Result.Count -eq 1) {
-            $valueToSet = $evalResult.Result[0]
-        } elseif ($evalResult.Result.Count -gt 1) {
-            $valueToSet = @($evalResult.Result)
-        }
-    } else {
-        $valueToSet = $evalResult.Result
-    }
+    $valueToSet = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
 
     $resolvedName = Resolve-CFGVariableStackActualName -Context $context -VariableName $VariableName
     $targetNames = @($resolvedName)
@@ -7236,8 +7205,9 @@ function Get-CFGNextEdgePreview {
         }
 
         $pred = $false
-        if ($null -ne $eval.Result -and $eval.Result.Count -gt 0) {
-            $pred = [bool]$eval.Result[0]
+        $predItems = @(Get-ExecutionResultItems -Value $eval.Result -TreatArraysAsSequence)
+        if ($predItems.Count -gt 0) {
+            $pred = [bool]$predItems[0]
         }
         $label = Get-CFGConditionEdgeLabel -NodeType $node.Type -ConditionValue $pred
         $edge = Get-CFGOutgoingEdges -CFG $context.CFG -FromNodeId $node.Id | Where-Object { $_.Label -eq $label } | Select-Object -First 1

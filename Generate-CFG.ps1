@@ -5192,6 +5192,10 @@ function New-RuntimeSubgraph {
     $allEdges = if ($null -ne $cfg.Edges) { @($cfg.Edges) } else { @() }
     $newNodes = if ($allNodes.Count -gt $initialNodeCount) { @($allNodes | Select-Object -Skip $initialNodeCount) } else { @() }
     $newEdges = if ($allEdges.Count -gt $initialEdgeCount) { @($allEdges | Select-Object -Skip $initialEdgeCount) } else { @() }
+    foreach ($node in $newNodes) {
+        $node | Add-Member -NotePropertyName "RuntimeGenerated" -NotePropertyValue $true -Force
+        $node | Add-Member -NotePropertyName "RuntimeBlockName" -NotePropertyValue $blockName -Force
+    }
     if (Get-Command -Name Sync-CFGExecutionIndexesIncremental -ErrorAction SilentlyContinue) {
         try {
             $null = Sync-CFGExecutionIndexesIncremental -CFG $cfg -NewNodes $newNodes -NewEdges $newEdges

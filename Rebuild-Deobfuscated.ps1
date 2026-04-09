@@ -41,7 +41,7 @@ param(
     [ValidateSet('skip', 'last')]
     [string]$VariableConflictPolicy = 'skip',
 
-    [int]$MaxRounds = 5,
+    [int]$MaxRounds = 10,
 
     [int]$MaxIterations = 1000,
 
@@ -828,8 +828,94 @@ function Get-ReplacementCandidatePriority {
         if ($Candidate.PSObject.Properties['UsedEmptyFallback'] -and [bool]$Candidate.UsedEmptyFallback) { return 100 }
         return 200
     }
+    if ($sourceKind -eq 'DynamicInvoke') { return 400 }
     if ($sourceKind -eq 'VariableRead') { return 350 }
     return 300
+}
+
+function Get-DynamicInvokeReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.DynamicInvokeResults -or $Context.DynamicInvokeResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in $Context.DynamicInvokeResults) {
+        if (-not $rec) { continue }
+
+        $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
+        $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+        $replacementValue = if ($rec -is [hashtable]) { $rec['ArgumentValue'] } else { $rec.ArgumentValue }
+        $replacement = if ($null -ne $replacementValue) { [string]$replacementValue } else { $null }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = if ($node) { $node.TextStartOffset } else { $null }
+            EndOffset   = if ($node) { $node.TextEndOffset } else { $null }
+            Type        = 'DynamicInvoke'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        if (-not $node) {
+            $skipped += New-SkipRecord -Reason 'dynamic_node_missing' -Message "DynamicInvoke 节点不存在: NodeId=$nodeId" -Item $baseItem
+            continue
+        }
+        if ($node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+            $skipped += New-SkipRecord -Reason 'dynamic_runtime_node' -Message '运行时子图中的 DynamicInvoke 不直接回写原脚本' -Item $baseItem
+            continue
+        }
+
+        $start = $node.TextStartOffset
+        $end = $node.TextEndOffset
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'dynamic_no_offset' -Message 'DynamicInvoke 无原始 offset，跳过' -Item $baseItem
+            continue
+        }
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'dynamic_out_of_range' -Message "DynamicInvoke offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement)) {
+            $skipped += New-SkipRecord -Reason 'dynamic_empty' -Message 'DynamicInvoke 解析结果为空，跳过' -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring($start, $end - $start)
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'no_change' -Message 'DynamicInvoke replacement 与原片段一致' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'DynamicInvoke'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'DynamicInvoke'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'String'
+            Executed    = $true
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
 }
 
 function Merge-ReplacementCandidatesByRange {
@@ -870,6 +956,54 @@ function Merge-ReplacementCandidatesByRange {
     return [PSCustomObject]@{
         Candidates = @($map.Values | Sort-Object StartOffset, EndOffset, NodeId, Type)
         Skipped = @($skipped)
+    }
+}
+
+function Filter-CandidatesPreferDynamicInvoke {
+    param([array]$Candidates)
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -eq 'DynamicInvoke' })
+    if ($dynamicCandidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @($Candidates)
+            Skipped    = @()
+        }
+    }
+
+    $kept = @()
+    $skipped = @()
+
+    foreach ($cand in $Candidates) {
+        if (-not $cand) { continue }
+        if ([string]$cand.SourceKind -eq 'DynamicInvoke') {
+            $kept += $cand
+            continue
+        }
+
+        $coveringDynamic = $dynamicCandidates | Where-Object {
+            $_.StartOffset -le $cand.StartOffset -and
+            $_.EndOffset -ge $cand.EndOffset -and
+            (Get-ReplacementCandidatePriority -Candidate $_) -gt (Get-ReplacementCandidatePriority -Candidate $cand)
+        } | Sort-Object StartOffset, @{ Expression = { $_.EndOffset - $_.StartOffset } } | Select-Object -First 1
+
+        if ($coveringDynamic) {
+            $skipped += New-SkipRecord -Reason 'prefer_dynamic_invoke' -Message '内层候选被更高优先级的 DynamicInvoke 候选覆盖，优先保留整条动态代码替换' -Item $cand
+            continue
+        }
+
+        $kept += $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($kept)
+        Skipped    = @($skipped)
     }
 }
 
@@ -1015,6 +1149,12 @@ function Get-ReplacementsFromResolvableResults {
             NodeId      = $nodeId
         }
 
+        $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+        if ($node -and $node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+            $skipped += New-SkipRecord -Reason 'runtime_generated' -Message '运行时子图的 Resolvable 不直接回写原脚本' -Item $baseItem
+            continue
+        }
+
         if ($null -eq $start -or $null -eq $end) {
             $skipped += New-SkipRecord -Reason 'no_offset' -Message '无 StartOffset/EndOffset，无法回写' -Item $baseItem
             continue
@@ -1116,6 +1256,12 @@ function Get-ReplacementsFromResolvableResults {
                 Type        = $type
                 Depth       = $depth
                 NodeId      = $nodeId
+            }
+
+            $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+            if ($node -and $node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
+                $skipped += New-SkipRecord -Reason 'runtime_generated' -Message '运行时子图的变量读取不直接回写原脚本' -Item $baseItem
+                continue
             }
 
             if ($null -eq $start -or $null -eq $end) {
@@ -1556,11 +1702,14 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     }
 
     $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
+    $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
     $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText
-    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($base.Candidates) + @($static.Candidates))
+    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($base.Candidates) + @($static.Candidates))
 
-    $candidates = @($merged.Candidates)
-    $skipped = @($base.Skipped) + @($static.Skipped) + @($merged.Skipped)
+    $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($merged.Candidates)
+
+    $candidates = @($preferred.Candidates)
+    $skipped = @($dynamic.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped)
 
     $lowConfidence = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.UsedEmptyFallback })
     foreach ($cand in $lowConfidence) {
