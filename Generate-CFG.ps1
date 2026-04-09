@@ -52,6 +52,39 @@ function ConvertTo-SingleQuotedStringLiteral {
     return "'" + $Text.Replace("'", "''") + "'"
 }
 
+function ConvertTo-SingleQuotedHereStringLiteral {
+    param([string]$Text)
+
+    $content = if ($null -eq $Text) { '' } else { [string]$Text }
+    $content = $content.TrimEnd("`r", "`n")
+    return "@'`r`n$content`r`n'@"
+}
+
+function ConvertTo-CanonicalPowerShellHostCommandText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [string]$PayloadText,
+        $HostDynamicInfo = $null
+    )
+
+    if (-not $HostDynamicInfo) {
+        $HostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $CommandAst
+    }
+    if (-not $HostDynamicInfo -or -not $HostDynamicInfo.ParameterAst) {
+        return $null
+    }
+
+    $originalText = [string]$CommandAst.Extent.Text
+    $paramAst = $HostDynamicInfo.ParameterAst
+    $prefixLen = $paramAst.Extent.StartOffset - $CommandAst.Extent.StartOffset
+    if ($prefixLen -lt 0) { return $null }
+
+    $beforeParam = $originalText.Substring(0, $prefixLen)
+    $payloadLiteral = ConvertTo-SingleQuotedHereStringLiteral -Text $PayloadText
+    return $beforeParam + "-Command $payloadLiteral"
+}
+
 function Test-PowerShellHostCommandName {
     param([string]$CommandName)
 
@@ -743,18 +776,10 @@ function Try-DecodeEncodedCommand {
         # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
         $decoded = [Text.Encoding]::Unicode.GetString($bytes)
 
-        # 转义解码后的内容中的引号（使用反引号转义）
-        $escapedDecoded = $decoded.Replace('`', '``').Replace('"', '`"')
-
         # 构造替换后的命令文本
-        # 将 -EncodedCommand <base64> 替换为 -Command "<decoded>"
-        $originalText = $CommandAst.Extent.Text
-
-        # 构造新的命令行
-        # 保留 powershell 及其前面的参数，替换 -EncodedCommand 部分
-        $elem = $hostDynamicInfo.ParameterAst
-        $beforeParam = $originalText.Substring(0, $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset)
-        $replacementText = $beforeParam + "-Command `"$escapedDecoded`""
+        # 将 -EncodedCommand <base64> 统一替换为 -Command @'... '@，
+        # 避免双引号/可扩展字符串带来的提前变量插值问题。
+        $replacementText = ConvertTo-CanonicalPowerShellHostCommandText -CommandAst $CommandAst -PayloadText $decoded -HostDynamicInfo $hostDynamicInfo
 
         return @{
             ReplacementText = $replacementText

@@ -100,6 +100,55 @@ function ConvertTo-PreviewText {
     return $Text.Substring(0, $MaxLen) + '...'
 }
 
+function ConvertTo-SingleQuotedStringLiteral {
+    param([string]$Text)
+
+    if ($null -eq $Text) { return "''" }
+    return "'" + $Text.Replace("'", "''") + "'"
+}
+
+function ConvertTo-SingleQuotedHereStringLiteral {
+    param([string]$Text)
+
+    $content = if ($null -eq $Text) { '' } else { [string]$Text }
+    $content = $content.TrimEnd("`r", "`n")
+    return "@'`r`n$content`r`n'@"
+}
+
+function ConvertTo-CanonicalPowerShellHostCommandText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [string]$PayloadText
+    )
+
+    $cmdName = $CommandAst.GetCommandName()
+    if ($cmdName -notmatch '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$') {
+        return $null
+    }
+
+    $elements = @($CommandAst.CommandElements)
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+        if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+
+        $paramName = [string]$elem.ParameterName
+        if ($paramName -notmatch '^(?i:e(?:n(?:c(?:odedcommand)?)?)?|c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)$') {
+            continue
+        }
+
+        $originalText = [string]$CommandAst.Extent.Text
+        $prefixLen = $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset
+        if ($prefixLen -lt 0) { return $null }
+
+        $beforeParam = $originalText.Substring(0, $prefixLen)
+        $payloadLiteral = ConvertTo-SingleQuotedHereStringLiteral -Text $PayloadText
+        return $beforeParam + "-Command $payloadLiteral"
+    }
+
+    return $null
+}
+
 function Test-SimpleVariableReplacementLiteral {
     param([string]$Replacement)
 
@@ -592,17 +641,10 @@ function Try-DecodeEncodedCommand {
                             # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
                             $decoded = [Text.Encoding]::Unicode.GetString($bytes)
 
-                            # 转义解码后的内容中的引号（使用反引号转义）
-                            $escapedDecoded = $decoded.Replace('`', '``').Replace('"', '`"')
-
                             # 构造替换后的命令文本
-                            # 将 -EncodedCommand <base64> 替换为 -Command "<decoded>"
-                            $originalText = $CommandAst.Extent.Text
-
-                            # 构造新的命令行
-                            # 保留 powershell 及其前面的参数，替换 -EncodedCommand 部分
-                            $beforeParam = $originalText.Substring(0, $elem.Extent.StartOffset - $CommandAst.Extent.StartOffset)
-                            $replacementText = $beforeParam + "-Command `"$escapedDecoded`""
+                            # 将 -EncodedCommand <base64> 统一替换为 -Command @'... '@，
+                            # 避免双引号/可扩展字符串带来的提前变量插值问题。
+                            $replacementText = ConvertTo-CanonicalPowerShellHostCommandText -CommandAst $CommandAst -PayloadText $decoded
 
                             return @{
                                 ReplacementText = $replacementText
@@ -858,7 +900,11 @@ function Get-DynamicInvokeReplacementCandidates {
 
         $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
         $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
-        $replacementValue = if ($rec -is [hashtable]) { $rec['ArgumentValue'] } else { $rec.ArgumentValue }
+        $replacementValue = if ($rec -is [hashtable]) {
+            if ($rec.ContainsKey('ReplacementText') -and $null -ne $rec['ReplacementText']) { $rec['ReplacementText'] } else { $rec['ArgumentValue'] }
+        } else {
+            if ($rec.PSObject.Properties['ReplacementText'] -and $null -ne $rec.ReplacementText) { $rec.ReplacementText } else { $rec.ArgumentValue }
+        }
         $replacement = if ($null -ne $replacementValue) { [string]$replacementValue } else { $null }
 
         $baseItem = [PSCustomObject]@{

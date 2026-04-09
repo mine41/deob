@@ -781,6 +781,39 @@ function Convert-CodeForCurrentScope {
     return $Code
 }
 
+function ConvertTo-SingleQuotedHereStringLiteral {
+    param([string]$Text)
+
+    $content = if ($null -eq $Text) { '' } else { [string]$Text }
+    $content = $content.TrimEnd("`r", "`n")
+    return "@'`r`n$content`r`n'@"
+}
+
+function ConvertTo-CanonicalPowerShellHostCommandText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [string]$PayloadText,
+        $HostDynamicInfo = $null
+    )
+
+    if (-not $HostDynamicInfo) {
+        $HostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $CommandAst
+    }
+    if (-not $HostDynamicInfo -or -not $HostDynamicInfo.ParameterAst) {
+        return $null
+    }
+
+    $originalText = [string]$CommandAst.Extent.Text
+    $paramAst = $HostDynamicInfo.ParameterAst
+    $prefixLen = $paramAst.Extent.StartOffset - $CommandAst.Extent.StartOffset
+    if ($prefixLen -lt 0) { return $null }
+
+    $beforeParam = $originalText.Substring(0, $prefixLen)
+    $payloadLiteral = ConvertTo-SingleQuotedHereStringLiteral -Text $PayloadText
+    return $beforeParam + "-Command $payloadLiteral"
+}
+
 function Ensure-ContextStopwatch {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -4332,6 +4365,7 @@ function Handle-DynamicInvoke {
         Command       = $dynType
         ArgumentCode  = $displayArgCode
         ArgumentValue = $argumentValue
+        ReplacementText = $null
         Timestamp     = Get-Date
         RecursionStopped = $false
         StopReason    = $null
@@ -4355,6 +4389,15 @@ function Handle-DynamicInvoke {
 
     $codePreview = if ($argumentValue.Length -gt 100) { $argumentValue.Substring(0, 100) + "..." } else { $argumentValue }
     Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Code to execute: $codePreview"
+
+    $replacementText = $argumentValue
+    if ($dynType -eq 'PowerShellCommand' -and $CommandInfo -and $CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $canonicalHostCommand = ConvertTo-CanonicalPowerShellHostCommandText -CommandAst $CommandInfo.Ast -PayloadText $argumentValue
+        if (-not [string]::IsNullOrWhiteSpace($canonicalHostCommand)) {
+            $replacementText = $canonicalHostCommand
+        }
+    }
+    $dynamicRecord.ReplacementText = $replacementText
 
     $dynamicBudgetStatus = Get-ContextBudgetStatus -Context $Context -BudgetPropertyName 'DynamicTimeBudgetMs' -StopwatchPropertyName 'DynamicBudgetStopwatch' -StopReason 'DynamicTimeBudgetExceeded' -StartStopwatch
     if ($dynamicBudgetStatus.Exceeded) {

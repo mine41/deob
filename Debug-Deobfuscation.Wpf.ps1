@@ -804,7 +804,11 @@ function Get-DynamicInvokeReplacementCandidates {
 
         $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
         $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
-        $replacementValue = if ($rec -is [hashtable]) { $rec['ArgumentValue'] } else { $rec.ArgumentValue }
+        $replacementValue = if ($rec -is [hashtable]) {
+            if ($rec.ContainsKey('ReplacementText') -and $null -ne $rec['ReplacementText']) { $rec['ReplacementText'] } else { $rec['ArgumentValue'] }
+        } else {
+            if ($rec.PSObject.Properties['ReplacementText'] -and $null -ne $rec.ReplacementText) { $rec.ReplacementText } else { $rec.ArgumentValue }
+        }
         $replacement = if ($null -ne $replacementValue) { [string]$replacementValue } else { $null }
 
         $baseItem = [PSCustomObject]@{
