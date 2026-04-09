@@ -543,7 +543,7 @@ function Invoke-StaticConvertOperator {
     }
 }
 
-# 辅助函数：尝试解码 powershell -EncodedCommand 调用
+# 辅助函数：尝试解码 powershell/pwsh -EncodedCommand 调用
 # 如果是 EncodedCommand 调用，返回解码信息；否则返回 $null
 function Try-DecodeEncodedCommand {
     param(
@@ -554,7 +554,7 @@ function Try-DecodeEncodedCommand {
     # 获取命令名
     $cmdName = $CommandAst.GetCommandName()
     # 支持完整路径和简单命令名
-    if ($cmdName -notmatch '(?i)(^|[/\\])powershell(\.exe)?$') {
+    if ($cmdName -notmatch '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$') {
         return $null
     }
 
@@ -604,6 +604,7 @@ function Try-DecodeEncodedCommand {
                                 ReplacementText = $replacementText
                                 DecodedContent = $decoded
                                 OriginalBase64 = $base64String
+                                IsRawScript    = $true
                             }
 
                         } catch {
@@ -798,11 +799,18 @@ function Resolve-StaticAstValue {
         return [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
     }
     if ($Ast -is [System.Management.Automation.Language.CommandAst]) {
-        # 尝试解码 powershell -EncodedCommand 调用
+        # 尝试解码 powershell/pwsh -EncodedCommand 调用
         $decodedInfo = Try-DecodeEncodedCommand -CommandAst $Ast
         if ($decodedInfo) {
-            # 返回解码后的文本作为求值结果
-            return [PSCustomObject]@{ Success = $true; Value = $decodedInfo.ReplacementText; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+            # 返回解码后的文本作为“原样脚本文本”替换结果，避免后续被序列化成单引号字符串
+            return [PSCustomObject]@{
+                Success            = $true
+                Value              = $decodedInfo.ReplacementText
+                RawReplacementText = $decodedInfo.ReplacementText
+                UsedEmptyFallback  = $false
+                Reason             = $null
+                Message            = $null
+            }
         }
         # 如果不是 EncodedCommand，返回失败
         return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_command'; Message = 'CommandAst 不是 EncodedCommand 调用' }
@@ -923,7 +931,11 @@ function Get-StaticReplacementCandidates {
                 continue
             }
 
-            $replacement = [string](Format-ResolvableValue $resolved.Value)
+            if ($resolved.PSObject.Properties['RawReplacementText']) {
+                $replacement = [string]$resolved.RawReplacementText
+            } else {
+                $replacement = [string](Format-ResolvableValue $resolved.Value)
+            }
             if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
                 $skipped += New-SkipRecord -Reason 'static_blocked' -Message '静态结果为占位符，跳过' -Item $baseItem
                 continue

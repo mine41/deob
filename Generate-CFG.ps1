@@ -163,18 +163,20 @@ function Add-Node {
         $ownerAst = $null  # 节点所属的结构 AST（用于 try/catch 嵌套判断）
     )
     $node = [PSCustomObject]@{
-        Id            = $cfg.Nodes.Count + 1
-        Type          = $type
-        Text          = $text
-        Line          = $line
-        Ast           = $ast
-        OwnerAst      = $ownerAst  # 虚拟节点所属的结构（如 switch/foreach/for 的 AST）
-        VarsRead      = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
-        VarsWritten   = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
-        DynamicInvoke = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
-        Invokes       = @{ Functions = @(); ScriptBlocks = @() }  # 调用的函数和脚本块
-        Resolvables   = @()  # 可还原表达式列表
-        AliasesUsed   = @()  # 使用的别名列表 @{ Name; Target; Ast }
+        Id              = $cfg.Nodes.Count + 1
+        Type            = $type
+        Text            = $text
+        Line            = $line
+        Ast             = $ast
+        OwnerAst        = $ownerAst  # 虚拟节点所属的结构（如 switch/foreach/for 的 AST）
+        TextStartOffset = if ($null -ne $ast) { $ast.Extent.StartOffset } else { $null }  # 节点文本在原始脚本中的起始位置
+        TextEndOffset   = if ($null -ne $ast) { $ast.Extent.EndOffset } else { $null }    # 节点文本在原始脚本中的结束位置
+        VarsRead        = @()  # 当前节点读取的变量列表（元素为 { Name; Scope }）
+        VarsWritten     = @()  # 当前节点写入的变量列表（元素为 { Name; Scope }）
+        DynamicInvoke   = $null  # 动态执行标记：@{ Type = "IEX"|"ScriptBlockCreate"|"NewScriptBlock"; ArgAst = <Ast> }
+        Invokes         = @{ Functions = @(); ScriptBlocks = @() }  # 调用的函数和脚本块
+        Resolvables     = @()  # 可还原表达式列表
+        AliasesUsed     = @()  # 使用的别名列表 @{ Name; Target; Ast }
     }
 
     # 如果提供了 AST，分析该节点中的变量读写情况
@@ -576,7 +578,7 @@ function Populate-NodeInvokes {
     $node.Invokes.ScriptBlocks = @($blockVars | Select-Object -Unique)
 }
 
-# 辅助函数：尝试解码 powershell -EncodedCommand 调用
+# 辅助函数：尝试解码 powershell/pwsh -EncodedCommand 调用
 # 如果是 EncodedCommand 调用，返回解码信息；否则返回 $null
 function Try-DecodeEncodedCommand {
     param(
@@ -587,7 +589,7 @@ function Try-DecodeEncodedCommand {
     # 获取命令名
     $cmdName = $CommandAst.GetCommandName()
     # 支持完整路径和简单命令名
-    if ($cmdName -notmatch '(?i)(^|[/\\])powershell(\.exe)?$') {
+    if ($cmdName -notmatch '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$') {
         return $null
     }
 
@@ -596,11 +598,14 @@ function Try-DecodeEncodedCommand {
     for ($i = 1; $i -lt $elements.Count; $i++) {
         $elem = $elements[$i]
 
-        # 检查是否是 -EncodedCommand 或 -enc 参数
+        # 检查是否是 -EncodedCommand 或其缩写形式
+        # PowerShell 支持参数前缀匹配，只要前缀唯一即可
+        # 支持：-EncodedCommand, -EncodedComman, -EncodedComma, -Encoded, -Encode, -Encod, -Enco, -Enc, -En, -E
         if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
             $paramName = $elem.ParameterName.ToLower()
 
-            if ($paramName -match '^(encodedcommand|enc|e)$') {
+            # 匹配 encodedcommand 的任意前缀（至少 1 个字符）
+            if ($paramName -match '^e(n(c(o(d(e(d(c(o(m(m(a(nd?)?)?)?)?)?)?)?)?)?)?)?)?$') {
                 # 获取下一个元素（Base64 字符串）
                 if ($i + 1 -lt $elements.Count) {
                     $valueElem = $elements[$i + 1]
@@ -747,7 +752,7 @@ function Populate-NodeResolvables {
             $ancestor = $ancestor.Parent
         }
 
-        # 检查是否是 powershell -EncodedCommand 调用并解码
+        # 检查是否是 powershell/pwsh -EncodedCommand 调用并解码
         $textToUse = $expr.Extent.Text
         if ($type -eq "Command" -and $expr -is [System.Management.Automation.Language.CommandAst]) {
             $decodedInfo = Try-DecodeEncodedCommand -CommandAst $expr
