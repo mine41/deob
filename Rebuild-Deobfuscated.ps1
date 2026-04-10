@@ -47,9 +47,9 @@ param(
 
     [int]$MaxTotalNodes = 50000,
 
-    [int]$GlobalTimeBudgetMs = 60000,
+    [int]$GlobalTimeBudgetMs = 45000,
 
-    [int]$DynamicTimeBudgetMs = 10000,
+    [int]$DynamicTimeBudgetMs = 3000,
 
     [switch]$DryRun
 )
