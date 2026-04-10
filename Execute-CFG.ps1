@@ -1040,7 +1040,7 @@ function Test-DynamicPayloadShouldStopRecursing {
         $tokens = $null
         $errors = $null
         $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
-        $result.ParseSucceeded = ($null -ne $ast)
+        $result.ParseSucceeded = ($null -ne $ast -and (-not $errors -or $errors.Count -eq 0))
 
         if ($ast) {
             $topLevelStatements = New-Object System.Collections.Generic.List[object]
@@ -1083,16 +1083,37 @@ function Test-DynamicPayloadShouldStopRecursing {
     $hasStartSleep = ($analysisText -match '(?i)\b(?:Start-Sleep|sleep)\b')
     $hasInvokeExpression = ($analysisText -match '(?i)\b(?:Invoke-Expression|iex)\b')
     $hasNetwork = ($analysisText -match '(?i)\b(?:Invoke-WebRequest|iwr|curl|wget|Invoke-RestMethod|irm|Start-BitsTransfer|DownloadFile|DownloadData|DownloadString|UploadData|UploadString|GetResponse|WebClient|WebRequest|HttpClient)\b')
+    $hasAddType = ($analysisText -match '(?i)\bAdd-Type\b')
+    $hasDllImport = ($analysisText -match '(?i)\bDllImport\s*\(')
+    $hasShellcodeApi = ($analysisText -match '(?i)\b(?:VirtualAlloc(?:Ex)?|VirtualProtect(?:Ex)?|CreateThread|CreateRemoteThread|WriteProcessMemory|ReadProcessMemory|OpenProcess|RtlMoveMemory|memset)\b')
+    $hasLargeByteArray = ($analysisText -match '(?is)\[(?:byte|Byte)\s*\[\]\]') -or ($analysisText -match '(?is)(?:0x[0-9a-f]{2}|\b\d{1,3}\b)\s*(?:,\s*(?:0x[0-9a-f]{2}|\b\d{1,3}\b)\s*){31,}')
+    $hasComObject = ($analysisText -match '(?i)\bNew-Object\b[\s\S]{0,120}?(?<!\S)-(?:ComObject|Com)\b')
+    $hasWscriptPopup = ($analysisText -match '(?i)\bWScript\.Shell\b') -or ($analysisText -match '(?i)\.\s*Popup\s*\(')
+    $hasIeAutomation = ($analysisText -match '(?i)\bInternetExplorer\.Application\b') -or ($analysisText -match '(?i)\.\s*Navigate2?\s*\(')
 
     $features = New-Object System.Collections.Generic.List[string]
     if ($hasInfiniteLoop) { $features.Add('InfiniteLoop') | Out-Null }
     if ($hasStartSleep) { $features.Add('StartSleep') | Out-Null }
     if ($hasNetwork) { $features.Add('Network') | Out-Null }
     if ($hasInvokeExpression) { $features.Add('InvokeExpression') | Out-Null }
+    if ($hasAddType) { $features.Add('AddType') | Out-Null }
+    if ($hasDllImport) { $features.Add('DllImport') | Out-Null }
+    if ($hasShellcodeApi) { $features.Add('ShellcodeApi') | Out-Null }
+    if ($hasLargeByteArray) { $features.Add('LargeByteArray') | Out-Null }
+    if ($hasComObject) { $features.Add('ComObject') | Out-Null }
+    if ($hasWscriptPopup) { $features.Add('WScriptPopup') | Out-Null }
+    if ($hasIeAutomation) { $features.Add('IEAutomation') | Out-Null }
 
     $result.Features = @($features)
     $result.FeatureSummary = if ($features.Count -gt 0) { ($features -join ', ') } else { $null }
     $result.AnalysisText = $analysisText
+
+    if (-not $result.ParseSucceeded) {
+        $result.ShouldStop = $true
+        $result.StopReason = 'DynamicPayloadParseFailed'
+        $result.Message = '动态脚本文本解析失败，停止递归执行，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
 
     if ($hasInfiniteLoop) {
         $result.ShouldStop = $true
@@ -1112,6 +1133,56 @@ function Test-DynamicPayloadShouldStopRecursing {
         $result.ShouldStop = $true
         $result.StopReason = 'DynamicPayloadNetworkSleep'
         $result.Message = '检测到网络轮询与休眠组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
+
+    if ($hasShellcodeApi -and ($hasDllImport -or $hasAddType -or $hasLargeByteArray)) {
+        $result.ShouldStop = $true
+        $result.StopReason = 'DynamicPayloadDangerousShellcode'
+        $result.Message = '检测到 shellcode 注入特征，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
+
+    if ($hasComObject -and ($hasWscriptPopup -or $hasIeAutomation)) {
+        $result.ShouldStop = $true
+        $result.StopReason = 'DynamicPayloadComAutomation'
+        $result.Message = '检测到 COM GUI/自动化特征，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
+        return [PSCustomObject]$result
+    }
+
+    return [PSCustomObject]$result
+}
+
+function Test-InteractiveComNode {
+    param($Node)
+
+    $result = [ordered]@{
+        IsDangerous = $false
+        Reason      = $null
+        Detail      = $null
+    }
+
+    if ($null -eq $Node -or [string]::IsNullOrWhiteSpace([string]$Node.Text)) {
+        return [PSCustomObject]$result
+    }
+
+    $text = [string]$Node.Text
+    $hasPopup = ($text -match '(?i)\.\s*Popup\s*\(') -or ($text -match '(?i)\bWScript\.Shell\b')
+    $hasIeAutomation = ($text -match '(?i)\bInternetExplorer\.Application\b') -or ($text -match '(?i)\.\s*Navigate2?\s*\(')
+    $hasComObject = ($text -match '(?i)\bNew-Object\b[\s\S]{0,120}?(?<!\S)-(?:ComObject|Com)\b')
+    $hasBusyLoop = ($text -match '(?i)\bwhile\b[\s\S]{0,200}?\.\s*(?:Busy|ReadyState)\b')
+
+    if ($hasComObject -and $hasPopup) {
+        $result.IsDangerous = $true
+        $result.Reason = 'COM GUI 弹窗调用已阻断'
+        $result.Detail = 'WScript.Shell.Popup'
+        return [PSCustomObject]$result
+    }
+
+    if (($hasComObject -and $hasIeAutomation) -or $hasBusyLoop) {
+        $result.IsDangerous = $true
+        $result.Reason = 'COM 浏览器自动化已阻断'
+        $result.Detail = 'InternetExplorer.Application'
         return [PSCustomObject]$result
     }
 
@@ -2441,6 +2512,33 @@ function Invoke-NodeSafe {
             Action    = "Blocked"
             Command   = "$($methodCheck.Type).$($methodCheck.Method)"
             Reason    = $methodCheck.Reason
+        }
+    }
+
+    $comCheck = Test-InteractiveComNode -Node $Node
+    if ($comCheck.IsDangerous) {
+        Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Interactive COM node: $($comCheck.Detail)"
+        Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Reason: $($comCheck.Reason)"
+
+        $placeholder = New-BlockedPlaceholder -Command $comCheck.Detail -Reason $comCheck.Reason
+
+        if ($Node.VarsWritten) {
+            foreach ($varInfo in $Node.VarsWritten) {
+                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varInfo.Name, $placeholder)
+                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($varInfo.Name) = [BlockedPlaceholder]"
+            }
+        }
+
+        Evaluate-NodeResolvables -Node $Node -Context $Context
+
+        return @{
+            Success   = $true
+            Executed  = $false
+            Result    = $placeholder
+            Error     = $null
+            Action    = "Blocked"
+            Command   = $comCheck.Detail
+            Reason    = $comCheck.Reason
         }
     }
 
@@ -5449,6 +5547,18 @@ function Test-CommandSafety {
             IsForbidden = $false
             Target      = $cmdName
             DynamicType = 'PowerShellCommand'
+        }
+    }
+
+    if ($CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $commandText = [string]$CommandInfo.Ast.Extent.Text
+        if ($cmdName -ieq 'New-Object' -and $commandText -match '(?i)(?<!\S)-(?:ComObject|Com)\b') {
+            return @{
+                Action      = "Block"
+                IsForbidden = $true
+                Reason      = "COM object blocked"
+                Command     = $cmdName
+            }
         }
     }
 

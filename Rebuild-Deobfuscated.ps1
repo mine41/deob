@@ -344,9 +344,24 @@ function Convert-StaticInterpolatedValueToString {
 }
 
 function Get-StaticExpressionFromPipelineAst {
-    param([System.Management.Automation.Language.PipelineAst]$PipelineAst)
+    param($PipelineAst)
 
     if ($null -eq $PipelineAst) { return $null }
+
+    if ($PipelineAst -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return $PipelineAst.Right
+    }
+
+    if ($PipelineAst -isnot [System.Management.Automation.Language.PipelineAst]) {
+        if ($PipelineAst -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            return $PipelineAst.Expression
+        }
+        if ($PipelineAst -is [System.Management.Automation.Language.ExpressionAst]) {
+            return $PipelineAst
+        }
+        return $null
+    }
+
     if ($PipelineAst.PipelineElements.Count -ne 1) { return $null }
 
     $element = $PipelineAst.PipelineElements[0]
@@ -365,6 +380,145 @@ function Get-StaticExpressionFromStatementBlock {
     if ($null -eq $StatementBlockAst) { return $null }
     if ($StatementBlockAst.Traps -and $StatementBlockAst.Traps.Count -gt 0) { return $null }
     return @($StatementBlockAst.Statements)
+}
+
+function Get-RawScriptTextFromFile {
+    param([Parameter(Mandatory)][string]$Path)
+
+    return [System.IO.File]::ReadAllText($Path)
+}
+
+function Test-PowerShellHostCommandName {
+    param([string]$CommandName)
+
+    if ([string]::IsNullOrWhiteSpace($CommandName)) { return $false }
+    return ([string]$CommandName) -match '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$'
+}
+
+function Test-PowerShellHostParameterPrefix {
+    param(
+        [string]$ParameterName,
+        [string]$CanonicalName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ParameterName)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($CanonicalName)) { return $false }
+
+    $actual = $ParameterName.ToLowerInvariant()
+    $canonical = $CanonicalName.ToLowerInvariant()
+    if ($actual.Length -gt $canonical.Length) { return $false }
+    return $canonical.StartsWith($actual)
+}
+
+function Try-DecodeEncodedCommandValue {
+    param([Parameter(Mandatory)][string]$Base64String)
+
+    try {
+        $bytes = [Convert]::FromBase64String($Base64String)
+        return [Text.Encoding]::Unicode.GetString($bytes)
+    } catch {
+        return $null
+    }
+}
+
+function Try-GetWholeScriptHostPayloadInfoLoose {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) { return $null }
+
+    $text = $ScriptText.Trim()
+    $hostMatch = [regex]::Match($text, '(?is)\b(?<cmd>(?:[A-Z]:)?[^''"\r\n]*?(?:powershell|pwsh)(?:\.exe)?)\b')
+    if (-not $hostMatch.Success) { return $null }
+
+    $tail = $text.Substring($hostMatch.Index + $hostMatch.Length)
+    if ([string]::IsNullOrWhiteSpace($tail)) { return $null }
+
+    $tokenMatches = [regex]::Matches($tail, '(?is)-(?<name>[a-z]+)\b')
+    foreach ($tokenMatch in $tokenMatches) {
+        $paramName = [string]$tokenMatch.Groups['name'].Value
+        $valueStart = $tokenMatch.Index + $tokenMatch.Length
+        $remaining = $tail.Substring($valueStart).TrimStart()
+        if ([string]::IsNullOrWhiteSpace($remaining)) { continue }
+
+        if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'encodedcommand') {
+            $valueMatch = [regex]::Match($remaining, '^(?<value>["'']?[^"''\s]+["'']?)')
+            if (-not $valueMatch.Success) { continue }
+
+            $encodedValue = [string]$valueMatch.Groups['value'].Value
+            if (($encodedValue.StartsWith('"') -and $encodedValue.EndsWith('"')) -or ($encodedValue.StartsWith("'") -and $encodedValue.EndsWith("'"))) {
+                $encodedValue = $encodedValue.Substring(1, $encodedValue.Length - 2)
+            }
+
+            $decoded = Try-DecodeEncodedCommandValue -Base64String $encodedValue
+            if (-not [string]::IsNullOrWhiteSpace($decoded)) {
+                return [PSCustomObject]@{
+                    CommandName = $hostMatch.Groups['cmd'].Value
+                    DynamicType = 'EncodedCommand'
+                    PayloadText = $decoded
+                }
+            }
+        }
+
+        if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'command') {
+            $payloadText = $remaining.Trim()
+            if ([string]::IsNullOrWhiteSpace($payloadText)) { continue }
+
+            if ($payloadText.StartsWith('"')) {
+                if ($payloadText.Length -ge 2 -and $payloadText.EndsWith('"')) {
+                    $payloadText = $payloadText.Substring(1, $payloadText.Length - 2)
+                } else {
+                    $payloadText = $payloadText.Substring(1)
+                }
+            } elseif ($payloadText.StartsWith("'")) {
+                if ($payloadText.Length -ge 2 -and $payloadText.EndsWith("'")) {
+                    $payloadText = $payloadText.Substring(1, $payloadText.Length - 2)
+                } else {
+                    $payloadText = $payloadText.Substring(1)
+                }
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($payloadText)) {
+                return [PSCustomObject]@{
+                    CommandName = $hostMatch.Groups['cmd'].Value
+                    DynamicType = 'PowerShellCommand'
+                    PayloadText = $payloadText
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+function Get-BestEffortParseFallbackScriptText {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [string]$ParseError
+    )
+
+    $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $ScriptText
+    if (-not $payloadInfo) {
+        $payloadInfo = Try-GetWholeScriptHostPayloadInfoLoose -ScriptText $ScriptText
+    }
+
+    $body = if ($payloadInfo -and -not [string]::IsNullOrWhiteSpace([string]$payloadInfo.PayloadText)) {
+        [string]$payloadInfo.PayloadText
+    } else {
+        $ScriptText
+    }
+
+    $normalizedBody = Invoke-NormalizePlainScriptText -ScriptText $body
+    if (-not [string]::IsNullOrWhiteSpace($normalizedBody)) {
+        $body = $normalizedBody
+    }
+
+    $errorText = if ([string]::IsNullOrWhiteSpace($ParseError)) {
+        'unknown parse error'
+    } else {
+        ([string]$ParseError -replace '[\r\n]+', ' ').Trim()
+    }
+
+    return "# [ParseFallback] $errorText`r`n$body"
 }
 
 function Get-StaticBinaryOperatorText {
@@ -481,7 +635,6 @@ function Test-StaticAstStringCompatible {
     if ($Ast -is [System.Management.Automation.Language.SubExpressionAst]) {
         $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
         if ($null -eq $statements -or $statements.Count -ne 1) { return $false }
-        if ($statements[0] -isnot [System.Management.Automation.Language.PipelineAst]) { return $false }
         $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statements[0]
         if ($null -eq $expr) { return $false }
         return (Test-StaticAstStringCompatible -Ast $expr -Context $Context)
@@ -784,12 +937,9 @@ function Resolve-StaticAstValue {
         $values = @()
         $usedFallback = $false
         foreach ($statement in $statements) {
-            if ($statement -isnot [System.Management.Automation.Language.PipelineAst]) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_statement'; Message = '子表达式包含非 Pipeline 语句' }
-            }
             $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statement
             if ($null -eq $expr) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '子表达式包含复杂 pipeline' }
+                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '子表达式包含暂不支持的语句类型' }
             }
             $exprResult = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback
             if (-not $exprResult.Success) {
@@ -829,12 +979,9 @@ function Resolve-StaticAstValue {
         $values = @()
         $usedFallback = $false
         foreach ($statement in $statements) {
-            if ($statement -isnot [System.Management.Automation.Language.PipelineAst]) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_statement'; Message = '数组表达式包含非 Pipeline 语句' }
-            }
             $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statement
             if ($null -eq $expr) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '数组表达式包含复杂 pipeline' }
+                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '数组表达式包含暂不支持的语句类型' }
             }
             $exprResult = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback
             if (-not $exprResult.Success) {
@@ -2162,25 +2309,106 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $roundCfgDotPath = $null
     $roundCfgPngPath = $null
 
-    if ($FullOutput) {
-        $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
-        $roundOutPath = Join-Path $WorkDir ("round{0}.out.ps1" -f $roundLabel)
-        $roundLogPath = Join-Path $WorkDir ("round{0}.execution.log" -f $roundLabel)
-        $roundReportPath = Join-Path $WorkDir ("round{0}.report.json" -f $roundLabel)
-        $roundCfgDotPath = Join-Path $WorkDir ("round{0}.cfg.dot" -f $roundLabel)
+        if ($FullOutput) {
+            $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
+            $roundOutPath = Join-Path $WorkDir ("round{0}.out.ps1" -f $roundLabel)
+            $roundLogPath = Join-Path $WorkDir ("round{0}.execution.log" -f $roundLabel)
+            $roundReportPath = Join-Path $WorkDir ("round{0}.report.json" -f $roundLabel)
+            $roundCfgDotPath = Join-Path $WorkDir ("round{0}.cfg.dot" -f $roundLabel)
         $roundCfgPngPath = [System.IO.Path]::ChangeExtension($roundCfgDotPath, '.png')
 
-        Copy-Item -LiteralPath $currentPath -Destination $roundInPath -Force
-        Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $MaxRounds) -ForegroundColor Yellow
+            Copy-Item -LiteralPath $currentPath -Destination $roundInPath -Force
+            Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $MaxRounds) -ForegroundColor Yellow
 
-        $cfg = Get-ScriptControlFlow -ScriptPath $roundInPath
-        if (-not $cfg) {
-            throw "CFG 生成失败: $roundInPath"
-        }
+            $rawRoundText = Get-RawScriptTextFromFile -Path $roundInPath
+            $roundParseInfo = Get-ScriptParseInfo -ScriptText $rawRoundText
+            if (-not $roundParseInfo.IsValid) {
+                $fallbackText = Get-BestEffortParseFallbackScriptText -ScriptText $rawRoundText -ParseError $roundParseInfo.FirstError
+                Set-Content -LiteralPath $roundOutPath -Value $fallbackText -Encoding UTF8
 
-        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs
+                if ($FullOutput) {
+                    $report = [ordered]@{
+                        Round              = $round
+                        RoundLabel         = $roundLabel
+                        InputPath          = $roundInPath
+                        OutputPath         = $roundOutPath
+                        ExecutionLog       = $roundLogPath
+                        CfgDotPath         = $roundCfgDotPath
+                        CfgPngPath         = $roundCfgPngPath
+                        TerminatedBy       = 'parse_failure'
+                        ParseError         = $roundParseInfo.FirstError
+                        Timestamp          = (Get-Date).ToString('o')
+                    }
+                    Write-JsonFile -Path $roundReportPath -Object $report
+                }
 
-        $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
+                $currentText = $fallbackText
+                $finalRound = $round
+                $finalRoundOutPath = $roundOutPath
+                $terminatedBy = 'parse_failure'
+                break
+            }
+
+            $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $rawRoundText
+            if ($roundStop.ShouldStop) {
+                Set-Content -LiteralPath $roundOutPath -Value $rawRoundText -Encoding UTF8
+
+                if ($FullOutput) {
+                    $report = [ordered]@{
+                        Round              = $round
+                        RoundLabel         = $roundLabel
+                        InputPath          = $roundInPath
+                        OutputPath         = $roundOutPath
+                        ExecutionLog       = $roundLogPath
+                        CfgDotPath         = $roundCfgDotPath
+                        CfgPngPath         = $roundCfgPngPath
+                        TerminatedBy       = 'pre_traversal_stop'
+                        StopReason         = $roundStop.StopReason
+                        StopMessage        = $roundStop.Message
+                        StopFeatures       = @($roundStop.Features)
+                        Timestamp          = (Get-Date).ToString('o')
+                    }
+                    Write-JsonFile -Path $roundReportPath -Object $report
+                }
+
+                $currentText = $rawRoundText
+                $finalRound = $round
+                $finalRoundOutPath = $roundOutPath
+                $terminatedBy = 'pre_traversal_stop'
+                break
+            }
+
+            $cfg = Get-ScriptControlFlow -ScriptPath $roundInPath
+            if (-not $cfg) {
+                $fallbackText = Get-BestEffortParseFallbackScriptText -ScriptText $rawRoundText -ParseError 'CFG generation failed'
+                Set-Content -LiteralPath $roundOutPath -Value $fallbackText -Encoding UTF8
+
+                if ($FullOutput) {
+                    $report = [ordered]@{
+                        Round              = $round
+                        RoundLabel         = $roundLabel
+                        InputPath          = $roundInPath
+                        OutputPath         = $roundOutPath
+                        ExecutionLog       = $roundLogPath
+                        CfgDotPath         = $roundCfgDotPath
+                        CfgPngPath         = $roundCfgPngPath
+                        TerminatedBy       = 'cfg_generation_failed'
+                        ParseError         = $roundParseInfo.FirstError
+                        Timestamp          = (Get-Date).ToString('o')
+                    }
+                    Write-JsonFile -Path $roundReportPath -Object $report
+                }
+
+                $currentText = $fallbackText
+                $finalRound = $round
+                $finalRoundOutPath = $roundOutPath
+                $terminatedBy = 'cfg_generation_failed'
+                break
+            }
+
+            $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs
+
+            $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
         $currentText = $scriptText
     } else {
         # Fast 模式：全程只在内存中迭代
@@ -2191,9 +2419,27 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
         Write-Host ("[Round {0}/{1}] 分析+执行 (fast)..." -f $round, $MaxRounds) -ForegroundColor Yellow
 
+        $roundParseInfo = Get-ScriptParseInfo -ScriptText $currentText
+        if (-not $roundParseInfo.IsValid) {
+            $currentText = Get-BestEffortParseFallbackScriptText -ScriptText $currentText -ParseError $roundParseInfo.FirstError
+            $finalRound = $round
+            $terminatedBy = 'parse_failure'
+            break
+        }
+
+        $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $currentText
+        if ($roundStop.ShouldStop) {
+            $finalRound = $round
+            $terminatedBy = 'pre_traversal_stop'
+            break
+        }
+
         $cfg = New-CfgFromText -ScriptText $currentText
         if (-not $cfg) {
-            throw "CFG 生成失败（fast mode）"
+            $currentText = Get-BestEffortParseFallbackScriptText -ScriptText $currentText -ParseError 'CFG generation failed'
+            $finalRound = $round
+            $terminatedBy = 'cfg_generation_failed'
+            break
         }
 
         # fast mode：禁用 execution.log（避免文件 IO）
