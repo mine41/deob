@@ -19,12 +19,20 @@ public class BlockedCommandPlaceholder : DynamicObject
 
     public string BlockedCommand { get; set; }
     public string Reason { get; set; }
+    public string PreservedText { get; set; }
 
     public BlockedCommandPlaceholder() { }
     public BlockedCommandPlaceholder(string command, string reason)
     {
         BlockedCommand = command;
         Reason = reason;
+    }
+
+    public BlockedCommandPlaceholder(string command, string reason, string preservedText)
+    {
+        BlockedCommand = command;
+        Reason = reason;
+        PreservedText = preservedText;
     }
 
     // 任何属性访问返回自身
@@ -105,9 +113,10 @@ public class BlockedCommandPlaceholder : DynamicObject
 function New-BlockedPlaceholder {
     param(
         [string]$Command,
-        [string]$Reason = "Forbidden command"
+        [string]$Reason = "Forbidden command",
+        [string]$PreservedText = $null
     )
-    return [BlockedCommandPlaceholder]::new($Command, $Reason)
+    return [BlockedCommandPlaceholder]::new($Command, $Reason, $PreservedText)
 }
 
 # 创建执行上下文（Runspace）
@@ -789,6 +798,162 @@ function ConvertTo-SingleQuotedHereStringLiteral {
     return "@'`r`n$content`r`n'@"
 }
 
+function Get-BlockedPlaceholderPreservedText {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    if ($Value -is [BlockedCommandPlaceholder]) {
+        if ([string]::IsNullOrWhiteSpace([string]$Value.PreservedText)) { return $null }
+        return [string]$Value.PreservedText
+    }
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -is [BlockedCommandPlaceholder]) {
+        $base = $Value.BaseObject
+        if ([string]::IsNullOrWhiteSpace([string]$base.PreservedText)) { return $null }
+        return [string]$base.PreservedText
+    }
+
+    return $null
+}
+
+function Get-RebuiltNodeTextSegment {
+    param(
+        $Node,
+        [hashtable]$Context,
+        [hashtable]$ResolvedValues = $null,
+        $CommandInfo = $null,
+        [int]$RangeStart = 0,
+        [int]$RangeEnd = -1
+    )
+
+    if ($null -eq $Node -or [string]::IsNullOrWhiteSpace([string]$Node.Text)) {
+        return $null
+    }
+
+    $nodeText = [string]$Node.Text
+    if ($RangeEnd -lt 0 -or $RangeEnd -gt $nodeText.Length) {
+        $RangeEnd = $nodeText.Length
+    }
+    if ($RangeStart -lt 0) { $RangeStart = 0 }
+    if ($RangeStart -ge $RangeEnd) {
+        return $nodeText
+    }
+
+    $segment = $nodeText.Substring($RangeStart, $RangeEnd - $RangeStart)
+    $replacements = @()
+
+    if ($ResolvedValues) {
+        foreach ($entry in $ResolvedValues.GetEnumerator()) {
+            $key = [string]$entry.Key
+            if ($key -notmatch '^local:\d+:(\d+):(\d+)$') { continue }
+
+            $start = [int]$Matches[1]
+            $end = [int]$Matches[2]
+            if ($start -lt $RangeStart -or $end -gt $RangeEnd -or $end -le $start) { continue }
+
+            $valueText = [string]$entry.Value
+            if ([string]::IsNullOrWhiteSpace($valueText) -or $valueText -eq $script:BlockedPlaceholderMarker) { continue }
+
+            $replacements += [PSCustomObject]@{
+                Start = $start
+                End   = $end
+                Text  = $valueText
+                Span  = ($end - $start)
+                Kind  = 'Resolved'
+            }
+        }
+    }
+
+    if ($CommandInfo -and $CommandInfo.HasCommand -and $CommandInfo.IsAlias -and $CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 0) {
+        $nameAst = $CommandInfo.Ast.CommandElements[0]
+        $start = [int]$nameAst.Extent.StartOffset
+        $end = [int]$nameAst.Extent.EndOffset
+        if ($start -ge $RangeStart -and $end -le $RangeEnd -and $end -gt $start) {
+            $replacements += [PSCustomObject]@{
+                Start = $start
+                End   = $end
+                Text  = [string]$CommandInfo.ResolvedName
+                Span  = ($end - $start)
+                Kind  = 'CommandName'
+            }
+        }
+    }
+
+    if ($replacements.Count -eq 0) {
+        return $segment
+    }
+
+    $selected = New-Object System.Collections.Generic.List[object]
+    foreach ($candidate in @($replacements | Sort-Object @{ Expression = { -$_.Span } }, Start, End)) {
+        $overlap = $false
+        foreach ($existing in $selected) {
+            if ($candidate.Start -lt $existing.End -and $candidate.End -gt $existing.Start) {
+                $overlap = $true
+                break
+            }
+        }
+        if (-not $overlap) {
+            $selected.Add($candidate) | Out-Null
+        }
+    }
+
+    $result = $segment
+    foreach ($replacement in @($selected | Sort-Object Start -Descending)) {
+        $localStart = $replacement.Start - $RangeStart
+        $localEnd = $replacement.End - $RangeStart
+        $result = $result.Substring(0, $localStart) + $replacement.Text + $result.Substring($localEnd)
+    }
+
+    return $result
+}
+
+function Get-BlockedPlaceholderPreservedValueText {
+    param(
+        $Node,
+        [hashtable]$Context,
+        [hashtable]$ResolvedValues = $null,
+        $CommandInfo = $null
+    )
+
+    if ($null -eq $Node -or [string]::IsNullOrWhiteSpace([string]$Node.Text)) {
+        return $null
+    }
+
+    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    if ($parseInfo.Success -and $parseInfo.Ast) {
+        $statement = Get-FirstStatementFromScriptAst -ScriptAst $parseInfo.Ast
+        if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst] -and $statement.Right -and $statement.Right.Extent) {
+            return Get-RebuiltNodeTextSegment -Node $Node -Context $Context -ResolvedValues $ResolvedValues -CommandInfo $CommandInfo -RangeStart $statement.Right.Extent.StartOffset -RangeEnd $statement.Right.Extent.EndOffset
+        }
+    }
+
+    return (Get-RebuiltNodeTextSegment -Node $Node -Context $Context -ResolvedValues $ResolvedValues -CommandInfo $CommandInfo)
+}
+
+function Get-PreservedDynamicInvokeCommandText {
+    param(
+        $Node,
+        [string]$ArgCode,
+        [string]$DisplayArgCode,
+        [string]$PreservedArgumentText
+    )
+
+    if ($null -eq $Node -or [string]::IsNullOrWhiteSpace([string]$Node.Text)) { return $null }
+    if ([string]::IsNullOrWhiteSpace($PreservedArgumentText)) { return [string]$Node.Text }
+
+    $nodeText = [string]$Node.Text
+    foreach ($candidate in @($DisplayArgCode, $ArgCode)) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidate)) { continue }
+        $idx = $nodeText.IndexOf([string]$candidate, [System.StringComparison]::Ordinal)
+        if ($idx -lt 0) { continue }
+
+        return $nodeText.Substring(0, $idx) + $PreservedArgumentText + $nodeText.Substring($idx + $candidate.Length)
+    }
+
+    return $nodeText
+}
+
 function Format-LiteralizedCommandValue {
     param($Value)
 
@@ -1014,6 +1179,37 @@ function Test-LoopConditionLiteral {
     return ($normalized -in $falsy)
 }
 
+function Get-DynamicPayloadTopLevelCommandAst {
+    param($Statement)
+
+    if ($null -eq $Statement) { return $null }
+
+    if ($Statement -is [System.Management.Automation.Language.CommandAst]) {
+        return $Statement
+    }
+
+    if ($Statement -is [System.Management.Automation.Language.PipelineAst] -and
+        $Statement.PipelineElements -and
+        $Statement.PipelineElements.Count -eq 1 -and
+        $Statement.PipelineElements[0] -is [System.Management.Automation.Language.CommandAst]) {
+        return $Statement.PipelineElements[0]
+    }
+
+    return $null
+}
+
+function Test-DynamicPayloadAliasDefinitionStatement {
+    param($Statement)
+
+    $cmdAst = Get-DynamicPayloadTopLevelCommandAst -Statement $Statement
+    if ($null -eq $cmdAst) { return $false }
+
+    $cmdName = $cmdAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($cmdName)) { return $false }
+
+    return ($cmdName -in @('Set-Alias', 'New-Alias', 'sal', 'nal'))
+}
+
 function Test-DynamicPayloadShouldStopRecursing {
     param(
         [Parameter(Mandatory)][string]$ScriptText
@@ -1044,11 +1240,15 @@ function Test-DynamicPayloadShouldStopRecursing {
 
         if ($ast) {
             $topLevelStatements = New-Object System.Collections.Generic.List[object]
+            $analysisStatements = New-Object System.Collections.Generic.List[object]
             foreach ($block in @($ast.BeginBlock, $ast.ProcessBlock, $ast.EndBlock)) {
                 if ($null -eq $block -or -not $block.Statements) { continue }
                 foreach ($statement in @($block.Statements)) {
                     if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { continue }
                     $topLevelStatements.Add($statement) | Out-Null
+                    if (-not (Test-DynamicPayloadAliasDefinitionStatement -Statement $statement)) {
+                        $analysisStatements.Add($statement) | Out-Null
+                    }
 
                     if ($statement -is [System.Management.Automation.Language.WhileStatementAst]) {
                         if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'True') {
@@ -1071,8 +1271,10 @@ function Test-DynamicPayloadShouldStopRecursing {
                 }
             }
 
-            if ($topLevelStatements.Count -gt 0) {
-                $analysisText = (($topLevelStatements | ForEach-Object { $_.Extent.Text }) -join [Environment]::NewLine)
+            if ($analysisStatements.Count -gt 0) {
+                $analysisText = (($analysisStatements | ForEach-Object { $_.Extent.Text }) -join [Environment]::NewLine)
+            } elseif ($topLevelStatements.Count -gt 0) {
+                $analysisText = ''
             }
         }
     } catch {
@@ -2495,7 +2697,8 @@ function Invoke-NodeSafe {
         Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Full call: $($methodCheck.FullCall)"
         Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Reason: $($methodCheck.Reason)"
 
-        $placeholder = New-BlockedPlaceholder -Command "$($methodCheck.Type).$($methodCheck.Method)" -Reason $methodCheck.Reason
+        $preservedText = [string]$Node.Text
+        $placeholder = New-BlockedPlaceholder -Command "$($methodCheck.Type).$($methodCheck.Method)" -Reason $methodCheck.Reason -PreservedText $preservedText
 
         if ($Node.VarsWritten) {
             foreach ($varInfo in $Node.VarsWritten) {
@@ -2520,7 +2723,8 @@ function Invoke-NodeSafe {
         Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Interactive COM node: $($comCheck.Detail)"
         Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Reason: $($comCheck.Reason)"
 
-        $placeholder = New-BlockedPlaceholder -Command $comCheck.Detail -Reason $comCheck.Reason
+        $preservedText = [string]$Node.Text
+        $placeholder = New-BlockedPlaceholder -Command $comCheck.Detail -Reason $comCheck.Reason -PreservedText $preservedText
 
         if ($Node.VarsWritten) {
             foreach ($varInfo in $Node.VarsWritten) {
@@ -2559,8 +2763,10 @@ function Invoke-NodeSafe {
     if ($checkResult.IsForbidden) {
         Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Forbidden command: $($commandInfo.ResolvedName) (original: $($commandInfo.OriginalName))"
 
+        $preservedText = Get-BlockedPlaceholderPreservedValueText -Node $Node -Context $Context -ResolvedValues $resolvedValues -CommandInfo $commandInfo
+
         # 创建占位符对象
-        $placeholder = New-BlockedPlaceholder -Command $commandInfo.ResolvedName -Reason $checkResult.Reason
+        $placeholder = New-BlockedPlaceholder -Command $commandInfo.ResolvedName -Reason $checkResult.Reason -PreservedText $preservedText
 
         # 如果节点有写入的变量，将其设置为占位符，防止后续引用报错
         if ($Node.VarsWritten) {
@@ -4584,6 +4790,8 @@ function Handle-DynamicInvoke {
         }
     }
 
+    $blockedArgumentPreservedText = Get-BlockedPlaceholderPreservedText -Value $argumentValue
+
     # 记录动态执行信息
     $dynamicRecord = @{
         NodeId        = $Node.Id
@@ -4591,6 +4799,7 @@ function Handle-DynamicInvoke {
         ArgumentCode  = $displayArgCode
         ArgumentValue = $argumentValue
         ReplacementText = $null
+        PreservedCommandText = $null
         Timestamp     = Get-Date
         RecursionStopped = $false
         StopReason    = $null
@@ -4599,6 +4808,25 @@ function Handle-DynamicInvoke {
     $Context.DynamicInvokeResults += $dynamicRecord
 
     Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Type: $dynType"
+
+    if ($argumentValue -is [BlockedCommandPlaceholder] -or ($argumentValue -is [psobject] -and $argumentValue.BaseObject -is [BlockedCommandPlaceholder])) {
+        $preservedCommandText = Get-PreservedDynamicInvokeCommandText -Node $Node -ArgCode $argCode -DisplayArgCode $displayArgCode -PreservedArgumentText $blockedArgumentPreservedText
+        $dynamicRecord.PreservedCommandText = $preservedCommandText
+        $dynamicRecord.ReplacementText = $preservedCommandText
+        $dynamicRecord.StopReason = 'DynamicArgumentBlocked'
+        $dynamicRecord.StopMessage = '动态参数依赖被阻断命令，保留已解析命令文本但不执行。'
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
+
+        return @{
+            Success       = $true
+            Executed      = $false
+            Result        = $argumentValue
+            Error         = $null
+            Action        = "DynamicInvoke"
+            DynamicRecord = $dynamicRecord
+            StopReason    = $dynamicRecord.StopReason
+        }
+    }
 
     # 2. 验证参数值是字符串
     if (-not ($argumentValue -is [string]) -or [string]::IsNullOrWhiteSpace($argumentValue)) {

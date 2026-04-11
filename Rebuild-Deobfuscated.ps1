@@ -521,6 +521,57 @@ function Get-BestEffortParseFallbackScriptText {
     return "# [ParseFallback] $errorText`r`n$body"
 }
 
+function Get-PreTraversalStopCheckInfo {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [bool]$IsMaterializedPayloadRound = $false
+    )
+
+    $reason = $null
+    if ($IsMaterializedPayloadRound) {
+        $reason = 'materialized_payload_round'
+    }
+
+    return [PSCustomObject]@{
+        ShouldCheck = [bool]$IsMaterializedPayloadRound
+        Reason      = $reason
+        CheckText    = $ScriptText
+    }
+}
+
+function Get-NextRoundMaterializedPayloadInfo {
+    param(
+        [object[]]$Selected = @(),
+        [Parameter(Mandatory)][string]$PrePostProcessText
+    )
+
+    $hasDynamicInvokeSelection = @($Selected | Where-Object { $_ -and $_.PSObject.Properties['SourceKind'] -and [string]$_.SourceKind -eq 'DynamicInvoke' }).Count -gt 0
+    $cameFromHostWrapperDecode = $false
+
+    $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $PrePostProcessText
+    if ($payloadInfo -and -not [string]::IsNullOrWhiteSpace([string]$payloadInfo.PayloadText)) {
+        $payloadParse = Get-ScriptParseInfo -ScriptText ([string]$payloadInfo.PayloadText)
+        if ($payloadParse.IsValid) {
+            $cameFromHostWrapperDecode = $true
+        }
+    }
+
+    $isMaterializedPayload = ($hasDynamicInvokeSelection -or $cameFromHostWrapperDecode)
+    $reason = $null
+    if ($hasDynamicInvokeSelection) {
+        $reason = 'dynamic_invoke_selection'
+    } elseif ($cameFromHostWrapperDecode) {
+        $reason = 'host_wrapper_decode'
+    }
+
+    return [PSCustomObject]@{
+        IsMaterializedPayload = $isMaterializedPayload
+        Reason                = $reason
+        FromDynamicInvoke     = $hasDynamicInvokeSelection
+        FromHostWrapperDecode = $cameFromHostWrapperDecode
+    }
+}
+
 function Get-StaticBinaryOperatorText {
     param($BinaryAst)
 
@@ -1084,6 +1135,10 @@ function Get-LiteralizedCommandReplacementCandidates {
             $skipped += New-SkipRecord -Reason 'literalized_empty' -Message '安全命令折叠 replacement 为空，跳过' -Item $baseItem
             continue
         }
+        if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
+            $skipped += New-SkipRecord -Reason 'literalized_blocked' -Message '安全命令折叠结果为占位符，保留原命令文本' -Item $baseItem
+            continue
+        }
 
         $original = $ScriptText.Substring($start, $end - $start)
         if ($original -eq $replacement) {
@@ -1143,6 +1198,11 @@ function Get-DynamicInvokeReplacementCandidates {
             if ($rec.PSObject.Properties['ReplacementText'] -and $null -ne $rec.ReplacementText) { $rec.ReplacementText } else { $rec.ArgumentValue }
         }
         $replacement = if ($null -ne $replacementValue) { [string]$replacementValue } else { $null }
+        $preservedCommandText = if ($rec -is [hashtable]) {
+            if ($rec.ContainsKey('PreservedCommandText') -and $null -ne $rec['PreservedCommandText']) { [string]$rec['PreservedCommandText'] } else { $null }
+        } else {
+            if ($rec.PSObject.Properties['PreservedCommandText'] -and $null -ne $rec.PreservedCommandText) { [string]$rec.PreservedCommandText } else { $null }
+        }
 
         $baseItem = [PSCustomObject]@{
             StartOffset = if ($node) { $node.TextStartOffset } else { $null }
@@ -1171,8 +1231,16 @@ function Get-DynamicInvokeReplacementCandidates {
             $skipped += New-SkipRecord -Reason 'dynamic_out_of_range' -Message "DynamicInvoke offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
             continue
         }
+
+        if ($replacement -eq '__BLOCKED_PLACEHOLDER__' -and -not [string]::IsNullOrWhiteSpace($preservedCommandText)) {
+            $replacement = $preservedCommandText
+        }
         if ([string]::IsNullOrWhiteSpace($replacement)) {
             $skipped += New-SkipRecord -Reason 'dynamic_empty' -Message 'DynamicInvoke 解析结果为空，跳过' -Item $baseItem
+            continue
+        }
+        if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
+            $skipped += New-SkipRecord -Reason 'dynamic_blocked' -Message 'DynamicInvoke 结果为占位符，保留原命令文本' -Item $baseItem
             continue
         }
 
@@ -2292,6 +2360,7 @@ $finalRound = 0
 $finalRoundOutPath = $null
 $terminatedBy = $null
 $globalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$currentRoundIsMaterializedPayload = $false
 
 for ($round = 1; $round -le $MaxRounds; $round++) {
     $remainingGlobalBudgetMs = if ($GlobalTimeBudgetMs -gt 0) { [int]($GlobalTimeBudgetMs - $globalStopwatch.ElapsedMilliseconds) } else { 0 }
@@ -2349,8 +2418,14 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 break
             }
 
-            $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $rawRoundText
-            if ($roundStop.ShouldStop) {
+            $preTraversalCheck = Get-PreTraversalStopCheckInfo -ScriptText $rawRoundText -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
+            if ($preTraversalCheck.ShouldCheck) {
+                $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $preTraversalCheck.CheckText
+            } else {
+                $roundStop = $null
+            }
+
+            if ($roundStop -and $roundStop.ShouldStop) {
                 Set-Content -LiteralPath $roundOutPath -Value $rawRoundText -Encoding UTF8
 
                 if ($FullOutput) {
@@ -2363,6 +2438,9 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
                         TerminatedBy       = 'pre_traversal_stop'
+                        InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
+                        PreTraversalCheckApplied = $true
+                        PreTraversalCheckReason = $preTraversalCheck.Reason
                         StopReason         = $roundStop.StopReason
                         StopMessage        = $roundStop.Message
                         StopFeatures       = @($roundStop.Features)
@@ -2427,8 +2505,14 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             break
         }
 
-        $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $currentText
-        if ($roundStop.ShouldStop) {
+        $preTraversalCheck = Get-PreTraversalStopCheckInfo -ScriptText $currentText -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
+        if ($preTraversalCheck.ShouldCheck) {
+            $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $preTraversalCheck.CheckText
+        } else {
+            $roundStop = $null
+        }
+
+        if ($roundStop -and $roundStop.ShouldStop) {
             $finalRound = $round
             $terminatedBy = 'pre_traversal_stop'
             break
@@ -2474,6 +2558,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $skipped += @($syntaxGuard.Skipped)
 
     $newText = Apply-ReplacementsToText -Text $scriptText -Replacements $selected
+    $nextRoundMaterializedPayload = Get-NextRoundMaterializedPayloadInfo -Selected $selected -PrePostProcessText $newText
     $postProcessedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $newText
     $postProcessChanged = ($postProcessedText -ne $newText)
     if ($postProcessChanged) {
@@ -2591,6 +2676,9 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             GlobalTimeBudgetMs = $GlobalTimeBudgetMs
             DynamicTimeBudgetMs = $DynamicTimeBudgetMs
             ExecutionStopReason = if ($ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
+            InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
+            PreTraversalCheckApplied = [bool]$preTraversalCheck.ShouldCheck
+            PreTraversalCheckReason = $preTraversalCheck.Reason
             CandidateCount  = $candidates.Count
             DynamicCount    = $dynamicCount
             LiteralizedCommandCount = $literalizedCount
@@ -2600,6 +2688,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             SelectedCount   = $selected.Count
             AppliedCount    = $appliedCount
             PostProcessChanged = $postProcessChanged
+            NextRoundIsMaterializedPayload = [bool]$nextRoundMaterializedPayload.IsMaterializedPayload
+            NextRoundMaterializedPayloadReason = $nextRoundMaterializedPayload.Reason
             SkippedCount    = $skipped.Count
             SkippedByReason = $skipReasonCounts
             AppliedNodeIds  = $appliedNodeIds
@@ -2627,6 +2717,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
         $currentText = $newText
     }
+
+    $currentRoundIsMaterializedPayload = [bool]$nextRoundMaterializedPayload.IsMaterializedPayload
 
     $finalRound = $round
 
