@@ -2080,6 +2080,8 @@ function Format-PowerShellScriptReadable {
     $lineStart = $true
     $pendingIndent = $false
     $state = 'Normal'
+    $parenDepth = 0
+    $bracketDepth = 0
 
     function Append-NewLine([System.Text.StringBuilder]$Builder, [ref]$LineStart, [ref]$PendingIndent) {
         if ($Builder.Length -eq 0 -or $Builder[$Builder.Length - 1] -ne "`n") {
@@ -2167,7 +2169,39 @@ function Format-PowerShellScriptReadable {
             ';' {
                 Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
                 [void]$sb.Append(';')
-                Append-NewLine -Builder $sb -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                if ($parenDepth -eq 0 -and $bracketDepth -eq 0) {
+                    Append-NewLine -Builder $sb -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                } else {
+                    $lineStart = $false
+                }
+                continue
+            }
+            '(' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append('(')
+                $parenDepth++
+                $lineStart = $false
+                continue
+            }
+            ')' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append(')')
+                $parenDepth = [Math]::Max(0, $parenDepth - 1)
+                $lineStart = $false
+                continue
+            }
+            '[' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append('[')
+                $bracketDepth++
+                $lineStart = $false
+                continue
+            }
+            ']' {
+                Ensure-Indent -Builder $sb -Level $indent -LineStart ([ref]$lineStart) -PendingIndent ([ref]$pendingIndent)
+                [void]$sb.Append(']')
+                $bracketDepth = [Math]::Max(0, $bracketDepth - 1)
+                $lineStart = $false
                 continue
             }
             '{' {
@@ -2213,6 +2247,19 @@ function Format-PowerShellScriptReadable {
     }
 
     return ($formatted + "`r`n")
+}
+
+function Get-NormalizedScriptComparisonText {
+    param([string]$ScriptText)
+
+    if ($null -eq $ScriptText) { return '' }
+
+    $text = [string]$ScriptText
+    $text = $text -replace "`r`n", "`n"
+    $text = $text -replace "`r", "`n"
+    $text = [regex]::Replace($text, "[ \t]+(?=`n)", '')
+    $text = [regex]::Replace($text, "(?:`n)+$", "`n")
+    return $text
 }
 
 function Invoke-NormalizePlainScriptText {
@@ -2560,7 +2607,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $newText = Apply-ReplacementsToText -Text $scriptText -Replacements $selected
     $nextRoundMaterializedPayload = Get-NextRoundMaterializedPayloadInfo -Selected $selected -PrePostProcessText $newText
     $postProcessedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $newText
-    $postProcessChanged = ($postProcessedText -ne $newText)
+    $postProcessChanged = ((Get-NormalizedScriptComparisonText -ScriptText $postProcessedText) -ne (Get-NormalizedScriptComparisonText -ScriptText $newText))
     if ($postProcessChanged) {
         $newText = $postProcessedText
     }
