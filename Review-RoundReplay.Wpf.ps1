@@ -167,10 +167,12 @@ function Try-Load-ReportSummary {
     if (-not (Test-Path -LiteralPath $ReportPath)) { return $null }
     try {
         $r = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        $hostDisplay = Get-ReportHostDisplay -ReportData $r
         return [PSCustomObject]@{
             CandidateCount = $r.CandidateCount
             AppliedCount   = $r.AppliedCount
             SkippedCount   = $r.SkippedCount
+            HostDisplay    = $hostDisplay
         }
     } catch {
         return $null
@@ -182,7 +184,7 @@ function Select-RoundDialog {
         [Parameter(Mandatory)][string]$Dir
     )
 
-    $rounds = Get-RoundList -Dir $Dir
+    $rounds = @(Get-RoundList -Dir $Dir)
     if ($rounds.Count -eq 0) {
         [System.Windows.MessageBox]::Show("目录中未找到 round*.execution.log: `n$Dir", "未找到 Round", "OK", "Warning") | Out-Null
         return $null
@@ -193,10 +195,14 @@ function Select-RoundDialog {
         $label = '{0:d2}' -f $n
         $reportPath = Join-Path $Dir ("round{0}.report.json" -f $label)
         $sum = Try-Load-ReportSummary -ReportPath $reportPath
+        $sumHostDisplay = $null
+        if ($sum -and $sum.PSObject.Properties['HostDisplay']) {
+            $sumHostDisplay = [string]$sum.HostDisplay
+        }
         [PSCustomObject]@{
             Round  = $n
             Label  = "Round $label"
-            Report = if ($sum) { "candidates=$($sum.CandidateCount) applied=$($sum.AppliedCount) skipped=$($sum.SkippedCount)" + $(if ($sum.HostDisplay) { " host=$($sum.HostDisplay)" } else { "" }) } else { "(no report)" }
+            Report = if ($sum) { "candidates=$($sum.CandidateCount) applied=$($sum.AppliedCount) skipped=$($sum.SkippedCount)" + $(if (-not [string]::IsNullOrWhiteSpace($sumHostDisplay)) { " host=$sumHostDisplay" } else { "" }) } else { "(no report)" }
         }
     }
 
@@ -796,7 +802,7 @@ while ($true) {
 
 if (-not $Round) {
     if ($NoUI) {
-        $allRounds = Get-RoundList -Dir $WorkDir
+        $allRounds = @(Get-RoundList -Dir $WorkDir)
         if ($allRounds.Count -eq 0) {
             throw "目录中未找到 round*.execution.log: $WorkDir"
         }
@@ -1331,6 +1337,40 @@ function Set-GraphZoom {
     Apply-GraphZoom
 }
 
+function Invoke-GraphCtrlWheelZoom {
+    param(
+        [Parameter(Mandatory)]$MouseArgs
+    )
+
+    if (([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -eq 0) {
+        return
+    }
+
+    $oldZoom = [double]$script:GraphZoom
+    $step = if ($MouseArgs.Delta -gt 0) { 0.1 } else { -0.1 }
+    $newZoom = $oldZoom + $step
+    if ($newZoom -lt 0.2) { $newZoom = 0.2 }
+    if ($newZoom -gt 3.0) { $newZoom = 3.0 }
+
+    if ([Math]::Abs($newZoom - $oldZoom) -lt 0.0001) {
+        $MouseArgs.Handled = $true
+        return
+    }
+
+    $viewportPoint = $MouseArgs.GetPosition($graphScroll)
+    $contentPoint = $MouseArgs.GetPosition($graphContainer)
+
+    Set-GraphZoom -Zoom $newZoom
+
+    $ratio = $newZoom / $oldZoom
+    $targetX = [Math]::Max(0.0, ($contentPoint.X * $ratio) - $viewportPoint.X)
+    $targetY = [Math]::Max(0.0, ($contentPoint.Y * $ratio) - $viewportPoint.Y)
+
+    $graphScroll.ScrollToHorizontalOffset($targetX)
+    $graphScroll.ScrollToVerticalOffset($targetY)
+    $MouseArgs.Handled = $true
+}
+
 function Ensure-GraphLoaded {
     Reset-GraphOverlayState
 
@@ -1340,11 +1380,15 @@ function Ensure-GraphLoaded {
     }
 
     try {
+        $pngPath = (Resolve-Path -LiteralPath $files.PngPath).ProviderPath
+        $graphImage.Source = $null
         $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
         $bmp.BeginInit()
         $bmp.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
-        $bmp.UriSource = [Uri](Resolve-Path -LiteralPath $files.PngPath).ProviderPath
+        $bmp.CreateOptions = [System.Windows.Media.Imaging.BitmapCreateOptions]::IgnoreImageCache
+        $bmp.UriSource = [Uri]$pngPath
         $bmp.EndInit()
+        $bmp.Freeze()
         $graphImage.Source = $bmp
     } catch {
         Set-GraphPlaceholder -Message "(加载 cfg.png 失败: $_)" -ClearImage
@@ -1691,6 +1735,9 @@ $btnLast.Add_Click({ Set-CurrentIndex -Index ($frames.Count - 1) -FromGrid:$fals
 $sldZoom.Add_ValueChanged({
     if ($script:SyncingZoomUi) { return }
     Set-GraphZoom -Zoom ($sldZoom.Value / 100.0) -FromSlider
+})
+$graphScroll.Add_PreviewMouseWheel({
+    Invoke-GraphCtrlWheelZoom -MouseArgs $eventArgs
 })
 $btnZoomOut.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom - 0.1) })
 $btnZoomIn.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom + 0.1) })
