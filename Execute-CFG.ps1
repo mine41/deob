@@ -349,6 +349,21 @@ function Get-VariableFromContext {
         [hashtable]$ExecContext,
         [string]$Name
     )
+    $envActualName = Get-CFGEnvironmentVariableActualName -Name $Name
+    if (-not [string]::IsNullOrWhiteSpace($envActualName)) {
+        $envName = Get-CFGEnvironmentVariableLeafName -Name $envActualName
+        if ([string]::IsNullOrWhiteSpace($envName)) {
+            return $null
+        }
+
+        $escapedEnvName = $envName.Replace("'", "''")
+        $envResult = Invoke-InContext -ExecContext $ExecContext -Code "[System.Environment]::GetEnvironmentVariable('$escapedEnvName','Process')"
+        if (-not $envResult.Success) {
+            return $null
+        }
+        return $envResult.Result
+    }
+
     $psVar = $ExecContext.Runspace.SessionStateProxy.PSVariable.Get($Name)
     if ($null -eq $psVar) {
         return $null
@@ -788,6 +803,51 @@ function Convert-CodeForCurrentScope {
         }
     }
     return $Code
+}
+
+function Get-CFGEnvironmentVariableActualName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+
+    $text = [string]$Name
+    if ($text.StartsWith('$')) {
+        $text = $text.Substring(1)
+    }
+
+    if ($text -match '^(?i)env:(.+)$') {
+        $leafName = [string]$Matches[1]
+        if ([string]::IsNullOrWhiteSpace($leafName)) { return $null }
+        return ('env:' + $leafName)
+    }
+
+    return $null
+}
+
+function Get-CFGEnvironmentVariableLeafName {
+    param([string]$Name)
+
+    $actualName = Get-CFGEnvironmentVariableActualName -Name $Name
+    if ([string]::IsNullOrWhiteSpace($actualName)) { return $null }
+    return $actualName.Substring(4)
+}
+
+function Register-CFGTrackedEnvironmentVariable {
+    param(
+        [hashtable]$Context,
+        [string]$ActualName
+    )
+
+    if ($null -eq $Context) { return }
+
+    $envActualName = Get-CFGEnvironmentVariableActualName -Name $ActualName
+    if ([string]::IsNullOrWhiteSpace($envActualName)) { return }
+
+    if (-not $Context.ContainsKey('TrackedEnvironmentVariables') -or $null -eq $Context.TrackedEnvironmentVariables) {
+        $Context.TrackedEnvironmentVariables = @{}
+    }
+
+    $Context.TrackedEnvironmentVariables[$envActualName] = $true
 }
 
 function ConvertTo-SingleQuotedHereStringLiteral {
@@ -6587,6 +6647,7 @@ function Invoke-CFGTraversal {
         ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
         VariableReadResults = @{}  # Key: "StartOffset:EndOffset", Value: @{ VarInfo; Values }
         LiteralizedCommandResults = @()
+        TrackedEnvironmentVariables = @{}
 
         # 新增字段 - 安全执行与作用域管理
         ScopeStack            = @()          # 作用域栈 [{ ScopeType; ScopeName; ScopePrefix; ReturnNodeId; LocalVars }]
@@ -6765,6 +6826,7 @@ function New-CFGExecutionSession {
         ResolvableResults   = @{}
         VariableReadResults = @{}
         LiteralizedCommandResults = @()
+        TrackedEnvironmentVariables = @{}
 
         ScopeStack            = @()
         CurrentScopePrefix    = ""
@@ -7614,6 +7676,16 @@ function Get-CFGVariableStackDescriptor {
         }
     }
 
+    $envActualName = Get-CFGEnvironmentVariableActualName -Name $ActualName
+    if (-not [string]::IsNullOrWhiteSpace($envActualName)) {
+        return [PSCustomObject]@{
+            Tier        = 'User'
+            DisplayName = ('$' + $envActualName)
+            SortBucket  = 1
+            ValueMode   = 'Default'
+        }
+    }
+
     if ($ActualName -eq '__proc_input') {
         return [PSCustomObject]@{
             Tier        = 'DefaultInternal'
@@ -7901,6 +7973,7 @@ function Get-CFGVariableStackPlaceholderRows {
 
             $actualName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varInfo.Name)
             if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
+            Register-CFGTrackedEnvironmentVariable -Context $context -ActualName $actualName
             if ($seenActualNames.Contains($actualName)) { continue }
 
             $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
@@ -7909,15 +7982,26 @@ function Get-CFGVariableStackPlaceholderRows {
             }
 
             $isInternal = Test-CFGInternalVariableName -Name $actualName
+            $currentValue = $null
+            $isPlaceholder = $true
+            $placeholderValueText = '(missing; set manually)'
+            if (-not [string]::IsNullOrWhiteSpace((Get-CFGEnvironmentVariableActualName -Name $actualName))) {
+                $currentValue = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualName
+                if ($null -ne $currentValue) {
+                    $isPlaceholder = $false
+                    $placeholderValueText = Format-CFGVariableStackValue -Value $currentValue -Mode $descriptor.ValueMode
+                }
+            }
+
             $rows.Add([PSCustomObject]@{
                 DisplayName       = $descriptor.DisplayName
                 ActualName        = $actualName
                 IsInternal        = $isInternal
                 DisplayTier       = $descriptor.Tier
                 SortBucket        = [int]$descriptor.SortBucket
-                Value             = $null
-                ValueText         = '(missing; set manually)'
-                IsPlaceholder     = $true
+                Value             = $currentValue
+                ValueText         = $placeholderValueText
+                IsPlaceholder     = $isPlaceholder
                 PlaceholderSource = $Source
             }) | Out-Null
             $null = $seenActualNames.Add($actualName)
@@ -7986,6 +8070,35 @@ function Get-CFGVariableStack {
         })
     }
 
+    if ($context.ContainsKey('TrackedEnvironmentVariables') -and $context.TrackedEnvironmentVariables) {
+        foreach ($trackedEnvName in @($context.TrackedEnvironmentVariables.Keys | Sort-Object)) {
+            $actualName = [string]$trackedEnvName
+            if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
+
+            $existing = @($rows | Where-Object { [string]$_.ActualName -ieq $actualName })
+            if ($existing.Count -gt 0) { continue }
+
+            $descriptor = Get-CFGVariableStackDescriptor -ActualName $actualName
+            if (-not (Test-CFGVariableStackTierVisible -Tier $descriptor.Tier -IncludeInternal:$IncludeInternal -IncludeAdvancedInternal:$IncludeAdvancedInternal)) {
+                continue
+            }
+
+            $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualName
+            $isMissing = ($null -eq $value)
+            [void]$rows.Add([PSCustomObject]@{
+                DisplayName       = $descriptor.DisplayName
+                ActualName        = $actualName
+                IsInternal        = $false
+                DisplayTier       = $descriptor.Tier
+                SortBucket        = [int]$descriptor.SortBucket
+                Value             = $value
+                ValueText         = if ($isMissing) { '(missing; set manually)' } else { Format-CFGVariableStackValue -Value $value -Mode $descriptor.ValueMode }
+                IsPlaceholder     = $isMissing
+                PlaceholderSource = if ($isMissing) { 'TrackedEnvironment' } else { $null }
+            })
+        }
+    }
+
     $existingActualNames = New-Object System.Collections.Generic.List[string]
     foreach ($row in $rows) {
         [void]$existingActualNames.Add([string]$row.ActualName)
@@ -8051,6 +8164,38 @@ function Set-CFGVariableValue {
     $valueToSet = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
 
     $resolvedName = Resolve-CFGVariableStackActualName -Context $context -VariableName $VariableName
+    $envActualName = Get-CFGEnvironmentVariableActualName -Name $resolvedName
+    if (-not [string]::IsNullOrWhiteSpace($envActualName)) {
+        Register-CFGTrackedEnvironmentVariable -Context $context -ActualName $envActualName
+
+        $envLeafName = Get-CFGEnvironmentVariableLeafName -Name $envActualName
+        $escapedEnvLeafName = $envLeafName.Replace("'", "''")
+        $tempVarName = '__cfg_env_value_to_set'
+
+        try {
+            $context.ExecContext.Runspace.SessionStateProxy.SetVariable($tempVarName, $valueToSet)
+            $setCode = if ($null -eq $valueToSet) {
+                "[System.Environment]::SetEnvironmentVariable('$escapedEnvLeafName', \$null, 'Process') | Out-Null"
+            } else {
+                "[System.Environment]::SetEnvironmentVariable('$escapedEnvLeafName', [string]`$$tempVarName, 'Process') | Out-Null"
+            }
+
+            $setEnvResult = Invoke-InContext -ExecContext $context.ExecContext -Code $setCode
+            if (-not $setEnvResult.Success) {
+                throw "环境变量写入失败: $($setEnvResult.Error)"
+            }
+        } finally {
+            try { $context.ExecContext.Runspace.SessionStateProxy.PSVariable.Remove($tempVarName) } catch { }
+        }
+
+        $storedValue = Get-VariableFromContext -ExecContext $context.ExecContext -Name $envActualName
+        return [PSCustomObject]@{
+            Name      = $envActualName
+            Value     = $storedValue
+            ValueText = if ($null -eq $storedValue) { '$null' } else { Format-VariableValue $storedValue }
+        }
+    }
+
     $targetNames = @($resolvedName)
     if ($VariableName -in @('_', 'PSItem', 'pipeline.current') -or $resolvedName -in @('_', 'PSItem')) {
         $targetNames = @('_', 'PSItem')
