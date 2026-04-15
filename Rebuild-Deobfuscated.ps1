@@ -100,6 +100,20 @@ function ConvertTo-PreviewText {
     return $Text.Substring(0, $MaxLen) + '...'
 }
 
+function Get-RemainingTimeBudgetMs {
+    param(
+        [int]$BudgetMs,
+        [System.Diagnostics.Stopwatch]$Stopwatch
+    )
+
+    if ($BudgetMs -le 0) { return 0 }
+    if ($null -eq $Stopwatch) { return $BudgetMs }
+
+    $remaining = [int]($BudgetMs - $Stopwatch.ElapsedMilliseconds)
+    if ($remaining -lt 0) { return 0 }
+    return $remaining
+}
+
 function ConvertTo-SingleQuotedStringLiteral {
     param([string]$Text)
 
@@ -241,6 +255,577 @@ function Get-VariableAccessKindMapFromScriptText {
     return $map
 }
 
+function Get-ReplacementContextInfoFromScriptText {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $result = [PSCustomObject]@{
+        ExpandableStringRanges = @()
+        CommandNameRangeKeys   = @{}
+        CommandNameRanges      = @()
+        DynamicPayloadRanges   = @()
+        MemberNameRanges       = @()
+        CommandTargetAssignmentRanges = @()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $result
+    }
+
+    try {
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    } catch {
+        return $result
+    }
+
+    if (-not $ast) { return $result }
+
+    function Add-UniqueContextRange {
+        param(
+            [hashtable]$SeenMap,
+            [System.Collections.Generic.List[object]]$List,
+            [int]$StartOffset,
+            [int]$EndOffset
+        )
+
+        if ($null -eq $StartOffset -or $null -eq $EndOffset -or $EndOffset -le $StartOffset) {
+            return
+        }
+
+        $key = "$StartOffset`:$EndOffset"
+        if ($SeenMap.ContainsKey($key)) {
+            return
+        }
+
+        $SeenMap[$key] = $true
+        $List.Add([PSCustomObject]@{
+                StartOffset = [int]$StartOffset
+                EndOffset   = [int]$EndOffset
+            }) | Out-Null
+    }
+
+    function Get-CommandArgumentAst {
+        param([System.Management.Automation.Language.CommandAst]$CommandAst)
+
+        if ($null -eq $CommandAst -or -not $CommandAst.CommandElements) { return $null }
+
+        for ($i = 1; $i -lt $CommandAst.CommandElements.Count; $i++) {
+            $elem = $CommandAst.CommandElements[$i]
+            if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                if ($elem.Argument) {
+                    return $elem.Argument
+                }
+                continue
+            }
+
+            return $elem
+        }
+
+        return $null
+    }
+
+    $expandableRanges = @()
+    $expandableAsts = @($ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.ExpandableStringExpressionAst]
+        }, $true))
+    foreach ($expandableAst in $expandableAsts) {
+        if (-not $expandableAst.Extent) { continue }
+        $start = $expandableAst.Extent.StartOffset
+        $end = $expandableAst.Extent.EndOffset
+        if ($null -eq $start -or $null -eq $end -or $end -le $start) { continue }
+        $expandableRanges += [PSCustomObject]@{
+            StartOffset = [int]$start
+            EndOffset   = [int]$end
+        }
+    }
+
+    $commandNameRangeKeys = @{}
+    $commandNameRanges = [System.Collections.Generic.List[object]]::new()
+    $dynamicPayloadRanges = [System.Collections.Generic.List[object]]::new()
+    $memberNameRanges = [System.Collections.Generic.List[object]]::new()
+    $commandTargetAssignmentRanges = [System.Collections.Generic.List[object]]::new()
+    $commandNameRangeSeen = @{}
+    $dynamicPayloadRangeSeen = @{}
+    $memberNameRangeSeen = @{}
+    $commandTargetAssignmentRangeSeen = @{}
+    $commandTargetVariableNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    $commandAsts = @($ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.CommandAst]
+        }, $true))
+    foreach ($cmdAst in $commandAsts) {
+        if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -eq 0) { continue }
+        $nameAst = $cmdAst.CommandElements[0]
+        if (-not $nameAst.Extent) { continue }
+        $start = $nameAst.Extent.StartOffset
+        $end = $nameAst.Extent.EndOffset
+        if ($null -eq $start -or $null -eq $end -or $end -le $start) { continue }
+        $commandNameRangeKeys["$start`:$end"] = $true
+        Add-UniqueContextRange -SeenMap $commandNameRangeSeen -List $commandNameRanges -StartOffset $start -EndOffset $end
+
+        if (($nameAst -is [System.Management.Automation.Language.VariableExpressionAst]) -and
+            ([string]$cmdAst.InvocationOperator) -in @('Ampersand', 'Dot')) {
+            $varName = [string]$nameAst.VariablePath.UserPath
+            if ($null -ne $nameAst.VariablePath -and $null -ne $nameAst.VariablePath.UserPath) {
+                $null = $commandTargetVariableNames.Add($varName)
+            }
+        }
+
+        $cmdName = $cmdAst.GetCommandName()
+        if ($cmdName -in @('Invoke-Expression', 'iex')) {
+            $statement = $cmdAst.Parent
+            if ($statement -is [System.Management.Automation.Language.PipelineAst]) {
+                $pipelineElements = @($statement.PipelineElements)
+                for ($i = 0; $i -lt $pipelineElements.Count; $i++) {
+                    if ($pipelineElements[$i] -ne $cmdAst) { continue }
+                    if ($i -le 0) { break }
+
+                    $payloadStart = $pipelineElements[0].Extent.StartOffset
+                    $payloadEnd = $pipelineElements[$i - 1].Extent.EndOffset
+                    Add-UniqueContextRange -SeenMap $dynamicPayloadRangeSeen -List $dynamicPayloadRanges -StartOffset $payloadStart -EndOffset $payloadEnd
+                    break
+                }
+            } else {
+                $argAst = Get-CommandArgumentAst -CommandAst $cmdAst
+                if ($argAst -and $argAst.Extent) {
+                    Add-UniqueContextRange -SeenMap $dynamicPayloadRangeSeen -List $dynamicPayloadRanges -StartOffset $argAst.Extent.StartOffset -EndOffset $argAst.Extent.EndOffset
+                }
+            }
+        }
+
+        if (Test-PowerShellHostCommandName -CommandName $cmdName) {
+            for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+                $elem = $cmdAst.CommandElements[$i]
+                if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+
+                $paramName = [string]$elem.ParameterName
+                if (-not (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'encodedcommand') -and
+                    -not (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'command')) {
+                    continue
+                }
+
+                $argAst = $elem.Argument
+                if (-not $argAst -and ($i + 1 -lt $cmdAst.CommandElements.Count)) {
+                    $i++
+                    $argAst = $cmdAst.CommandElements[$i]
+                }
+
+                if ($argAst -and $argAst.Extent) {
+                    Add-UniqueContextRange -SeenMap $dynamicPayloadRangeSeen -List $dynamicPayloadRanges -StartOffset $argAst.Extent.StartOffset -EndOffset $argAst.Extent.EndOffset
+                }
+                break
+            }
+        }
+    }
+
+    $memberAsts = @($ast.FindAll({
+            param($n)
+            ($n -is [System.Management.Automation.Language.MemberExpressionAst]) -or
+            ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst])
+        }, $true))
+    foreach ($memberAst in $memberAsts) {
+        if (-not $memberAst.Member -or -not $memberAst.Member.Extent) { continue }
+        Add-UniqueContextRange -SeenMap $memberNameRangeSeen -List $memberNameRanges -StartOffset $memberAst.Member.Extent.StartOffset -EndOffset $memberAst.Member.Extent.EndOffset
+    }
+
+    if ($commandTargetVariableNames.Count -gt 0) {
+        $assignmentAsts = @($ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.AssignmentStatementAst]
+            }, $true))
+        foreach ($assignAst in $assignmentAsts) {
+            if ($assignAst.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) { continue }
+            if (-not $assignAst.Right -or -not $assignAst.Right.Extent) { continue }
+
+            $assignedVarName = [string]$assignAst.Left.VariablePath.UserPath
+            if ($null -eq $assignAst.Left.VariablePath -or $null -eq $assignAst.Left.VariablePath.UserPath) { continue }
+            if (-not $commandTargetVariableNames.Contains($assignedVarName)) { continue }
+
+            Add-UniqueContextRange -SeenMap $commandTargetAssignmentRangeSeen -List $commandTargetAssignmentRanges -StartOffset $assignAst.Right.Extent.StartOffset -EndOffset $assignAst.Right.Extent.EndOffset
+        }
+    }
+
+    $result.ExpandableStringRanges = @($expandableRanges)
+    $result.CommandNameRangeKeys = $commandNameRangeKeys
+    $result.CommandNameRanges = @($commandNameRanges)
+    $result.DynamicPayloadRanges = @($dynamicPayloadRanges)
+    $result.MemberNameRanges = @($memberNameRanges)
+    $result.CommandTargetAssignmentRanges = @($commandTargetAssignmentRanges)
+    return $result
+}
+
+function Test-ReplacementWithinRanges {
+    param(
+        [int]$StartOffset,
+        [int]$EndOffset,
+        [array]$Ranges
+    )
+
+    if (-not $Ranges -or $Ranges.Count -eq 0) { return $false }
+
+    foreach ($range in $Ranges) {
+        if (-not $range) { continue }
+        $rangeStart = [int]$range.StartOffset
+        $rangeEnd = [int]$range.EndOffset
+        if ($StartOffset -ge $rangeStart -and $EndOffset -le $rangeEnd) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-ReplacementRangeKey {
+    param(
+        [AllowNull()]$StartOffset,
+        [AllowNull()]$EndOffset
+    )
+
+    if ($null -eq $StartOffset -or $null -eq $EndOffset) { return $null }
+    return ("{0}:{1}" -f ([int]$StartOffset), ([int]$EndOffset))
+}
+
+function Test-RuntimeGeneratedNode {
+    param($Node)
+
+    return ($Node -and $Node.PSObject.Properties['RuntimeGenerated'] -and [bool]$Node.RuntimeGenerated)
+}
+
+function Get-DynamicRecordValue {
+    param(
+        $Record,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $Record) { return $null }
+
+    if ($Record -is [hashtable]) {
+        if ($Record.ContainsKey($Name)) {
+            return $Record[$Name]
+        }
+        return $null
+    }
+
+    if ($Record.PSObject.Properties[$Name]) {
+        return $Record.$Name
+    }
+
+    return $null
+}
+
+function Get-DynamicInvokeRecordLookup {
+    param([Parameter(Mandatory)][hashtable]$Context)
+
+    if ($Context.ContainsKey('DynamicInvokeRecordLookup') -and $null -ne $Context.DynamicInvokeRecordLookup) {
+        return $Context.DynamicInvokeRecordLookup
+    }
+
+    $blockByName = @{}
+    foreach ($rec in @($Context.DynamicInvokeResults)) {
+        if (-not $rec) { continue }
+        $blockName = [string](Get-DynamicRecordValue -Record $rec -Name 'BlockName')
+        if ([string]::IsNullOrWhiteSpace($blockName)) { continue }
+        $blockByName[$blockName] = $rec
+    }
+
+    $lookup = [PSCustomObject]@{
+        BlockByName = $blockByName
+    }
+
+    $Context.DynamicInvokeRecordLookup = $lookup
+    return $lookup
+}
+
+function Resolve-DynamicInvokeOriginInfo {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        $Record,
+        $Node
+    )
+
+    $recordNodeId = Get-DynamicRecordValue -Record $Record -Name 'NodeId'
+    if (-not $Node -and $Context.CFG -and $recordNodeId) {
+        $Node = Get-NodeById -CFG $Context.CFG -Id ([int]$recordNodeId)
+    }
+
+    if (-not $Node) {
+        return [PSCustomObject]@{
+            Success       = $false
+            StartOffset   = $null
+            EndOffset     = $null
+            NodeId        = $recordNodeId
+            RuntimeDepth  = 0
+            ViaRuntime    = $false
+            FailureReason = 'node_missing'
+        }
+    }
+
+    $directStart = Get-DynamicRecordValue -Record $Record -Name 'ReplacementStartOffset'
+    $directEnd = Get-DynamicRecordValue -Record $Record -Name 'ReplacementEndOffset'
+
+    if (-not (Test-RuntimeGeneratedNode -Node $Node)) {
+        $start = if ($null -ne $directStart) { [int]$directStart } else { $Node.TextStartOffset }
+        $end = if ($null -ne $directEnd) { [int]$directEnd } else { $Node.TextEndOffset }
+        return [PSCustomObject]@{
+            Success       = ($null -ne $start -and $null -ne $end)
+            StartOffset   = $start
+            EndOffset     = $end
+            NodeId        = [int]$Node.Id
+            RuntimeDepth  = 0
+            ViaRuntime    = $false
+            FailureReason = if ($null -eq $start -or $null -eq $end) { 'missing_offset' } else { $null }
+        }
+    }
+
+    $lookup = Get-DynamicInvokeRecordLookup -Context $Context
+    $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $currentBlockName = [string](Get-DynamicRecordValue -Record $Record -Name 'BlockName')
+    if ([string]::IsNullOrWhiteSpace($currentBlockName) -and $Node.PSObject.Properties['RuntimeBlockName']) {
+        $currentBlockName = [string]$Node.RuntimeBlockName
+    }
+
+    $depth = 0
+    while (-not [string]::IsNullOrWhiteSpace($currentBlockName) -and $visited.Add($currentBlockName)) {
+        $depth++
+        $runtimeInfo = if ($Context.RuntimeSubgraphs -and $Context.RuntimeSubgraphs.ContainsKey($currentBlockName)) {
+            $Context.RuntimeSubgraphs[$currentBlockName]
+        } else {
+            $null
+        }
+
+        $creatorRecord = if ($lookup.BlockByName.ContainsKey($currentBlockName)) {
+            $lookup.BlockByName[$currentBlockName]
+        } else {
+            $null
+        }
+
+        $creatorNode = $null
+        $creatorNodeId = $null
+        $start = $null
+        $end = $null
+
+        if ($creatorRecord) {
+            $creatorNodeId = Get-DynamicRecordValue -Record $creatorRecord -Name 'NodeId'
+            if ($Context.CFG -and $creatorNodeId) {
+                $creatorNode = Get-NodeById -CFG $Context.CFG -Id ([int]$creatorNodeId)
+            }
+            $start = Get-DynamicRecordValue -Record $creatorRecord -Name 'ReplacementStartOffset'
+            $end = Get-DynamicRecordValue -Record $creatorRecord -Name 'ReplacementEndOffset'
+        }
+
+        if (-not $creatorNode -and $runtimeInfo -and $Context.CFG -and $runtimeInfo.CallerNodeId) {
+            $creatorNodeId = [int]$runtimeInfo.CallerNodeId
+            $creatorNode = Get-NodeById -CFG $Context.CFG -Id $creatorNodeId
+        }
+
+        if ($null -eq $start -and $runtimeInfo -and $null -ne $runtimeInfo.CallerStartOffset) {
+            $start = [int]$runtimeInfo.CallerStartOffset
+        }
+        if ($null -eq $end -and $runtimeInfo -and $null -ne $runtimeInfo.CallerEndOffset) {
+            $end = [int]$runtimeInfo.CallerEndOffset
+        }
+
+        if (-not $creatorNode) {
+            break
+        }
+
+        if ($null -eq $start) { $start = $creatorNode.TextStartOffset }
+        if ($null -eq $end) { $end = $creatorNode.TextEndOffset }
+
+        if (-not (Test-RuntimeGeneratedNode -Node $creatorNode)) {
+            return [PSCustomObject]@{
+                Success       = ($null -ne $start -and $null -ne $end)
+                StartOffset   = $start
+                EndOffset     = $end
+                NodeId        = [int]$creatorNode.Id
+                RuntimeDepth  = $depth
+                ViaRuntime    = $true
+                FailureReason = if ($null -eq $start -or $null -eq $end) { 'missing_origin_offset' } else { $null }
+            }
+        }
+
+        $nextBlockName = if ($creatorNode.PSObject.Properties['RuntimeBlockName']) {
+            [string]$creatorNode.RuntimeBlockName
+        } elseif ($runtimeInfo -and $runtimeInfo.PSObject.Properties['ParentBlockName']) {
+            [string]$runtimeInfo.ParentBlockName
+        } else {
+            $null
+        }
+
+        if ([string]::IsNullOrWhiteSpace($nextBlockName) -and $runtimeInfo -and $runtimeInfo.PSObject.Properties['ParentBlockName']) {
+            $nextBlockName = [string]$runtimeInfo.ParentBlockName
+        }
+
+        $currentBlockName = $nextBlockName
+    }
+
+    return [PSCustomObject]@{
+        Success       = $false
+        StartOffset   = $null
+        EndOffset     = $null
+        NodeId        = [int]$Node.Id
+        RuntimeDepth  = $depth
+        ViaRuntime    = $true
+        FailureReason = 'runtime_origin_unmapped'
+    }
+}
+
+function Test-EffectiveDynamicReplacementCandidate {
+    param($Candidate)
+
+    if (-not $Candidate) { return $false }
+    if (-not $Candidate.PSObject.Properties['SourceKind'] -or [string]$Candidate.SourceKind -ne 'DynamicInvoke') { return $false }
+
+    $replacement = if ($Candidate.PSObject.Properties['Replacement']) { [string]$Candidate.Replacement } else { $null }
+    $original = if ($Candidate.PSObject.Properties['Original']) { [string]$Candidate.Original } else { $null }
+    if ([string]::IsNullOrWhiteSpace($replacement)) { return $false }
+    if ($replacement -eq '__BLOCKED_PLACEHOLDER__') { return $false }
+    if ($null -ne $original -and $replacement -eq $original) { return $false }
+
+    return ($null -ne $Candidate.StartOffset -and $null -ne $Candidate.EndOffset)
+}
+
+function Get-ProtectedDynamicReplacementRanges {
+    param([AllowEmptyCollection()][array]$Candidates)
+
+    $ranges = @()
+    $seen = @{}
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return @()
+    }
+
+    foreach ($cand in @($Candidates)) {
+        if (-not (Test-EffectiveDynamicReplacementCandidate -Candidate $cand)) { continue }
+        if ($cand.PSObject.Properties['ProtectsInnerCandidates'] -and -not [bool]$cand.ProtectsInnerCandidates) { continue }
+
+        $start = [int]$cand.StartOffset
+        $end = [int]$cand.EndOffset
+        if ($null -eq $start -or $null -eq $end -or $end -le $start) { continue }
+
+        $key = Get-ReplacementRangeKey -StartOffset $start -EndOffset $end
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $ranges += [PSCustomObject]@{
+            StartOffset = [int]$start
+            EndOffset   = [int]$end
+        }
+    }
+
+    return @($ranges)
+}
+
+function Test-ValidCommandNameReplacement {
+    param(
+        [string]$Replacement,
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Replacement)) { return $false }
+
+    $text = $Replacement.Trim()
+    if ($text -match "[`r`n]") { return $false }
+    if ($text -match '[''"\s]') { return $false }
+
+    $allowed = $false
+    if ($text -match '^[A-Za-z_][A-Za-z0-9_.-]*$') { $allowed = $true }
+    if ($text -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$') { $allowed = $true }
+    if ($text -match '^_block_[a-f0-9]{8}$') { $allowed = $true }
+    if (-not $allowed) { return $false }
+
+    if ($Context.FunctionSubgraphs -and $Context.FunctionSubgraphs.ContainsKey($text)) { return $true }
+    if ($Context.ScriptBlockSubgraphs -and $Context.ScriptBlockSubgraphs.ContainsKey($text)) { return $true }
+    if ($Context.CFG -and $Context.CFG.DefinedAliases -and $Context.CFG.DefinedAliases.ContainsKey($text)) { return $true }
+
+    return ($null -ne (Get-Command -Name $text -ErrorAction SilentlyContinue | Select-Object -First 1))
+}
+
+function Filter-ReplacementCandidatesByContext {
+    param(
+        [AllowEmptyCollection()][array]$Candidates,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $contextInfo = Get-ReplacementContextInfoFromScriptText -ScriptText $ScriptText
+    $dynamicRanges = Get-ProtectedDynamicReplacementRanges -Candidates $Candidates
+    $kept = @()
+    $skipped = @()
+
+    foreach ($cand in $Candidates) {
+        if (-not $cand) { continue }
+
+        $start = [int]$cand.StartOffset
+        $end = [int]$cand.EndOffset
+        $sourceKind = if ($cand.PSObject.Properties['SourceKind']) { [string]$cand.SourceKind } else { '' }
+        $rangeKey = "$start`:$end"
+        $isExactCommandNameRange = $contextInfo.CommandNameRangeKeys.ContainsKey($rangeKey)
+        $withinDynamicRange = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $dynamicRanges)
+        $withinDynamicPayload = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.DynamicPayloadRanges)
+        $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
+
+        if ($sourceKind -ne 'DynamicInvoke' -and $withinDynamicPayload -and $withinDynamicRange) {
+            $skipped += New-SkipRecord -Reason 'dynamic_payload_protected' -Message '外层 DynamicInvoke 候选有效，动态 payload 内部局部候选跳过' -Item $cand
+            continue
+        }
+
+        if ($sourceKind -ne 'DynamicInvoke' -and $withinDynamicRange) {
+            $skipped += New-SkipRecord -Reason 'dynamic_wrapper_protected' -Message '外层 DynamicInvoke 候选有效，动态调用节点内部局部候选跳过' -Item $cand
+            continue
+        }
+
+        $allowInExpandable = $false
+        if ($withinExpandable) {
+            if ($sourceKind -in @('DynamicInvoke', 'LiteralizedCommand', 'Resolvable')) {
+                $allowInExpandable = $true
+            } elseif ($sourceKind -eq 'Static' -and $cand.PSObject.Properties['Confidence'] -and [string]$cand.Confidence -eq 'High') {
+                $allowInExpandable = $true
+            }
+        }
+        if ($sourceKind -ne 'DynamicInvoke' -and $withinExpandable -and -not $allowInExpandable) {
+            $skipped += New-SkipRecord -Reason 'expandable_context_protected' -Message 'ExpandableString 内仅放行高价值高置信候选，当前候选跳过' -Item $cand
+            continue
+        }
+
+        if ($sourceKind -ne 'DynamicInvoke' -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.MemberNameRanges)) {
+            $skipped += New-SkipRecord -Reason 'member_name_protected' -Message '成员名位点默认不做局部替换，避免破坏反射/方法调用语义' -Item $cand
+            continue
+        }
+
+        if ($sourceKind -ne 'DynamicInvoke' -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandTargetAssignmentRanges)) {
+            $skipped += New-SkipRecord -Reason 'command_target_assignment_protected' -Message '命令目标变量的赋值表达式只允许整段还原，局部候选跳过' -Item $cand
+            continue
+        }
+
+        if ((Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandNameRanges) -and -not $isExactCommandNameRange) {
+            $skipped += New-SkipRecord -Reason 'command_name_context_protected' -Message '命令位点内部不允许局部替换，避免破坏命令解析' -Item $cand
+            continue
+        }
+
+        if ($isExactCommandNameRange -and -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
+            $skipped += New-SkipRecord -Reason 'invalid_command_name_replacement' -Message '命令位点替换结果不是高置信合法命令名，跳过' -Item $cand
+            continue
+        }
+
+        $kept += $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($kept)
+        Skipped    = @($skipped)
+    }
+}
+
 function Get-FullScriptTextFromFile {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -289,7 +874,12 @@ function Test-StaticBindingValue {
     }
     if ($Value -is [scriptblock]) { return $false }
     if ($Value -is [BlockedCommandPlaceholder]) { return $false }
-    if ($Value -is [System.Collections.IDictionary]) { return $false }
+    if ($Value -is [System.Collections.IDictionary]) {
+        return (Test-StaticDictionaryBindingValue -Value $Value)
+    }
+    if (Test-StaticPropertyBagValue -Value $Value) {
+        return $true
+    }
 
     if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
         foreach ($item in $Value) {
@@ -310,6 +900,453 @@ function Get-StaticValueTypeName {
     }
     if ($null -eq $Value) { return 'Null' }
     return [string]$Value.GetType().Name
+}
+
+function Test-StaticDictionaryBindingValue {
+    param([System.Collections.IDictionary]$Value)
+
+    if ($null -eq $Value) { return $false }
+
+    foreach ($key in @($Value.Keys)) {
+        if (-not (Test-StaticReplacementScalarValue -Value $key)) { return $false }
+        if (-not (Test-StaticBindingValue -Value $Value[$key])) { return $false }
+    }
+
+    return $true
+}
+
+function Test-StaticPropertyBagValue {
+    param($Value)
+
+    if ($null -eq $Value) { return $false }
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+    if ($null -eq $Value) { return $false }
+
+    $typeName = [string]$Value.GetType().FullName
+    if ($typeName -notin @('System.Management.Automation.PSCustomObject', 'System.Management.Automation.PSObject')) {
+        return $false
+    }
+
+    $noteProperties = @($Value.PSObject.Properties | Where-Object { $_.MemberType -eq [System.Management.Automation.PSMemberTypes]::NoteProperty })
+    foreach ($property in $noteProperties) {
+        if (-not (Test-StaticBindingValue -Value $property.Value)) { return $false }
+    }
+
+    return $true
+}
+
+function New-StaticDictionaryValue {
+    param([switch]$Ordered)
+
+    if ($Ordered) {
+        return ([ordered]@{})
+    }
+
+    return @{}
+}
+
+function Resolve-StaticHashtableLiteralValue {
+    param(
+        [System.Management.Automation.Language.HashtableAst]$HashtableAst,
+        [hashtable]$Context,
+        [bool]$AllowEmptyFallback = $false,
+        [int]$Depth = 0,
+        [switch]$Ordered
+    )
+
+    if ($null -eq $HashtableAst) {
+        return New-StaticEvalFailureResult -Reason 'invalid_hashtable' -Message 'HashtableAst 为空'
+    }
+
+    $map = New-StaticDictionaryValue -Ordered:$Ordered
+    $usedFallback = $false
+
+    foreach ($pair in @($HashtableAst.KeyValuePairs)) {
+        if ($null -eq $pair) { continue }
+
+        $keyAst = if ($pair.PSObject.Properties['Item1']) { $pair.Item1 } else { $null }
+        $valueStatement = if ($pair.PSObject.Properties['Item2']) { $pair.Item2 } else { $null }
+        if ($null -eq $keyAst -or $null -eq $valueStatement) {
+            return New-StaticEvalFailureResult -Reason 'unsupported_hashtable_pair' -Message 'Hashtable 键值对结构不受支持' -UsedEmptyFallback:$usedFallback
+        }
+
+        $keyResult = Resolve-StaticAstValue -Ast $keyAst -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+        if (-not $keyResult.Success) {
+            return New-StaticEvalFailureResult -Reason 'hashtable_key' -Message $keyResult.Message -UsedEmptyFallback:([bool]$keyResult.UsedEmptyFallback -or $usedFallback)
+        }
+        if (-not (Test-StaticReplacementScalarValue -Value $keyResult.Value)) {
+            return New-StaticEvalFailureResult -Reason 'hashtable_key_complex' -Message ('Hashtable 键类型不支持静态求值: ' + (Get-StaticValueTypeName -Value $keyResult.Value)) -UsedEmptyFallback:([bool]$keyResult.UsedEmptyFallback -or $usedFallback)
+        }
+
+        $valueAst = Get-StaticExpressionFromPipelineAst -PipelineAst $valueStatement
+        if ($null -eq $valueAst) {
+            return New-StaticEvalFailureResult -Reason 'unsupported_pipeline' -Message 'Hashtable 值不是简单表达式' -UsedEmptyFallback:$usedFallback
+        }
+
+        $valueResult = Resolve-StaticAstValue -Ast $valueAst -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+        if (-not $valueResult.Success) {
+            return New-StaticEvalFailureResult -Reason 'hashtable_value' -Message $valueResult.Message -UsedEmptyFallback:([bool]$valueResult.UsedEmptyFallback -or $usedFallback)
+        }
+
+        $usedFallback = ($usedFallback -or [bool]$keyResult.UsedEmptyFallback -or [bool]$valueResult.UsedEmptyFallback)
+        $map[$keyResult.Value] = $valueResult.Value
+    }
+
+    return [PSCustomObject]@{
+        Success           = $true
+        Value             = $map
+        UsedEmptyFallback = $usedFallback
+        Reason            = $null
+        Message           = $null
+    }
+}
+
+function Get-StaticMemberNameText {
+    param(
+        $MemberAst,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $MemberAst) { return $null }
+
+    if ($MemberAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return [string]$MemberAst.Value
+    }
+    if ($MemberAst -is [System.Management.Automation.Language.ConstantExpressionAst] -and $MemberAst.Value -is [string]) {
+        return [string]$MemberAst.Value
+    }
+    if ($MemberAst -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and @($MemberAst.NestedExpressions).Count -eq 0) {
+        return [string]$MemberAst.Value
+    }
+
+    $resolved = Resolve-StaticAstValue -Ast $MemberAst -Context $Context -AllowEmptyFallback:$false
+    if (-not $resolved.Success) { return $null }
+    if ($resolved.Value -is [string] -or $resolved.Value -is [char]) {
+        return [string]$resolved.Value
+    }
+
+    return $null
+}
+
+function Normalize-StaticSequenceIndex {
+    param(
+        [int]$Index,
+        [int]$Count
+    )
+
+    if ($Count -lt 0) { return $null }
+    $resolved = if ($Index -lt 0) { $Count + $Index } else { $Index }
+    if ($resolved -lt 0 -or $resolved -ge $Count) { return $null }
+    return $resolved
+}
+
+function ConvertTo-StaticIndexList {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    $items = if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) { @($Value) } else { @($Value) }
+    $indexes = New-Object System.Collections.Generic.List[int]
+
+    foreach ($item in $items) {
+        if ($item -is [bool]) { return $null }
+
+        try {
+            if ($item -is [double] -or $item -is [float] -or $item -is [decimal]) {
+                $numeric = [double]$item
+                if ([Math]::Truncate($numeric) -ne $numeric) { return $null }
+                $indexes.Add([int]$numeric) | Out-Null
+            } elseif ($item -is [sbyte] -or $item -is [byte] -or $item -is [int16] -or $item -is [uint16] -or $item -is [int] -or $item -is [uint32] -or $item -is [int64] -or $item -is [uint64]) {
+                $indexes.Add([int]$item) | Out-Null
+            } elseif ($item -is [string]) {
+                $parsed = 0
+                if (-not [int]::TryParse($item, [ref]$parsed)) { return $null }
+                $indexes.Add($parsed) | Out-Null
+            } else {
+                return $null
+            }
+        } catch {
+            return $null
+        }
+    }
+
+    return @($indexes.ToArray())
+}
+
+function Resolve-StaticMemberAccessValue {
+    param(
+        $TargetValue,
+        [string]$MemberName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($MemberName)) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '成员名为空' }
+    }
+
+    if ($TargetValue -is [psobject] -and $null -ne $TargetValue.BaseObject -and $TargetValue.BaseObject -ne $TargetValue) {
+        $TargetValue = $TargetValue.BaseObject
+    }
+    if ($null -eq $TargetValue) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '成员访问目标为空' }
+    }
+
+    if ($TargetValue -is [System.Collections.IDictionary]) {
+        $matchedKey = $null
+        foreach ($existingKey in @($TargetValue.Keys)) {
+            if (($existingKey -is [string] -or $existingKey -is [char]) -and ([string]$existingKey -ieq $MemberName)) {
+                $matchedKey = $existingKey
+                break
+            }
+        }
+        if ($null -ne $matchedKey) {
+            return [PSCustomObject]@{ Success = $true; Value = $TargetValue[$matchedKey]; Message = $null }
+        }
+
+        if ($MemberName -ieq 'Keys') {
+            return [PSCustomObject]@{ Success = $true; Value = @($TargetValue.Keys); Message = $null }
+        }
+        if ($MemberName -ieq 'Values') {
+            return [PSCustomObject]@{ Success = $true; Value = @($TargetValue.Values); Message = $null }
+        }
+    }
+
+    if (Test-StaticPropertyBagValue -Value $TargetValue) {
+        $property = @($TargetValue.PSObject.Properties.Match($MemberName) | Where-Object { $_.MemberType -eq [System.Management.Automation.PSMemberTypes]::NoteProperty } | Select-Object -First 1)
+        if ($property.Count -gt 0) {
+            return [PSCustomObject]@{ Success = $true; Value = $property[0].Value; Message = $null }
+        }
+    }
+
+    if ($MemberName -match '^(?i:length|count)$') {
+        if ($TargetValue -is [string]) {
+            return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Length; Message = $null }
+        }
+        if ($TargetValue -is [array]) {
+            return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Length; Message = $null }
+        }
+        if ($TargetValue -is [System.Collections.ICollection]) {
+            return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Count; Message = $null }
+        }
+        if (($TargetValue -is [System.Collections.IEnumerable]) -and -not ($TargetValue -is [string])) {
+            return [PSCustomObject]@{ Success = $true; Value = @($TargetValue).Count; Message = $null }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('不支持的安全成员访问: ' + $MemberName) }
+}
+
+function Resolve-StaticTypeFromTypeExpressionAst {
+    param([System.Management.Automation.Language.TypeExpressionAst]$TypeExpressionAst)
+
+    if ($null -eq $TypeExpressionAst -or $null -eq $TypeExpressionAst.TypeName) { return $null }
+
+    try {
+        $reflectionType = $TypeExpressionAst.TypeName.GetReflectionType()
+        if ($reflectionType) { return $reflectionType }
+    } catch {}
+
+    $fullName = [string]$TypeExpressionAst.TypeName.FullName
+    if ([string]::IsNullOrWhiteSpace($fullName)) { return $null }
+
+    try {
+        $reflectionType = [Type]::GetType($fullName, $false, $true)
+        if ($reflectionType) { return $reflectionType }
+    } catch {}
+
+    foreach ($assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {
+        try {
+            $reflectionType = $assembly.GetType($fullName, $false, $true)
+            if ($reflectionType) { return $reflectionType }
+        } catch {}
+    }
+
+    return $null
+}
+
+function Resolve-StaticTypeMemberAccessValue {
+    param(
+        [Type]$TargetType,
+        [string]$MemberName
+    )
+
+    if ($null -eq $TargetType -or [string]::IsNullOrWhiteSpace($MemberName)) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '静态成员访问缺少类型或成员名' }
+    }
+
+    if ($TargetType.IsEnum) {
+        try {
+            return [PSCustomObject]@{ Success = $true; Value = [Enum]::Parse($TargetType, $MemberName, $true); Message = $null }
+        } catch {}
+    }
+
+    switch -Regex ($TargetType.FullName) {
+        '^(?i:System\.Text\.Encoding)$' {
+            switch -Regex ($MemberName) {
+                '^(?i:ASCII)$'            { return [PSCustomObject]@{ Success = $true; Value = [System.Text.Encoding]::ASCII; Message = $null } }
+                '^(?i:UTF8)$'             { return [PSCustomObject]@{ Success = $true; Value = [System.Text.Encoding]::UTF8; Message = $null } }
+                '^(?i:Unicode)$'          { return [PSCustomObject]@{ Success = $true; Value = [System.Text.Encoding]::Unicode; Message = $null } }
+                '^(?i:BigEndianUnicode)$' { return [PSCustomObject]@{ Success = $true; Value = [System.Text.Encoding]::BigEndianUnicode; Message = $null } }
+                '^(?i:UTF32)$'            { return [PSCustomObject]@{ Success = $true; Value = [System.Text.Encoding]::UTF32; Message = $null } }
+                '^(?i:Default)$'          { return [PSCustomObject]@{ Success = $true; Value = [System.Text.Encoding]::Default; Message = $null } }
+            }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('不支持的安全静态成员访问: ' + $TargetType.FullName + '::' + $MemberName) }
+}
+
+function Resolve-StaticIndexAccessValue {
+    param(
+        $TargetValue,
+        $IndexValue
+    )
+
+    if ($TargetValue -is [psobject] -and $null -ne $TargetValue.BaseObject -and $TargetValue.BaseObject -ne $TargetValue) {
+        $TargetValue = $TargetValue.BaseObject
+    }
+    if ($null -eq $TargetValue) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '索引访问目标为空' }
+    }
+
+    if ($TargetValue -is [System.Collections.IDictionary]) {
+        $keys = if (($IndexValue -is [System.Collections.IEnumerable]) -and -not ($IndexValue -is [string])) { @($IndexValue) } else { @($IndexValue) }
+        $values = @()
+        foreach ($lookupKey in $keys) {
+            $matchedKey = $null
+            foreach ($existingKey in @($TargetValue.Keys)) {
+                if ($existingKey -eq $lookupKey) {
+                    $matchedKey = $existingKey
+                    break
+                }
+                if (($existingKey -is [string] -or $existingKey -is [char]) -and ($lookupKey -is [string] -or $lookupKey -is [char]) -and ([string]$existingKey -ieq [string]$lookupKey)) {
+                    $matchedKey = $existingKey
+                    break
+                }
+            }
+
+            if ($null -eq $matchedKey) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('字典中不存在键: ' + [string]$lookupKey) }
+            }
+
+            $values += ,$TargetValue[$matchedKey]
+        }
+
+        if ($values.Count -eq 1) {
+            return [PSCustomObject]@{ Success = $true; Value = $values[0]; Message = $null }
+        }
+
+        return [PSCustomObject]@{ Success = $true; Value = @($values); Message = $null }
+    }
+
+    $indexes = ConvertTo-StaticIndexList -Value $IndexValue
+    if (-not $indexes -or $indexes.Count -eq 0) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '索引值不是受支持的整数/整数数组' }
+    }
+
+    if ($TargetValue -is [string]) {
+        $chars = $TargetValue.ToCharArray()
+        $values = @()
+        foreach ($index in $indexes) {
+            $normalized = Normalize-StaticSequenceIndex -Index $index -Count $chars.Length
+            if ($null -eq $normalized) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('字符串索引越界: ' + $index) }
+            }
+            $values += ,$chars[$normalized]
+        }
+
+        if ($values.Count -eq 1) {
+            return [PSCustomObject]@{ Success = $true; Value = $values[0]; Message = $null }
+        }
+
+        return [PSCustomObject]@{ Success = $true; Value = @($values); Message = $null }
+    }
+
+    $sequence = $null
+    if ($TargetValue -is [array]) {
+        $sequence = @($TargetValue)
+    } elseif ($TargetValue -is [System.Collections.IList]) {
+        $sequence = @($TargetValue)
+    } elseif (($TargetValue -is [System.Collections.IEnumerable]) -and -not ($TargetValue -is [string])) {
+        $sequence = @($TargetValue)
+    }
+
+    if ($null -eq $sequence) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('目标类型不支持索引访问: ' + (Get-StaticValueTypeName -Value $TargetValue)) }
+    }
+
+    $values = @()
+    foreach ($index in $indexes) {
+        $normalized = Normalize-StaticSequenceIndex -Index $index -Count $sequence.Count
+        if ($null -eq $normalized) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('数组索引越界: ' + $index) }
+        }
+        $values += ,$sequence[$normalized]
+    }
+
+    if ($values.Count -eq 1) {
+        return [PSCustomObject]@{ Success = $true; Value = $values[0]; Message = $null }
+    }
+
+    return [PSCustomObject]@{ Success = $true; Value = @($values); Message = $null }
+}
+
+function Get-FormattingEquivalentCollectionWrapperInfo {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+
+    $compact = (($Text -replace '\s+', '')).Trim()
+    $parenMatch = [regex]::Match($compact, '^\((?<inner>.+)\)$')
+    if ($parenMatch.Success) {
+        return [PSCustomObject]@{
+            Kind  = 'Paren'
+            Inner = [string]$parenMatch.Groups['inner'].Value
+        }
+    }
+
+    $arrayMatch = [regex]::Match($compact, '^@\((?<inner>.+)\)$')
+    if ($arrayMatch.Success) {
+        return [PSCustomObject]@{
+            Kind  = 'ArrayLiteral'
+            Inner = [string]$arrayMatch.Groups['inner'].Value
+        }
+    }
+
+    return $null
+}
+
+function Test-FormattingOnlyEquivalentReplacement {
+    param(
+        [string]$Original,
+        [string]$Replacement,
+        $Type
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Original) -or [string]::IsNullOrWhiteSpace($Replacement)) {
+        return $false
+    }
+
+    $typeNames = if (($Type -is [System.Collections.IEnumerable]) -and -not ($Type -is [string])) {
+        @($Type | ForEach-Object { [string]$_ })
+    } else {
+        @([string]$Type)
+    }
+
+    if (@($typeNames | Where-Object { $_ -in @('Paren', 'ArrayLiteral', 'ArrayExpression') }).Count -eq 0) {
+        return $false
+    }
+
+    $originalInfo = Get-FormattingEquivalentCollectionWrapperInfo -Text $Original
+    $replacementInfo = Get-FormattingEquivalentCollectionWrapperInfo -Text $Replacement
+    if ($null -eq $originalInfo -or $null -eq $replacementInfo) { return $false }
+    if ($originalInfo.Kind -eq $replacementInfo.Kind) { return $false }
+
+    return ($originalInfo.Inner -eq $replacementInfo.Inner)
 }
 
 function Replace-FirstOccurrence {
@@ -648,49 +1685,184 @@ function Get-StaticConvertTypeName {
     return [string]$ConvertAst.Type.TypeName.FullName
 }
 
+function Get-StaticEvalState {
+    param([hashtable]$Context)
+
+    if ($null -eq $Context) { return $null }
+
+    if (-not $Context.ContainsKey('StaticEvalState') -or $null -eq $Context.StaticEvalState) {
+        $Context.StaticEvalState = @{
+            StringCompatCache      = @{}
+            ValueCache             = @{}
+            StringCompatInProgress = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+            ValueInProgress        = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+            StringCompatDepthLimit = 128
+            ValueDepthLimit        = 192
+            BudgetMs               = 0
+            Stopwatch              = $null
+        }
+    }
+
+    return $Context.StaticEvalState
+}
+
+function Reset-StaticEvalState {
+    param(
+        [hashtable]$Context,
+        [int]$TimeBudgetMs = 0
+    )
+
+    $state = Get-StaticEvalState -Context $Context
+    if ($null -eq $state) { return $null }
+
+    $state.StringCompatCache = @{}
+    $state.ValueCache = @{}
+    $state.StringCompatInProgress = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    $state.ValueInProgress = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    $state.BudgetMs = [Math]::Max(0, $TimeBudgetMs)
+    $state.Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+    return $state
+}
+
+function Get-StaticAstCacheKey {
+    param(
+        $Ast,
+        [bool]$AllowEmptyFallback = $false,
+        [string]$Prefix = ''
+    )
+
+    if ($null -eq $Ast) { return $null }
+
+    $id = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($Ast)
+    if ([string]::IsNullOrWhiteSpace($Prefix)) {
+        return "$id|$AllowEmptyFallback"
+    }
+
+    return "$Prefix|$id|$AllowEmptyFallback"
+}
+
+function Test-StaticEvalBudgetExceeded {
+    param([hashtable]$Context)
+
+    $state = Get-StaticEvalState -Context $Context
+    if ($null -eq $state -or -not $state.Stopwatch) { return $false }
+
+    $budgetMs = if ($state.ContainsKey('BudgetMs') -and $null -ne $state.BudgetMs) { [int]$state.BudgetMs } else { 0 }
+    if ($budgetMs -le 0) { return $false }
+
+    return ($state.Stopwatch.ElapsedMilliseconds -ge $budgetMs)
+}
+
+function New-StaticEvalFailureResult {
+    param(
+        [string]$Reason,
+        [string]$Message,
+        [bool]$UsedEmptyFallback = $false
+    )
+
+    return [PSCustomObject]@{
+        Success           = $false
+        Value             = $null
+        UsedEmptyFallback = $UsedEmptyFallback
+        Reason            = $Reason
+        Message           = $Message
+    }
+}
+
+function Test-StaticEvalResultCacheable {
+    param($Result)
+
+    if (-not $Result) { return $false }
+    if ($Result.Success) { return $true }
+
+    $reason = if ($Result.PSObject.Properties['Reason']) { [string]$Result.Reason } else { '' }
+    return ($reason -notin @('depth_limit', 'budget_exceeded', 'cycle_detected'))
+}
+
 function Test-StaticAstStringCompatible {
     param(
         $Ast,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [int]$Depth = 0
     )
 
     if ($null -eq $Ast) { return $false }
 
-    if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) { return $true }
-    if ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) { return $true }
-    if ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
-        return (($Ast.Value -is [string]) -or ($Ast.Value -is [char]))
+    if (Test-StaticEvalBudgetExceeded -Context $Context) { return $false }
+
+    $state = Get-StaticEvalState -Context $Context
+    $depthLimit = if ($state -and $state.ContainsKey('StringCompatDepthLimit')) { [int]$state.StringCompatDepthLimit } else { 128 }
+    if ($Depth -ge $depthLimit) { return $false }
+
+    $cacheKey = Get-StaticAstCacheKey -Ast $Ast -Prefix 'compat'
+    if ($state -and $cacheKey -and $state.StringCompatCache.ContainsKey($cacheKey)) {
+        return [bool]$state.StringCompatCache[$cacheKey]
     }
-    if ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
-        $resolved = Resolve-StaticVariableValue -Context $Context -Ast $Ast -AllowEmptyFallback:$false
-        if (-not $resolved.Success) { return $false }
-        return (($resolved.Value -is [string]) -or ($resolved.Value -is [char]))
-    }
-    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
-        $typeName = Get-StaticConvertTypeName -ConvertAst $Ast
-        return ($typeName -and $typeName.ToLowerInvariant() -eq 'string')
-    }
-    if ($Ast -is [System.Management.Automation.Language.BinaryExpressionAst]) {
-        $op = [string]$Ast.Operator
-        if ($op -in @('Join', 'Format')) { return $true }
-        if ($op -eq 'Plus') {
-            return ((Test-StaticAstStringCompatible -Ast $Ast.Left -Context $Context) -or (Test-StaticAstStringCompatible -Ast $Ast.Right -Context $Context))
-        }
+    if ($state -and $cacheKey -and $state.StringCompatInProgress.Contains($cacheKey)) {
         return $false
     }
-    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
-        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
-        if ($null -eq $expr) { return $false }
-        return (Test-StaticAstStringCompatible -Ast $expr -Context $Context)
+
+    $addedToProgress = $false
+    if ($state -and $cacheKey) {
+        $addedToProgress = $state.StringCompatInProgress.Add($cacheKey)
     }
-    if ($Ast -is [System.Management.Automation.Language.SubExpressionAst]) {
-        $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
-        if ($null -eq $statements -or $statements.Count -ne 1) { return $false }
-        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statements[0]
-        if ($null -eq $expr) { return $false }
-        return (Test-StaticAstStringCompatible -Ast $expr -Context $Context)
+
+    try {
+        $result = $false
+
+        if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $result = $true
+        } elseif ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+            $result = $true
+        } elseif ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
+            $result = (($Ast.Value -is [string]) -or ($Ast.Value -is [char]))
+        } elseif ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $resolved = Resolve-StaticVariableValue -Context $Context -Ast $Ast -AllowEmptyFallback:$false
+            if ($resolved.Success) {
+                $result = (($resolved.Value -is [string]) -or ($resolved.Value -is [char]))
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+            $typeName = Get-StaticConvertTypeName -ConvertAst $Ast
+            $result = ($typeName -and $typeName.ToLowerInvariant() -eq 'string')
+        } elseif ($Ast -is [System.Management.Automation.Language.BinaryExpressionAst]) {
+            $op = [string]$Ast.Operator
+            if ($op -in @('Join', 'Format')) {
+                $result = $true
+            } elseif ($op -eq 'Plus') {
+                $result = ((Test-StaticAstStringCompatible -Ast $Ast.Left -Context $Context -Depth ($Depth + 1)) -or
+                    (Test-StaticAstStringCompatible -Ast $Ast.Right -Context $Context -Depth ($Depth + 1)))
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+            $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
+            if ($null -ne $expr) {
+                $result = (Test-StaticAstStringCompatible -Ast $expr -Context $Context -Depth ($Depth + 1))
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.SubExpressionAst]) {
+            $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
+            if ($null -ne $statements -and $statements.Count -eq 1) {
+                $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statements[0]
+                if ($null -ne $expr) {
+                    $result = (Test-StaticAstStringCompatible -Ast $expr -Context $Context -Depth ($Depth + 1))
+                }
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.MemberExpressionAst] -or $Ast -is [System.Management.Automation.Language.IndexExpressionAst]) {
+            $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+            if ($resolved.Success) {
+                $result = (($resolved.Value -is [string]) -or ($resolved.Value -is [char]) -or ($resolved.Value -is [char[]]))
+            }
+        }
+
+        if ($state -and $cacheKey) {
+            $state.StringCompatCache[$cacheKey] = [bool]$result
+        }
+
+        return [bool]$result
+    } finally {
+        if ($state -and $cacheKey -and $addedToProgress) {
+            $null = $state.StringCompatInProgress.Remove($cacheKey)
+        }
     }
-    return $false
 }
 
 function Resolve-StaticVariableValue {
@@ -734,6 +1906,279 @@ function Resolve-StaticVariableValue {
 
     return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'missing_variable'; Message = ('变量不存在: $' + $name) }
 }
+
+function Try-ConvertToByteArrayFromStaticValue {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($Value -is [byte[]]) {
+        return [byte[]]$Value
+    }
+
+    if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
+        $bytes = New-Object System.Collections.Generic.List[byte]
+        foreach ($item in $Value) {
+            try {
+                $bytes.Add([byte]$item) | Out-Null
+            } catch {
+                return $null
+            }
+        }
+        return $bytes.ToArray()
+    }
+
+    return $null
+}
+
+function Try-GetStaticByteArrayValueFromAst {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Ast) { return $null }
+
+    $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+    if (-not $resolved.Success) { return $null }
+
+    return (Try-ConvertToByteArrayFromStaticValue -Value $resolved.Value)
+}
+
+function Try-DecodeCompressedScriptTextFromReadToEndAst {
+    param(
+        [System.Management.Automation.Language.InvokeMemberExpressionAst]$InvokeAst,
+        [hashtable]$Context,
+        [string]$CallText
+    )
+
+    if ($null -eq $InvokeAst) { return $null }
+    if ([string]::IsNullOrWhiteSpace($CallText)) { return $null }
+    if ($CallText -notmatch '(?i)(DeflateStream|GZipStream)') { return $null }
+
+    $encodingName = if ($CallText -match '(?i)Encoding\]::UTF8') { 'utf8' } elseif ($CallText -match '(?i)Encoding\]::Unicode') { 'unicode' } else { 'ascii' }
+
+    $base64Call = @($InvokeAst.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+                $n.Extent.Text -match '(?i)FromBase64String'
+            }, $true) | Select-Object -First 1)
+    if ($base64Call.Count -gt 0) {
+        $base64Invoke = $base64Call[0]
+        if ($base64Invoke.Arguments -and $base64Invoke.Arguments.Count -gt 0) {
+            $base64String = Try-GetStaticStringValue -Ast $base64Invoke.Arguments[0] -Context $Context
+            if (-not [string]::IsNullOrWhiteSpace($base64String)) {
+                try {
+                    $bytes = [Convert]::FromBase64String($base64String)
+                } catch {
+                    $bytes = $null
+                }
+
+                if ($bytes) {
+                    $text = Try-DecodeCompressedScriptTextFromByteArray -Bytes $bytes -EncodingName $encodingName
+                    if (-not [string]::IsNullOrWhiteSpace($text) -and (Test-PowerShellSyntax -ScriptText $text).IsValid) {
+                        return $text
+                    }
+                }
+            }
+        }
+    }
+
+    $byteArrayAsts = @($InvokeAst.FindAll({
+                param($n)
+                if ($n -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+                    $typeName = Get-StaticConvertTypeName -ConvertAst $n
+                    return ($typeName -and $typeName -match '^(?i:byte\[\])$')
+                }
+                return ($n -is [System.Management.Automation.Language.ArrayLiteralAst] -or $n -is [System.Management.Automation.Language.ArrayExpressionAst])
+            }, $true))
+
+    foreach ($byteAst in $byteArrayAsts) {
+        $bytes = Try-GetStaticByteArrayValueFromAst -Ast $byteAst -Context $Context
+        if (-not $bytes -or $bytes.Length -eq 0) { continue }
+
+        $text = Try-DecodeCompressedScriptTextFromByteArray -Bytes $bytes -EncodingName $encodingName
+        if (-not [string]::IsNullOrWhiteSpace($text) -and (Test-PowerShellSyntax -ScriptText $text).IsValid) {
+            return $text
+        }
+    }
+
+    return $null
+}
+
+function Try-GetStaticStringValue {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Ast) { return $null }
+
+    $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+    if (-not $resolved.Success) { return $null }
+
+    $value = $resolved.Value
+    if ($value -is [psobject] -and $null -ne $value.BaseObject -and $value.BaseObject -ne $value) {
+        $value = $value.BaseObject
+    }
+
+    if ($value -is [string]) {
+        return [string]$value
+    }
+    if ($value -is [char]) {
+        return [string]$value
+    }
+    if ($value -is [char[]]) {
+        return (-join $value)
+    }
+
+    return $null
+}
+
+function Try-DecodeCompressedScriptTextFromByteArray {
+    param(
+        [byte[]]$Bytes,
+        [string]$EncodingName = 'ascii'
+    )
+
+    if (-not $Bytes -or $Bytes.Length -eq 0) { return $null }
+
+    try {
+        $inputStream = [System.IO.MemoryStream]::new($Bytes, $false)
+        try {
+            try {
+                $zipStream = [System.IO.Compression.DeflateStream]::new($inputStream, [System.IO.Compression.CompressionMode]::Decompress, $true)
+            } catch {
+                $inputStream.Position = 0
+                $zipStream = [System.IO.Compression.GZipStream]::new($inputStream, [System.IO.Compression.CompressionMode]::Decompress, $true)
+            }
+
+            try {
+                $outputStream = [System.IO.MemoryStream]::new()
+                try {
+                    $zipStream.CopyTo($outputStream)
+                    $decodedBytes = $outputStream.ToArray()
+                } finally {
+                    $outputStream.Dispose()
+                }
+            } finally {
+                $zipStream.Dispose()
+            }
+        } finally {
+            $inputStream.Dispose()
+        }
+
+        if (-not $decodedBytes -or $decodedBytes.Length -eq 0) { return $null }
+
+        $encoding = switch -Regex ($EncodingName) {
+            '^(?i:utf-?8)$'   { [System.Text.Encoding]::UTF8; break }
+            '^(?i:unicode|utf-?16|utf-?16le)$' { [System.Text.Encoding]::Unicode; break }
+            default { [System.Text.Encoding]::ASCII; break }
+        }
+
+        $text = $encoding.GetString($decodedBytes)
+        if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+        return $text
+    } catch {
+        return $null
+    }
+}
+
+function Try-DecodeStaticScriptTextFromAst {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Ast) { return $null }
+
+    $extentText = if ($Ast.PSObject.Properties['Extent'] -and $Ast.Extent) { [string]$Ast.Extent.Text } else { '' }
+
+    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+        $typeName = Get-StaticConvertTypeName -ConvertAst $Ast
+        if ($typeName -and $typeName.ToLowerInvariant() -eq 'string') {
+            $childDecoded = Try-DecodeStaticScriptTextFromAst -Ast $Ast.Child -Context $Context
+            if (-not [string]::IsNullOrWhiteSpace($childDecoded)) {
+                return $childDecoded
+            }
+
+            $value = Try-GetStaticStringValue -Ast $Ast.Child -Context $Context
+            if (-not [string]::IsNullOrWhiteSpace($value) -and (Test-PowerShellSyntax -ScriptText $value).IsValid) {
+                return $value
+            }
+        }
+    }
+
+    if ($extentText -match '(?i)\[char\]\s*\[\s*\]') {
+        $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+        if ($resolved.Success) {
+            $value = $resolved.Value
+            if ($value -is [psobject] -and $null -ne $value.BaseObject -and $value.BaseObject -ne $value) {
+                $value = $value.BaseObject
+            }
+
+            $text = $null
+            if ($value -is [char[]]) {
+                $text = -join $value
+            } elseif (($value -is [System.Collections.IEnumerable]) -and -not ($value -is [string])) {
+                try {
+                    $chars = @($value | ForEach-Object { [char]$_ })
+                    $text = -join $chars
+                } catch {
+                    $text = $null
+                }
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($text) -and (Test-PowerShellSyntax -ScriptText $text).IsValid) {
+                return $text
+            }
+        }
+    }
+
+    $invokeAsts = @()
+    if ($Ast -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        $invokeAsts = @($Ast)
+    } elseif ($Ast.PSObject.Methods['FindAll']) {
+        $invokeAsts = @($Ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]
+            }, $true))
+    }
+
+    foreach ($invokeAst in $invokeAsts) {
+        $memberName = $null
+        if ($invokeAst.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $memberName = [string]$invokeAst.Member.Value
+        } elseif ($invokeAst.Member) {
+            $memberName = [string]$invokeAst.Member.Extent.Text
+        }
+        if ([string]::IsNullOrWhiteSpace($memberName)) { continue }
+
+        if ($memberName -match '^(?i:ReadToEnd)$') {
+            $callText = [string]$invokeAst.Extent.Text
+
+            if ($callText -match '(?i)(DeflateStream|GZipStream)') {
+                $decodedCompressedText = Try-DecodeCompressedScriptTextFromReadToEndAst -InvokeAst $invokeAst -Context $Context -CallText $callText
+                if (-not [string]::IsNullOrWhiteSpace($decodedCompressedText)) {
+                    return $decodedCompressedText
+                }
+            }
+
+            if ($callText -match '(?i)SecureStringToGlobalAllocUnicode' -or $callText -match '(?i)PtrToStringUni') {
+                $stringValue = Try-GetStaticStringValue -Ast $invokeAst -Context $Context
+                if (-not [string]::IsNullOrWhiteSpace($stringValue) -and (Test-PowerShellSyntax -ScriptText $stringValue).IsValid) {
+                    return $stringValue
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
 function Invoke-StaticBinaryOperator {
     param(
         [string]$OperatorText,
@@ -881,193 +2326,325 @@ function Resolve-StaticAstValue {
     param(
         $Ast,
         [hashtable]$Context,
-        [bool]$AllowEmptyFallback = $false
+        [bool]$AllowEmptyFallback = $false,
+        [int]$Depth = 0
     )
 
     if ($null -eq $Ast) {
-        return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'no_ast'; Message = 'AST 为空' }
+        return New-StaticEvalFailureResult -Reason 'no_ast' -Message 'AST 为空'
     }
 
-    if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
-        return [PSCustomObject]@{ Success = $true; Value = $Ast.Value; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+    if (Test-StaticEvalBudgetExceeded -Context $Context) {
+        return New-StaticEvalFailureResult -Reason 'budget_exceeded' -Message '静态求值预算已耗尽'
     }
-    if ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
-        return [PSCustomObject]@{ Success = $true; Value = $Ast.Value; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+
+    $state = Get-StaticEvalState -Context $Context
+    $depthLimit = if ($state -and $state.ContainsKey('ValueDepthLimit')) { [int]$state.ValueDepthLimit } else { 192 }
+    if ($Depth -ge $depthLimit) {
+        return New-StaticEvalFailureResult -Reason 'depth_limit' -Message ("静态求值递归过深（Depth={0}, Limit={1}）" -f $Depth, $depthLimit)
     }
-    if ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
-        return (Resolve-StaticVariableValue -Context $Context -Ast $Ast -AllowEmptyFallback:$AllowEmptyFallback)
+
+    $cacheKey = Get-StaticAstCacheKey -Ast $Ast -AllowEmptyFallback:$AllowEmptyFallback -Prefix 'value'
+    if ($state -and $cacheKey -and $state.ValueCache.ContainsKey($cacheKey)) {
+        return $state.ValueCache[$cacheKey]
     }
-    if ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
-        $text = [string]$Ast.Value
-        $usedFallback = $false
-        foreach ($nested in @($Ast.NestedExpressions)) {
-            $nestedResult = Resolve-StaticAstValue -Ast $nested -Context $Context -AllowEmptyFallback:$true
-            if (-not $nestedResult.Success) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'expandable_nested'; Message = $nestedResult.Message }
+    if ($state -and $cacheKey -and $state.ValueInProgress.Contains($cacheKey)) {
+        return New-StaticEvalFailureResult -Reason 'cycle_detected' -Message '静态求值检测到循环引用'
+    }
+
+    $addedToProgress = $false
+    if ($state -and $cacheKey) {
+        $addedToProgress = $state.ValueInProgress.Add($cacheKey)
+    }
+
+    try {
+        $result = $null
+
+        if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $result = [PSCustomObject]@{ Success = $true; Value = $Ast.Value; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+        } elseif ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
+            $result = [PSCustomObject]@{ Success = $true; Value = $Ast.Value; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+        } elseif ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $result = Resolve-StaticVariableValue -Context $Context -Ast $Ast -AllowEmptyFallback:$AllowEmptyFallback
+        } elseif ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+            $text = [string]$Ast.Value
+            $usedFallback = $false
+            foreach ($nested in @($Ast.NestedExpressions)) {
+                $nestedResult = Resolve-StaticAstValue -Ast $nested -Context $Context -AllowEmptyFallback:$true -Depth ($Depth + 1)
+                if (-not $nestedResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'expandable_nested'; Message = $nestedResult.Message }
+                    break
+                }
+                $usedFallback = ($usedFallback -or [bool]$nestedResult.UsedEmptyFallback)
+                $replacementText = Convert-StaticInterpolatedValueToString -Value $nestedResult.Value
+                $text = Replace-FirstOccurrence -Text $text -OldValue ([string]$nested.Extent.Text) -NewValue $replacementText
             }
-            $usedFallback = ($usedFallback -or [bool]$nestedResult.UsedEmptyFallback)
-            $replacementText = Convert-StaticInterpolatedValueToString -Value $nestedResult.Value
-            $text = Replace-FirstOccurrence -Text $text -OldValue ([string]$nested.Extent.Text) -NewValue $replacementText
-        }
-        return [PSCustomObject]@{ Success = $true; Value = $text; UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
-    }
-    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
-        $typeName = Get-StaticConvertTypeName -ConvertAst $Ast
-        $childAllowFallback = ($typeName -and $typeName.ToLowerInvariant() -eq 'string')
-        $childResult = Resolve-StaticAstValue -Ast $Ast.Child -Context $Context -AllowEmptyFallback:$childAllowFallback
-        if (-not $childResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'convert_child'; Message = $childResult.Message }
-        }
-        $convertResult = Invoke-StaticConvertOperator -TypeName $typeName -Value $childResult.Value
-        if (-not $convertResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'convert_failed'; Message = $convertResult.Message }
-        }
-        return [PSCustomObject]@{ Success = $true; Value = $convertResult.Value; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = $null; Message = $null }
-    }
-    if ($Ast -is [System.Management.Automation.Language.UnaryExpressionAst]) {
-        $tokenName = [string]$Ast.TokenKind
-        if ($tokenName -in @('PlusPlus', 'MinusMinus', 'PostfixPlusPlus', 'PostfixMinusMinus')) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_unary'; Message = '不支持有副作用的一元操作' }
-        }
-        $childResult = Resolve-StaticAstValue -Ast $Ast.Child -Context $Context -AllowEmptyFallback:$false
-        if (-not $childResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'unary_child'; Message = $childResult.Message }
-        }
-        $operatorText = Get-StaticUnaryOperatorText -TokenKind $Ast.TokenKind
-        $unaryResult = Invoke-StaticUnaryOperator -OperatorText $operatorText -Value $childResult.Value
-        if (-not $unaryResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'unary_failed'; Message = $unaryResult.Message }
-        }
-        return [PSCustomObject]@{ Success = $true; Value = $unaryResult.Value; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = $null; Message = $null }
-    }
-    if ($Ast -is [System.Management.Automation.Language.BinaryExpressionAst]) {
-        $operatorName = [string]$Ast.Operator
-        $childAllowFallback = $false
-        if ($operatorName -in @('Join', 'Format')) {
-            $childAllowFallback = $true
-        } elseif ($operatorName -eq 'Plus') {
-            $childAllowFallback = (Test-StaticAstStringCompatible -Ast $Ast -Context $Context)
-        }
 
-        $leftResult = Resolve-StaticAstValue -Ast $Ast.Left -Context $Context -AllowEmptyFallback:$childAllowFallback
-        if (-not $leftResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$leftResult.UsedEmptyFallback; Reason = 'binary_left'; Message = $leftResult.Message }
-        }
-        $rightResult = Resolve-StaticAstValue -Ast $Ast.Right -Context $Context -AllowEmptyFallback:$childAllowFallback
-        if (-not $rightResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$leftResult.UsedEmptyFallback -or [bool]$rightResult.UsedEmptyFallback); Reason = 'binary_right'; Message = $rightResult.Message }
-        }
+            if (-not $result) {
+                $result = [PSCustomObject]@{ Success = $true; Value = $text; UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+            $typeName = Get-StaticConvertTypeName -ConvertAst $Ast
+            $normalizedTypeName = if ($typeName) { $typeName.ToLowerInvariant() } else { $null }
 
-        $opText = Get-StaticBinaryOperatorText -BinaryAst $Ast
-        $binaryResult = Invoke-StaticBinaryOperator -OperatorText $opText -LeftValue $leftResult.Value -RightValue $rightResult.Value
-        if (-not $binaryResult.Success) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$leftResult.UsedEmptyFallback -or [bool]$rightResult.UsedEmptyFallback); Reason = 'binary_failed'; Message = $binaryResult.Message }
-        }
+            if ($Ast.Child -is [System.Management.Automation.Language.HashtableAst] -and $normalizedTypeName -eq 'ordered') {
+                $result = Resolve-StaticHashtableLiteralValue -HashtableAst $Ast.Child -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1) -Ordered
+            } elseif ($Ast.Child -is [System.Management.Automation.Language.HashtableAst] -and $normalizedTypeName -eq 'pscustomobject') {
+                $hashResult = Resolve-StaticHashtableLiteralValue -HashtableAst $Ast.Child -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1) -Ordered
+                if (-not $hashResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$hashResult.UsedEmptyFallback; Reason = 'convert_child'; Message = $hashResult.Message }
+                } else {
+                    $propertyMap = [ordered]@{}
+                    foreach ($key in @($hashResult.Value.Keys)) {
+                        $propertyMap[[string]$key] = $hashResult.Value[$key]
+                    }
+                    $result = [PSCustomObject]@{ Success = $true; Value = ([pscustomobject]$propertyMap); UsedEmptyFallback = [bool]$hashResult.UsedEmptyFallback; Reason = $null; Message = $null }
+                }
+            }
 
-        return [PSCustomObject]@{
-            Success = $true
-            Value = $binaryResult.Value
-            UsedEmptyFallback = ([bool]$leftResult.UsedEmptyFallback -or [bool]$rightResult.UsedEmptyFallback)
-            Reason = $null
-            Message = $null
-        }
-    }
-    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
-        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
-        if ($null -eq $expr) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_paren'; Message = '括号表达式不是简单表达式' }
-        }
-        return (Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback)
-    }
-    if ($Ast -is [System.Management.Automation.Language.SubExpressionAst]) {
-        $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
-        if ($null -eq $statements) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_subexpression'; Message = '子表达式包含 trap 或为空' }
-        }
+            if (-not $result) {
+                $childAllowFallback = ($typeName -and $typeName.ToLowerInvariant() -eq 'string')
+                $childResult = Resolve-StaticAstValue -Ast $Ast.Child -Context $Context -AllowEmptyFallback:$childAllowFallback -Depth ($Depth + 1)
+                if (-not $childResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'convert_child'; Message = $childResult.Message }
+                } else {
+                    $convertResult = Invoke-StaticConvertOperator -TypeName $typeName -Value $childResult.Value
+                    if (-not $convertResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'convert_failed'; Message = $convertResult.Message }
+                    } else {
+                        $result = [PSCustomObject]@{ Success = $true; Value = $convertResult.Value; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = $null; Message = $null }
+                    }
+                }
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.HashtableAst]) {
+            $result = Resolve-StaticHashtableLiteralValue -HashtableAst $Ast -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+        } elseif ($Ast -is [System.Management.Automation.Language.UnaryExpressionAst]) {
+            $tokenName = [string]$Ast.TokenKind
+            if ($tokenName -in @('PlusPlus', 'MinusMinus', 'PostfixPlusPlus', 'PostfixMinusMinus')) {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_unary'; Message = '不支持有副作用的一元操作' }
+            } else {
+                $childResult = Resolve-StaticAstValue -Ast $Ast.Child -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $childResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'unary_child'; Message = $childResult.Message }
+                } else {
+                    $operatorText = Get-StaticUnaryOperatorText -TokenKind $Ast.TokenKind
+                    $unaryResult = Invoke-StaticUnaryOperator -OperatorText $operatorText -Value $childResult.Value
+                    if (-not $unaryResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = 'unary_failed'; Message = $unaryResult.Message }
+                    } else {
+                        $result = [PSCustomObject]@{ Success = $true; Value = $unaryResult.Value; UsedEmptyFallback = [bool]$childResult.UsedEmptyFallback; Reason = $null; Message = $null }
+                    }
+                }
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.BinaryExpressionAst]) {
+            $operatorName = [string]$Ast.Operator
+            $childAllowFallback = $false
+            if ($operatorName -in @('Join', 'Format')) {
+                $childAllowFallback = $true
+            } elseif ($operatorName -eq 'Plus') {
+                $childAllowFallback = (Test-StaticAstStringCompatible -Ast $Ast -Context $Context -Depth ($Depth + 1))
+            }
 
-        $values = @()
-        $usedFallback = $false
-        foreach ($statement in $statements) {
-            $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statement
+            $leftResult = Resolve-StaticAstValue -Ast $Ast.Left -Context $Context -AllowEmptyFallback:$childAllowFallback -Depth ($Depth + 1)
+            if (-not $leftResult.Success) {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$leftResult.UsedEmptyFallback; Reason = 'binary_left'; Message = $leftResult.Message }
+            } else {
+                $rightResult = Resolve-StaticAstValue -Ast $Ast.Right -Context $Context -AllowEmptyFallback:$childAllowFallback -Depth ($Depth + 1)
+                if (-not $rightResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$leftResult.UsedEmptyFallback -or [bool]$rightResult.UsedEmptyFallback); Reason = 'binary_right'; Message = $rightResult.Message }
+                } else {
+                    $opText = Get-StaticBinaryOperatorText -BinaryAst $Ast
+                    $binaryResult = Invoke-StaticBinaryOperator -OperatorText $opText -LeftValue $leftResult.Value -RightValue $rightResult.Value
+                    if (-not $binaryResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$leftResult.UsedEmptyFallback -or [bool]$rightResult.UsedEmptyFallback); Reason = 'binary_failed'; Message = $binaryResult.Message }
+                    } else {
+                        $result = [PSCustomObject]@{
+                            Success = $true
+                            Value = $binaryResult.Value
+                            UsedEmptyFallback = ([bool]$leftResult.UsedEmptyFallback -or [bool]$rightResult.UsedEmptyFallback)
+                            Reason = $null
+                            Message = $null
+                        }
+                    }
+                }
+            }
+        } elseif ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+            $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
             if ($null -eq $expr) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '子表达式包含暂不支持的语句类型' }
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_paren'; Message = '括号表达式不是简单表达式' }
+            } else {
+                $result = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
             }
-            $exprResult = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback
-            if (-not $exprResult.Success) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback); Reason = 'subexpression_child'; Message = $exprResult.Message }
-            }
-            $usedFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback)
-            $values += ,$exprResult.Value
-        }
+        } elseif ($Ast -is [System.Management.Automation.Language.SubExpressionAst]) {
+            $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
+            if ($null -eq $statements) {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_subexpression'; Message = '子表达式包含 trap 或为空' }
+            } else {
+                $values = @()
+                $usedFallback = $false
+                foreach ($statement in $statements) {
+                    $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statement
+                    if ($null -eq $expr) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '子表达式包含暂不支持的语句类型' }
+                        break
+                    }
+                    $exprResult = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                    if (-not $exprResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback); Reason = 'subexpression_child'; Message = $exprResult.Message }
+                        break
+                    }
+                    $usedFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback)
+                    $values += ,$exprResult.Value
+                }
 
-        if ($values.Count -eq 0) {
-            return [PSCustomObject]@{ Success = $true; Value = @(); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
-        }
-        if ($values.Count -eq 1) {
-            return [PSCustomObject]@{ Success = $true; Value = $values[0]; UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
-        }
-        return [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
-    }
-    if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
-        $values = @()
-        $usedFallback = $false
-        foreach ($element in @($Ast.Elements)) {
-            $itemResult = Resolve-StaticAstValue -Ast $element -Context $Context -AllowEmptyFallback:$AllowEmptyFallback
-            if (-not $itemResult.Success) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$itemResult.UsedEmptyFallback); Reason = 'array_literal_child'; Message = $itemResult.Message }
+                if (-not $result) {
+                    if ($values.Count -eq 0) {
+                        $result = [PSCustomObject]@{ Success = $true; Value = @(); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
+                    } elseif ($values.Count -eq 1) {
+                        $result = [PSCustomObject]@{ Success = $true; Value = $values[0]; UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
+                    } else {
+                        $result = [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
+                    }
+                }
             }
-            $usedFallback = ($usedFallback -or [bool]$itemResult.UsedEmptyFallback)
-            $values += ,$itemResult.Value
-        }
-        return [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
-    }
-    if ($Ast -is [System.Management.Automation.Language.ArrayExpressionAst]) {
-        $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
-        if ($null -eq $statements) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_array_expression'; Message = '数组表达式包含 trap 或为空' }
-        }
+        } elseif ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+            $values = @()
+            $usedFallback = $false
+            foreach ($element in @($Ast.Elements)) {
+                $itemResult = Resolve-StaticAstValue -Ast $element -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                if (-not $itemResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$itemResult.UsedEmptyFallback); Reason = 'array_literal_child'; Message = $itemResult.Message }
+                    break
+                }
+                $usedFallback = ($usedFallback -or [bool]$itemResult.UsedEmptyFallback)
+                $values += ,$itemResult.Value
+            }
 
-        $values = @()
-        $usedFallback = $false
-        foreach ($statement in $statements) {
-            $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statement
-            if ($null -eq $expr) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '数组表达式包含暂不支持的语句类型' }
+            if (-not $result) {
+                $result = [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
             }
-            $exprResult = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback
-            if (-not $exprResult.Success) {
-                return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback); Reason = 'array_expression_child'; Message = $exprResult.Message }
+        } elseif ($Ast -is [System.Management.Automation.Language.ArrayExpressionAst]) {
+            $statements = Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression
+            if ($null -eq $statements) {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_array_expression'; Message = '数组表达式包含 trap 或为空' }
+            } else {
+                $values = @()
+                $usedFallback = $false
+                foreach ($statement in $statements) {
+                    $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statement
+                    if ($null -eq $expr) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $usedFallback; Reason = 'unsupported_pipeline'; Message = '数组表达式包含暂不支持的语句类型' }
+                        break
+                    }
+                    $exprResult = Resolve-StaticAstValue -Ast $expr -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                    if (-not $exprResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback); Reason = 'array_expression_child'; Message = $exprResult.Message }
+                        break
+                    }
+                    $usedFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback)
+                    if (($exprResult.Value -is [System.Collections.IEnumerable]) -and -not ($exprResult.Value -is [string])) {
+                        foreach ($item in $exprResult.Value) {
+                            $values += ,$item
+                        }
+                    } else {
+                        $values += ,$exprResult.Value
+                    }
+                }
+
+                if (-not $result) {
+                    $result = [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
+                }
             }
-            $usedFallback = ($usedFallback -or [bool]$exprResult.UsedEmptyFallback)
-            if (($exprResult.Value -is [System.Collections.IEnumerable]) -and -not ($exprResult.Value -is [string])) {
-                foreach ($item in $exprResult.Value) {
-                    $values += ,$item
+        } elseif ($Ast -is [System.Management.Automation.Language.MemberExpressionAst]) {
+            if ($Ast.Static) {
+                $memberName = Get-StaticMemberNameText -MemberAst $Ast.Member -Context $Context
+                $targetType = if ($Ast.Expression -is [System.Management.Automation.Language.TypeExpressionAst]) {
+                    Resolve-StaticTypeFromTypeExpressionAst -TypeExpressionAst $Ast.Expression
+                } else {
+                    $null
+                }
+
+                if ([string]::IsNullOrWhiteSpace($memberName)) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'member_name'; Message = '成员名无法静态解析' }
+                } elseif ($null -eq $targetType) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_static_member'; Message = '静态成员访问的类型无法解析' }
+                } else {
+                    $staticMemberResult = Resolve-StaticTypeMemberAccessValue -TargetType $targetType -MemberName $memberName
+                    if (-not $staticMemberResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_static_member'; Message = $staticMemberResult.Message }
+                    } else {
+                        $result = [PSCustomObject]@{ Success = $true; Value = $staticMemberResult.Value; UsedEmptyFallback = $false; Reason = $null; Message = $null }
+                    }
                 }
             } else {
-                $values += ,$exprResult.Value
+                $targetResult = Resolve-StaticAstValue -Ast $Ast.Expression -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $targetResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$targetResult.UsedEmptyFallback; Reason = 'member_target'; Message = $targetResult.Message }
+                } else {
+                    $memberName = Get-StaticMemberNameText -MemberAst $Ast.Member -Context $Context
+                    if ([string]::IsNullOrWhiteSpace($memberName)) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$targetResult.UsedEmptyFallback; Reason = 'member_name'; Message = '成员名无法静态解析' }
+                    } else {
+                        $memberResult = Resolve-StaticMemberAccessValue -TargetValue $targetResult.Value -MemberName $memberName
+                        if (-not $memberResult.Success) {
+                            $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$targetResult.UsedEmptyFallback; Reason = 'member_failed'; Message = $memberResult.Message }
+                        } else {
+                            $result = [PSCustomObject]@{ Success = $true; Value = $memberResult.Value; UsedEmptyFallback = [bool]$targetResult.UsedEmptyFallback; Reason = $null; Message = $null }
+                        }
+                    }
+                }
             }
-        }
-        return [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
-    }
-    if ($Ast -is [System.Management.Automation.Language.CommandAst]) {
-        # 尝试解码 powershell/pwsh -EncodedCommand 调用
-        $decodedInfo = Try-DecodeEncodedCommand -CommandAst $Ast
-        if ($decodedInfo) {
-            # 返回解码后的文本作为“原样脚本文本”替换结果，避免后续被序列化成单引号字符串
-            return [PSCustomObject]@{
-                Success            = $true
-                Value              = $decodedInfo.ReplacementText
-                RawReplacementText = $decodedInfo.ReplacementText
-                UsedEmptyFallback  = $false
-                Reason             = $null
-                Message            = $null
+        } elseif ($Ast -is [System.Management.Automation.Language.IndexExpressionAst]) {
+            $targetResult = Resolve-StaticAstValue -Ast $Ast.Target -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+            if (-not $targetResult.Success) {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$targetResult.UsedEmptyFallback; Reason = 'index_target'; Message = $targetResult.Message }
+            } else {
+                $indexResult = Resolve-StaticAstValue -Ast $Ast.Index -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $indexResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$indexResult.UsedEmptyFallback); Reason = 'index_value'; Message = $indexResult.Message }
+                } else {
+                    $accessResult = Resolve-StaticIndexAccessValue -TargetValue $targetResult.Value -IndexValue $indexResult.Value
+                    if (-not $accessResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$indexResult.UsedEmptyFallback); Reason = 'index_failed'; Message = $accessResult.Message }
+                    } else {
+                        $result = [PSCustomObject]@{
+                            Success = $true
+                            Value = $accessResult.Value
+                            UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$indexResult.UsedEmptyFallback)
+                            Reason = $null
+                            Message = $null
+                        }
+                    }
+                }
             }
+        } elseif ($Ast -is [System.Management.Automation.Language.CommandAst]) {
+            $decodedInfo = Try-DecodeEncodedCommand -CommandAst $Ast
+            if ($decodedInfo) {
+                $result = [PSCustomObject]@{
+                    Success            = $true
+                    Value              = $decodedInfo.ReplacementText
+                    RawReplacementText = $decodedInfo.ReplacementText
+                    UsedEmptyFallback  = $false
+                    Reason             = $null
+                    Message            = $null
+                }
+            } else {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_command'; Message = 'CommandAst 不是 EncodedCommand 调用' }
+            }
+        } else {
+            $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_ast'; Message = ('不支持的 AST 类型: ' + $Ast.GetType().Name) }
         }
-        # 如果不是 EncodedCommand，返回失败
-        return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_command'; Message = 'CommandAst 不是 EncodedCommand 调用' }
-    }
 
-    return [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = $false; Reason = 'unsupported_ast'; Message = ('不支持的 AST 类型: ' + $Ast.GetType().Name) }
+        if ($state -and $cacheKey -and (Test-StaticEvalResultCacheable -Result $result)) {
+            $state.ValueCache[$cacheKey] = $result
+        }
+
+        return $result
+    } finally {
+        if ($state -and $cacheKey -and $addedToProgress) {
+            $null = $state.ValueInProgress.Remove($cacheKey)
+        }
+    }
 }
 
 function Get-ReplacementCandidatePriority {
@@ -1187,7 +2764,9 @@ function Get-DynamicInvokeReplacementCandidates {
         }
     }
 
+    $recordIndex = 0
     foreach ($rec in $Context.DynamicInvokeResults) {
+        $recordIndex++
         if (-not $rec) { continue }
 
         $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
@@ -1216,13 +2795,21 @@ function Get-DynamicInvokeReplacementCandidates {
             $skipped += New-SkipRecord -Reason 'dynamic_node_missing' -Message "DynamicInvoke 节点不存在: NodeId=$nodeId" -Item $baseItem
             continue
         }
-        if ($node.PSObject.Properties['RuntimeGenerated'] -and [bool]$node.RuntimeGenerated) {
-            $skipped += New-SkipRecord -Reason 'dynamic_runtime_node' -Message '运行时子图中的 DynamicInvoke 不直接回写原脚本' -Item $baseItem
+
+        $originInfo = Resolve-DynamicInvokeOriginInfo -Context $Context -Record $rec -Node $node
+        if (-not $originInfo.Success) {
+            $skipReason = if (Test-RuntimeGeneratedNode -Node $node) { 'dynamic_runtime_unmapped' } else { 'dynamic_no_offset' }
+            $skipMessage = if ($skipReason -eq 'dynamic_runtime_unmapped') {
+                '运行时子图中的 DynamicInvoke 已有结果，但未能映射回原脚本位点'
+            } else {
+                'DynamicInvoke 无原始 offset，跳过'
+            }
+            $skipped += New-SkipRecord -Reason $skipReason -Message $skipMessage -Item $baseItem
             continue
         }
 
-        $start = $node.TextStartOffset
-        $end = $node.TextEndOffset
+        $start = [int]$originInfo.StartOffset
+        $end = [int]$originInfo.EndOffset
         if ($null -eq $start -or $null -eq $end) {
             $skipped += New-SkipRecord -Reason 'dynamic_no_offset' -Message 'DynamicInvoke 无原始 offset，跳过' -Item $baseItem
             continue
@@ -1246,7 +2833,7 @@ function Get-DynamicInvokeReplacementCandidates {
 
         $original = $ScriptText.Substring($start, $end - $start)
         if ($original -eq $replacement) {
-            $skipped += New-SkipRecord -Reason 'no_change' -Message 'DynamicInvoke replacement 与原片段一致' -Item $baseItem
+            $skipped += New-SkipRecord -Reason 'dynamic_outer_candidate_ineffective' -Message 'DynamicInvoke replacement 与原片段一致，外层候选不参与压制内层候选' -Item $baseItem
             continue
         }
 
@@ -1263,15 +2850,98 @@ function Get-DynamicInvokeReplacementCandidates {
             UsedEmptyFallback = $false
             ResultType  = 'String'
             Executed    = $true
+            OriginStartOffset = $start
+            OriginEndOffset = $end
+            OriginRangeKey = (Get-ReplacementRangeKey -StartOffset $start -EndOffset $end)
+            OriginNodeId = [int]$originInfo.NodeId
+            OriginRuntimeDepth = [int]$originInfo.RuntimeDepth
+            IsOriginMappedFromRuntime = [bool]$originInfo.ViaRuntime
+            DynamicRecordIndex = $recordIndex
+            ProtectsInnerCandidates = $true
             DynamicStopReason = if ($rec -is [hashtable]) { [string]$rec['StopReason'] } else { [string]$rec.StopReason }
             DynamicStopMessage = if ($rec -is [hashtable]) { [string]$rec['StopMessage'] } else { [string]$rec.StopMessage }
         }
     }
 
-    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    $merged = Merge-DynamicInvokeReplacementCandidates -Candidates $candidates
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-PreferredDynamicReplacementCandidate {
+    param(
+        [Parameter(Mandatory)]$Left,
+        [Parameter(Mandatory)]$Right
+    )
+
+    $leftDepth = if ($Left.PSObject.Properties['OriginRuntimeDepth']) { [int]$Left.OriginRuntimeDepth } else { 0 }
+    $rightDepth = if ($Right.PSObject.Properties['OriginRuntimeDepth']) { [int]$Right.OriginRuntimeDepth } else { 0 }
+    if ($leftDepth -ne $rightDepth) {
+        return $(if ($rightDepth -gt $leftDepth) { $Right } else { $Left })
+    }
+
+    $leftIndex = if ($Left.PSObject.Properties['DynamicRecordIndex']) { [int]$Left.DynamicRecordIndex } else { 0 }
+    $rightIndex = if ($Right.PSObject.Properties['DynamicRecordIndex']) { [int]$Right.DynamicRecordIndex } else { 0 }
+    if ($leftIndex -ne $rightIndex) {
+        return $(if ($rightIndex -gt $leftIndex) { $Right } else { $Left })
+    }
+
+    $leftRuntime = if ($Left.PSObject.Properties['IsOriginMappedFromRuntime']) { [bool]$Left.IsOriginMappedFromRuntime } else { $false }
+    $rightRuntime = if ($Right.PSObject.Properties['IsOriginMappedFromRuntime']) { [bool]$Right.IsOriginMappedFromRuntime } else { $false }
+    if ($leftRuntime -ne $rightRuntime) {
+        return $(if ($rightRuntime) { $Right } else { $Left })
+    }
+
+    $leftLen = if ($Left.PSObject.Properties['Replacement'] -and $null -ne $Left.Replacement) { ([string]$Left.Replacement).Length } else { 0 }
+    $rightLen = if ($Right.PSObject.Properties['Replacement'] -and $null -ne $Right.Replacement) { ([string]$Right.Replacement).Length } else { 0 }
+    if ($leftLen -ne $rightLen) {
+        return $(if ($rightLen -gt $leftLen) { $Right } else { $Left })
+    }
+
+    return $Left
+}
+
+function Merge-DynamicInvokeReplacementCandidates {
+    param([array]$Candidates)
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $map = @{}
+    $skipped = @()
+    foreach ($cand in @($Candidates | Sort-Object StartOffset, EndOffset, DynamicRecordIndex)) {
+        if (-not $cand) { continue }
+
+        $key = Get-ReplacementRangeKey -StartOffset $cand.StartOffset -EndOffset $cand.EndOffset
+        if ([string]::IsNullOrWhiteSpace($key)) { continue }
+
+        if (-not $map.ContainsKey($key)) {
+            $map[$key] = $cand
+            continue
+        }
+
+        $existing = $map[$key]
+        $preferred = Get-PreferredDynamicReplacementCandidate -Left $existing -Right $cand
+        $dropped = if ($preferred -eq $existing) { $cand } else { $existing }
+        if ($preferred -ne $existing) {
+            $map[$key] = $preferred
+        }
+
+        $reason = if ([string]$existing.Replacement -eq [string]$cand.Replacement) { 'duplicate' } else { 'dynamic_same_range_preferred' }
+        $message = if ($reason -eq 'duplicate') {
+            "DynamicInvoke 同区间重复记录，已去重: [$($cand.StartOffset)-$($cand.EndOffset)]"
+        } else {
+            '同区间 DynamicInvoke 候选冲突，保留更深或更新的候选'
+        }
+        $skipped += New-SkipRecord -Reason $reason -Message $message -Item $dropped
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($map.Values | Sort-Object StartOffset, EndOffset)
+        Skipped    = @($skipped)
     }
 }
 
@@ -1347,11 +3017,13 @@ function Filter-CandidatesPreferDynamicInvoke {
         $coveringDynamic = $dynamicCandidates | Where-Object {
             $_.StartOffset -le $cand.StartOffset -and
             $_.EndOffset -ge $cand.EndOffset -and
+            (Test-EffectiveDynamicReplacementCandidate -Candidate $_) -and
+            ($_.PSObject.Properties['ProtectsInnerCandidates'] -and [bool]$_.ProtectsInnerCandidates) -and
             (Get-ReplacementCandidatePriority -Candidate $_) -gt (Get-ReplacementCandidatePriority -Candidate $cand)
         } | Sort-Object StartOffset, @{ Expression = { $_.EndOffset - $_.StartOffset } } | Select-Object -First 1
 
         if ($coveringDynamic) {
-            $skipped += New-SkipRecord -Reason 'prefer_dynamic_invoke' -Message '内层候选被更高优先级的 DynamicInvoke 候选覆盖，优先保留整条动态代码替换' -Item $cand
+            $skipped += New-SkipRecord -Reason 'dynamic_preferred_outer_effective' -Message '外层 DynamicInvoke 候选有效，内层候选被更高优先级整段替换覆盖' -Item $cand
             continue
         }
 
@@ -1364,20 +3036,74 @@ function Filter-CandidatesPreferDynamicInvoke {
     }
 }
 
+function Test-StaticLowConfidenceCandidateAutoApply {
+    param(
+        $Candidate,
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][hashtable]$Context,
+        $ContextInfo = $null
+    )
+
+    if (-not $Candidate) { return $false }
+    if (-not $Candidate.PSObject.Properties['SourceKind'] -or [string]$Candidate.SourceKind -ne 'Static') { return $false }
+    if (-not $Candidate.PSObject.Properties['UsedEmptyFallback'] -or -not [bool]$Candidate.UsedEmptyFallback) { return $true }
+
+    if ($null -eq $ContextInfo) {
+        $ContextInfo = Get-ReplacementContextInfoFromScriptText -ScriptText $ScriptText
+    }
+
+    $start = if ($Candidate.PSObject.Properties['StartOffset']) { [int]$Candidate.StartOffset } else { $null }
+    $end = if ($Candidate.PSObject.Properties['EndOffset']) { [int]$Candidate.EndOffset } else { $null }
+    $rangeKey = Get-ReplacementRangeKey -StartOffset $start -EndOffset $end
+    $replacement = if ($Candidate.PSObject.Properties['Replacement']) { [string]$Candidate.Replacement } else { $null }
+    $original = if ($Candidate.PSObject.Properties['Original']) {
+        [string]$Candidate.Original
+    } elseif ($null -ne $start -and $null -ne $end -and $start -ge 0 -and $end -gt $start -and $end -le $ScriptText.Length) {
+        $ScriptText.Substring($start, $end - $start)
+    } else {
+        $null
+    }
+
+    if ($rangeKey -and $ContextInfo.CommandNameRangeKeys.ContainsKey($rangeKey)) { return $true }
+    if ($null -ne $start -and $null -ne $end -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $ContextInfo.DynamicPayloadRanges)) { return $true }
+    if ($replacement -match '^(?i:https?|ftp)://\S+$') { return $true }
+
+    $trim = if ($null -ne $replacement) { $replacement.Trim() } else { '' }
+    if ($trim.StartsWith('{') -and $trim.EndsWith('}')) {
+        $check = Test-PowerShellSyntax -ScriptText $trim
+        if ($check.IsValid) { return $true }
+    }
+
+    if (([string]$original -match '(?i)(FromBase64String|EncodedCommand|DeflateStream|GZipStream|ScriptBlock\]::Create|NewScriptBlock|IEX|Invoke-Expression)') -and
+        -not [string]::IsNullOrWhiteSpace($replacement)) {
+        return $true
+    }
+
+    return $false
+}
+
 function Get-StaticReplacementCandidates {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
-        [Parameter(Mandatory)][string]$ScriptText
+        [Parameter(Mandatory)][string]$ScriptText,
+        [int]$TimeBudgetMs = 0
     )
 
     $candidates = @()
     $skipped = @()
     $nodes = @()
+    $budgetExceeded = $false
     if ($Context -and $Context.CFG -and $Context.CFG.Nodes) {
         $nodes = @($Context.CFG.Nodes | Sort-Object Id)
     }
+    $null = Reset-StaticEvalState -Context $Context -TimeBudgetMs $TimeBudgetMs
 
     foreach ($node in $nodes) {
+        if (Test-StaticEvalBudgetExceeded -Context $Context) {
+            $skipped += New-SkipRecord -Reason 'static_budget_exceeded' -Message '静态候选阶段预算已耗尽，停止继续扫描。' -Item $null
+            $budgetExceeded = $true
+            break
+        }
         if (-not $node -or -not $node.Resolvables) {
             continue
         }
@@ -1387,6 +3113,11 @@ function Get-StaticReplacementCandidates {
         # 即使节点被执行过，静态可解析的表达式仍然应该被处理
 
         foreach ($r in @($node.Resolvables)) {
+            if (Test-StaticEvalBudgetExceeded -Context $Context) {
+                $skipped += New-SkipRecord -Reason 'static_budget_exceeded' -Message '静态候选阶段预算已耗尽，停止继续扫描。' -Item $null
+                $budgetExceeded = $true
+                break
+            }
             if (-not $r) { continue }
             $start = $r.StartOffset
             $end = $r.EndOffset
@@ -1411,52 +3142,98 @@ function Get-StaticReplacementCandidates {
                 continue
             }
 
-            $resolved = Resolve-StaticAstValue -Ast $r.Ast -Context $Context -AllowEmptyFallback:$false
-            if (-not $resolved.Success) {
-                $message = if ([string]::IsNullOrWhiteSpace([string]$resolved.Message)) { '静态求值失败' } else { [string]$resolved.Message }
-                $skipped += New-SkipRecord -Reason 'static_eval_failed' -Message $message -Item $baseItem
-                continue
-            }
-            if (-not (Test-StaticReplacementScalarValue -Value $resolved.Value)) {
-                $skipped += New-SkipRecord -Reason 'static_non_scalar' -Message ('静态结果非标量: ' + (Get-StaticValueTypeName -Value $resolved.Value)) -Item $baseItem
-                continue
-            }
+            try {
+                $decodedScriptText = Try-DecodeStaticScriptTextFromAst -Ast $r.Ast -Context $Context
+                if (-not [string]::IsNullOrWhiteSpace($decodedScriptText)) {
+                    $replacement = $decodedScriptText
+                    $original = $ScriptText.Substring($start, $end - $start)
+                    if ($original -eq $replacement) {
+                        $skipped += New-SkipRecord -Reason 'static_no_change' -Message '静态整段解码结果与原片段一致' -Item $baseItem
+                        continue
+                    }
 
-            if ($resolved.PSObject.Properties['RawReplacementText']) {
-                $replacement = [string]$resolved.RawReplacementText
-            } else {
-                $replacement = [string](Format-ResolvableValue $resolved.Value)
-            }
-            if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
-                $skipped += New-SkipRecord -Reason 'static_blocked' -Message '静态结果为占位符，跳过' -Item $baseItem
+                    $candidates += [PSCustomObject]@{
+                        StartOffset = $start
+                        EndOffset = $end
+                        Replacement = $replacement
+                        Original = $original
+                        Type = $r.Type
+                        Depth = $r.Depth
+                        NodeId = $nodeId
+                        SourceKind = 'Static'
+                        Confidence = 'High'
+                        UsedEmptyFallback = $false
+                        ResultType = 'DecodedScriptText'
+                        Executed = $false
+                        VariableName = $null
+                        IsSimpleVariable = $false
+                        IsValueChanged = $false
+                        ObservedValueCount = 1
+                    }
+                    continue
+                }
+
+                $resolved = Resolve-StaticAstValue -Ast $r.Ast -Context $Context -AllowEmptyFallback:$false
+                if (-not $resolved.Success) {
+                    $message = if ([string]::IsNullOrWhiteSpace([string]$resolved.Message)) { '静态求值失败' } else { [string]$resolved.Message }
+                    $reason = if ([string]$resolved.Reason -eq 'budget_exceeded') { 'static_budget_exceeded' } else { 'static_eval_failed' }
+                    $skipped += New-SkipRecord -Reason $reason -Message $message -Item $baseItem
+                    if ([string]$resolved.Reason -eq 'budget_exceeded') {
+                        $budgetExceeded = $true
+                        break
+                    }
+                    continue
+                }
+                if (-not (Test-StaticReplacementScalarValue -Value $resolved.Value)) {
+                    $skipped += New-SkipRecord -Reason 'static_non_scalar' -Message ('静态结果非标量: ' + (Get-StaticValueTypeName -Value $resolved.Value)) -Item $baseItem
+                    continue
+                }
+
+                if ($resolved.PSObject.Properties['RawReplacementText']) {
+                    $replacement = [string]$resolved.RawReplacementText
+                } else {
+                    $replacement = [string](Format-ResolvableValue $resolved.Value)
+                }
+                if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
+                    $skipped += New-SkipRecord -Reason 'static_blocked' -Message '静态结果为占位符，跳过' -Item $baseItem
+                    continue
+                }
+
+                $original = $ScriptText.Substring($start, $end - $start)
+                if ($original -eq $replacement) {
+                    $skipped += New-SkipRecord -Reason 'static_no_change' -Message '静态替换无变化' -Item $baseItem
+                    continue
+                }
+
+                $confidence = if ([bool]$resolved.UsedEmptyFallback) { 'Low' } else { 'High' }
+                $candidates += [PSCustomObject]@{
+                    StartOffset = $start
+                    EndOffset = $end
+                    Replacement = $replacement
+                    Original = $original
+                    Type = $r.Type
+                    Depth = $r.Depth
+                    NodeId = $nodeId
+                    SourceKind = 'Static'
+                    Confidence = $confidence
+                    UsedEmptyFallback = [bool]$resolved.UsedEmptyFallback
+                    ResultType = (Get-StaticValueTypeName -Value $resolved.Value)
+                    Executed = $false
+                    VariableName = $null
+                    IsSimpleVariable = $false
+                    IsValueChanged = $false
+                    ObservedValueCount = 1
+                }
+            } catch {
+                $ex = $_.Exception
+                $message = if ($ex) { "{0}: {1}" -f $ex.GetType().Name, $ex.Message } else { [string]$_ }
+                $skipped += New-SkipRecord -Reason 'static_exception' -Message ('静态候选异常，已跳过: ' + $message) -Item $baseItem
                 continue
             }
+        }
 
-            $original = $ScriptText.Substring($start, $end - $start)
-            if ($original -eq $replacement) {
-                $skipped += New-SkipRecord -Reason 'static_no_change' -Message '静态替换无变化' -Item $baseItem
-                continue
-            }
-
-            $confidence = if ([bool]$resolved.UsedEmptyFallback) { 'Low' } else { 'High' }
-            $candidates += [PSCustomObject]@{
-                StartOffset = $start
-                EndOffset = $end
-                Replacement = $replacement
-                Original = $original
-                Type = $r.Type
-                Depth = $r.Depth
-                NodeId = $nodeId
-                SourceKind = 'Static'
-                Confidence = $confidence
-                UsedEmptyFallback = [bool]$resolved.UsedEmptyFallback
-                ResultType = (Get-StaticValueTypeName -Value $resolved.Value)
-                Executed = $false
-                VariableName = $null
-                IsSimpleVariable = $false
-                IsValueChanged = $false
-                ObservedValueCount = 1
-            }
+        if ($budgetExceeded) {
+            break
         }
     }
 
@@ -1547,6 +3324,10 @@ function Get-ReplacementsFromResolvableResults {
         $original = $ScriptText.Substring($start, $end - $start)
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'no_change' -Message 'replacement 与原片段一致' -Item $baseItem
+            continue
+        }
+        if (Test-FormattingOnlyEquivalentReplacement -Original $original -Replacement $replacement -Type $type) {
+            $skipped += New-SkipRecord -Reason 'formatting_only' -Message 'replacement 仅改变集合包装格式，跳过以避免来回震荡' -Item $baseItem
             continue
         }
 
@@ -2285,6 +4066,133 @@ function Invoke-NormalizePlainScriptText {
     return $working
 }
 
+function Invoke-CanonicalizeWildcardCommandTargets {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    if (-not (Get-Command Resolve-CommandNameFromGetCommandExpression -ErrorAction SilentlyContinue) -or
+        -not (Get-Command Resolve-SafeCommandNameExpressionValue -ErrorAction SilentlyContinue) -or
+        -not (Get-Command Convert-ResolvedCommandCandidateToName -ErrorAction SilentlyContinue) -or
+        -not (Get-Command Test-CommandNameExistsInContext -ErrorAction SilentlyContinue) -or
+        -not (Get-Command Get-SafeCommandLookupResults -ErrorAction SilentlyContinue)) {
+        return $ScriptText
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $dummyContext = @{
+        CFG = @{ DefinedAliases = @{} }
+        FunctionSubgraphs = @{}
+        ScriptBlockSubgraphs = @{}
+        ExecContext = $null
+    }
+
+    $execContext = $null
+    try {
+        $execContext = New-ExecutionContext
+        $dummyContext.ExecContext = $execContext
+    } catch {
+        $execContext = $null
+    }
+
+    $resolveCanonicalCommandName = {
+        param([string]$Name)
+
+        if ([string]::IsNullOrWhiteSpace($Name)) {
+            return $null
+        }
+
+        $lookup = @(Get-SafeCommandLookupResults -Name $Name) | Select-Object -First 1
+        if ($lookup) {
+            if ($lookup.CommandType -eq [System.Management.Automation.CommandTypes]::Alias -and
+                -not [string]::IsNullOrWhiteSpace([string]$lookup.Definition)) {
+                return [string]$lookup.Definition
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$lookup.Name)) {
+                return [string]$lookup.Name
+            }
+        }
+
+        $compatAlias = Resolve-CompatibilityAliasName -Name $Name
+        if (-not [string]::IsNullOrWhiteSpace($compatAlias)) {
+            return [string]$compatAlias
+        }
+
+        return [string]$Name
+    }
+
+    try {
+        $replacements = @()
+        $commandAsts = @($parse.Ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.CommandAst]
+            }, $true))
+
+        foreach ($cmdAst in $commandAsts) {
+            if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -eq 0) { continue }
+
+            $firstElement = $cmdAst.CommandElements[0]
+            if (-not $firstElement -or -not $firstElement.Extent) { continue }
+            if ($cmdAst.GetCommandName() -and
+                (($firstElement -is [System.Management.Automation.Language.StringConstantExpressionAst]) -or
+                 ($firstElement -is [System.Management.Automation.Language.ExpandableStringExpressionAst]))) {
+                continue
+            }
+
+            $resolvedName = $null
+            $safeEval = Resolve-SafeCommandNameExpressionValue -Ast $firstElement -Context $dummyContext
+            if ($safeEval -and $safeEval.Success) {
+                $candidateName = Convert-ResolvedCommandCandidateToName -Value $safeEval.Value
+                if (Test-CommandNameExistsInContext -CommandName $candidateName -Context $dummyContext) {
+                    $resolvedName = & $resolveCanonicalCommandName $candidateName
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($resolvedName)) {
+                $resolution = Resolve-CommandNameFromGetCommandExpression -CommandAst $cmdAst -FirstElementAst $firstElement -Context $dummyContext
+                if ($resolution -and $resolution.Success) {
+                    $resolvedName = & $resolveCanonicalCommandName ([string]$resolution.ResolvedName)
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($resolvedName)) { continue }
+            if ([string]$firstElement.Extent.Text -eq $resolvedName) { continue }
+
+            $replacements += [PSCustomObject]@{
+                Start = [int]$firstElement.Extent.StartOffset
+                End   = [int]$firstElement.Extent.EndOffset
+                Text  = [string]$resolvedName
+            }
+        }
+    } finally {
+        if ($execContext) {
+            Close-ExecutionContext -ExecContext $execContext
+        }
+    }
+
+    if ($replacements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $result = $ScriptText
+    foreach ($r in @($replacements | Sort-Object Start -Descending)) {
+        $result = $result.Substring(0, $r.Start) + $r.Text + $result.Substring($r.End)
+    }
+
+    $check = Test-PowerShellSyntax -ScriptText $result
+    if ($check.IsValid) {
+        return $result
+    }
+
+    return $ScriptText
+}
+
 function Invoke-PostProcessDeobfuscatedScriptText {
     param([Parameter(Mandatory)][string]$ScriptText)
 
@@ -2303,6 +4211,7 @@ function Invoke-PostProcessDeobfuscatedScriptText {
         $working = $payloadText
     }
 
+    $working = Invoke-CanonicalizeWildcardCommandTargets -ScriptText $working
     $normalized = Invoke-NormalizePlainScriptText -ScriptText $working
     $check = Test-PowerShellSyntax -ScriptText $normalized
     if ($check.IsValid) {
@@ -2410,7 +4319,7 @@ $globalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $currentRoundIsMaterializedPayload = $false
 
 for ($round = 1; $round -le $MaxRounds; $round++) {
-    $remainingGlobalBudgetMs = if ($GlobalTimeBudgetMs -gt 0) { [int]($GlobalTimeBudgetMs - $globalStopwatch.ElapsedMilliseconds) } else { 0 }
+    $remainingGlobalBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
     if ($GlobalTimeBudgetMs -gt 0 -and $remainingGlobalBudgetMs -le 0) {
         $terminatedBy = 'global_time_budget'
         $finalRound = [Math]::Max(0, $round - 1)
@@ -2582,20 +4491,40 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
     $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
     $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
-    $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText
+    $remainingStaticBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
+    if ($GlobalTimeBudgetMs -gt 0 -and $remainingStaticBudgetMs -le 0) {
+        $static = [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @(New-SkipRecord -Reason 'static_budget_exceeded' -Message '进入静态候选阶段时全局预算已耗尽，跳过静态求值。' -Item $null)
+        }
+    } else {
+        $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs
+    }
     $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
-
-    $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($merged.Candidates)
+    $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($merged.Candidates) -Context $ctx -ScriptText $scriptText
+    $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
     $candidates = @($preferred.Candidates)
-    $skipped = @($dynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped)
+    $skipped = @($dynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
-    $lowConfidence = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.UsedEmptyFallback })
-    foreach ($cand in $lowConfidence) {
+    $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
+    $autoCandidates = @()
+    foreach ($cand in @($candidates)) {
+        $isLowConfidenceStatic = ($cand -and $cand.PSObject.Properties['SourceKind'] -and [string]$cand.SourceKind -eq 'Static' -and
+            $cand.PSObject.Properties['UsedEmptyFallback'] -and [bool]$cand.UsedEmptyFallback)
+        if (-not $isLowConfidenceStatic) {
+            $autoCandidates += $cand
+            continue
+        }
+
+        if (Test-StaticLowConfidenceCandidateAutoApply -Candidate $cand -ScriptText $scriptText -Context $ctx -ContextInfo $contextInfoForLowConfidence) {
+            $autoCandidates += $cand
+            continue
+        }
+
         $skipped += New-SkipRecord -Reason 'static_low_confidence' -Message '低置信静态候选默认不自动应用' -Item $cand
     }
 
-    $autoCandidates = @($candidates | Where-Object { -not ($_.SourceKind -eq 'Static' -and $_.UsedEmptyFallback) })
     $sel = Select-NonOverlappingReplacements -Candidates $autoCandidates -Strategy $OverlapStrategy
     $selected = @($sel.Selected)
     $skipped += @($sel.Skipped)

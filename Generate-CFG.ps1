@@ -1322,6 +1322,115 @@ function Test-ForEachObjectCommandAst {
     return ($cmdName -in @('ForEach-Object', 'ForEach', '%'))
 }
 
+function Get-ContainingStatementInfo {
+    param($Ast)
+
+    $current = $Ast
+    while ($null -ne $current) {
+        $parent = $current.Parent
+        if ($parent -is [System.Management.Automation.Language.NamedBlockAst] -or
+            $parent -is [System.Management.Automation.Language.StatementBlockAst]) {
+            return [PSCustomObject]@{
+                StatementAst = $current
+                Statements   = @($parent.Statements)
+            }
+        }
+        $current = $parent
+    }
+
+    return $null
+}
+
+function Get-UnwrappedScriptBlockBindingAst {
+    param($Ast)
+
+    $current = $Ast
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
+            $pipe = $current.Pipeline
+            if ($pipe -and $pipe.PipelineElements.Count -eq 1 -and
+                $pipe.PipelineElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                $current = $pipe.PipelineElements[0].Expression
+                continue
+            }
+        }
+        break
+    }
+
+    return $current
+}
+
+function Resolve-CommandVariableBackedLiteralScriptBlockExpression {
+    param(
+        [System.Management.Automation.Language.VariableExpressionAst]$VariableAst,
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [int]$MaxAliasDepth = 4
+    )
+
+    if ($null -eq $VariableAst -or $null -eq $CommandAst -or $null -eq $VariableAst.VariablePath) {
+        return $null
+    }
+
+    $statementInfo = Get-ContainingStatementInfo -Ast $CommandAst
+    if ($null -eq $statementInfo -or -not $statementInfo.Statements -or $statementInfo.Statements.Count -eq 0) {
+        return $null
+    }
+
+    $currentStatement = $statementInfo.StatementAst
+    $statements = @($statementInfo.Statements)
+    $currentIndex = [array]::IndexOf($statements, $currentStatement)
+    if ($currentIndex -lt 0) {
+        return $null
+    }
+
+    $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $targetName = [string]$VariableAst.VariablePath.UserPath
+    if ([string]::IsNullOrWhiteSpace($targetName)) {
+        return $null
+    }
+
+    for ($depth = 0; $depth -lt $MaxAliasDepth; $depth++) {
+        if (-not $visited.Add($targetName)) {
+            return $null
+        }
+
+        $matchedAssignment = $null
+        for ($i = $currentIndex - 1; $i -ge 0; $i--) {
+            $statement = $statements[$i]
+            if ($statement -isnot [System.Management.Automation.Language.AssignmentStatementAst]) { continue }
+            if ($statement.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) { continue }
+
+            $leftName = [string]$statement.Left.VariablePath.UserPath
+            if ([string]::IsNullOrWhiteSpace($leftName)) { continue }
+            if ($leftName -ine $targetName) { continue }
+
+            $matchedAssignment = $statement
+            break
+        }
+
+        if ($null -eq $matchedAssignment) {
+            return $null
+        }
+
+        $rightAst = Get-UnwrappedScriptBlockBindingAst -Ast $matchedAssignment.Right
+        if ($rightAst -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+            return $rightAst
+        }
+
+        if ($rightAst -is [System.Management.Automation.Language.VariableExpressionAst] -and $rightAst.VariablePath) {
+            $targetName = [string]$rightAst.VariablePath.UserPath
+            if ([string]::IsNullOrWhiteSpace($targetName)) {
+                return $null
+            }
+            continue
+        }
+
+        return $null
+    }
+
+    return $null
+}
+
 function Get-ForEachObjectExpansionInfo {
     param(
         [System.Management.Automation.Language.CommandAst]$CommandAst
@@ -1352,11 +1461,16 @@ function Get-ForEachObjectExpansionInfo {
             return @{ Success = $false; Reason = "$Role block is missing"; BlockAst = $null }
         }
 
-        if ($Ast -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+        $resolvedAst = $Ast
+        if ($resolvedAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $resolvedAst = Resolve-CommandVariableBackedLiteralScriptBlockExpression -VariableAst $resolvedAst -CommandAst $CommandAst
+        }
+
+        if ($resolvedAst -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
             return @{ Success = $false; Reason = "$Role block is not a literal scriptblock"; BlockAst = $null }
         }
 
-        $sbAst = $Ast.ScriptBlock
+        $sbAst = $resolvedAst.ScriptBlock
         if ($null -eq $sbAst) {
             return @{ Success = $false; Reason = "$Role block has no ScriptBlock AST"; BlockAst = $null }
         }
@@ -1407,8 +1521,13 @@ function Get-ForEachObjectExpansionInfo {
             if ($e -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
                 $blocks += $e
             } elseif ($e -is [System.Management.Automation.Language.VariableExpressionAst]) {
-                $result.Reason = 'variable-backed scriptblock arguments fall back to runtime execution'
-                return [PSCustomObject]$result
+                $resolvedBlock = Resolve-CommandVariableBackedLiteralScriptBlockExpression -VariableAst $e -CommandAst $CommandAst
+                if ($resolvedBlock) {
+                    $blocks += $resolvedBlock
+                } else {
+                    $result.Reason = 'variable-backed scriptblock arguments fall back to runtime execution'
+                    return [PSCustomObject]$result
+                }
             }
         }
 

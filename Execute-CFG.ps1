@@ -338,9 +338,20 @@ function Normalize-ExecutionResultValue {
     }
 
     $items = @($Value)
-    if ($items.Count -eq 0) { return @() }
-    if ($items.Count -eq 1) { return $items[0] }
-    return @($items)
+    if ($items.Count -eq 0) {
+        Write-Output -NoEnumerate @()
+        return
+    }
+    if ($items.Count -eq 1) {
+        $singleItem = $items[0]
+        if ($singleItem -is [array]) {
+            Write-Output -NoEnumerate $singleItem
+            return
+        }
+        return $singleItem
+    }
+
+    Write-Output -NoEnumerate @($items)
 }
 
 # 从 Runspace 获取变量值
@@ -725,7 +736,8 @@ function Test-ExecutionLogDetailEnabled {
 function Get-NodeTextParseInfo {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [string]$SourceText = $null
     )
 
     if (-not $Context.TextParseCache) {
@@ -736,7 +748,11 @@ function Get-NodeTextParseInfo {
     }
 
     $nodeId = [int]$Node.Id
-    $text = [string]$Node.Text
+    $text = if ($PSBoundParameters.ContainsKey('SourceText') -and $null -ne $SourceText) {
+        [string]$SourceText
+    } else {
+        [string]$Node.Text
+    }
 
     if ($Context.TextParseCacheKeyByNodeId.ContainsKey($nodeId)) {
         $recentKey = [string]$Context.TextParseCacheKeyByNodeId[$nodeId]
@@ -925,8 +941,12 @@ function Get-RebuiltNodeTextSegment {
         }
     }
 
-    if ($CommandInfo -and $CommandInfo.HasCommand -and $CommandInfo.IsAlias -and $CommandInfo.Ast -and $CommandInfo.Ast.CommandElements -and $CommandInfo.Ast.CommandElements.Count -gt 0) {
-        $nameAst = $CommandInfo.Ast.CommandElements[0]
+    if ($CommandInfo -and $CommandInfo.HasCommand -and
+        $CommandInfo.PSObject.Properties['ResolutionKind'] -and
+        [string]$CommandInfo.ResolutionKind -ne 'Direct' -and
+        $CommandInfo.PSObject.Properties['CommandElementAst'] -and
+        $null -ne $CommandInfo.CommandElementAst) {
+        $nameAst = $CommandInfo.CommandElementAst
         $start = [int]$nameAst.Extent.StartOffset
         $end = [int]$nameAst.Extent.EndOffset
         if ($start -ge $RangeStart -and $end -le $RangeEnd -and $end -gt $start) {
@@ -1080,7 +1100,7 @@ function Resolve-AssignmentActualVariableName {
         [string]$VariableName
     )
 
-    if ([string]::IsNullOrWhiteSpace($VariableName)) {
+    if ($null -eq $VariableName) {
         return $VariableName
     }
 
@@ -1092,6 +1112,280 @@ function Resolve-AssignmentActualVariableName {
     }
 
     return $VariableName
+}
+
+function Test-CFGVariableNameAvailable {
+    param([AllowNull()][string]$Name)
+
+    return ($null -ne $Name)
+}
+
+function Resolve-VariableExpressionActualName {
+    param(
+        $VariableExpressionAst,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $VariableExpressionAst -or $null -eq $VariableExpressionAst.VariablePath) {
+        return $null
+    }
+
+    $userPath = $VariableExpressionAst.VariablePath.UserPath
+    if ($null -eq $userPath) {
+        return $null
+    }
+
+    $actualName = $null
+    if ($VariableExpressionAst.Extent) {
+        $actualName = Get-CFGEnvironmentVariableActualName -Name ([string]$VariableExpressionAst.Extent.Text)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($actualName)) {
+        return $actualName
+    }
+
+    return (Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$userPath))
+}
+
+function Ensure-CFGBlockedTaintMap {
+    param([hashtable]$Context)
+
+    if ($null -eq $Context) { return }
+    if (-not $Context.ContainsKey('BlockedTaintedVariables') -or $null -eq $Context.BlockedTaintedVariables) {
+        $Context.BlockedTaintedVariables = @{}
+    }
+}
+
+function Set-CFGVariableBlockedTaint {
+    param(
+        [hashtable]$Context,
+        [AllowNull()][string]$ActualName,
+        [string]$Reason = 'blocked_dependency'
+    )
+
+    if ($null -eq $Context -or $null -eq $ActualName) { return }
+    Ensure-CFGBlockedTaintMap -Context $Context
+    $Context.BlockedTaintedVariables[[string]$ActualName] = $Reason
+}
+
+function Clear-CFGVariableBlockedTaint {
+    param(
+        [hashtable]$Context,
+        [AllowNull()][string]$ActualName
+    )
+
+    if ($null -eq $Context -or $null -eq $ActualName) { return }
+    Ensure-CFGBlockedTaintMap -Context $Context
+    $null = $Context.BlockedTaintedVariables.Remove([string]$ActualName)
+}
+
+function Test-CFGVariableBlockedTaint {
+    param(
+        [hashtable]$Context,
+        [AllowNull()][string]$ActualName
+    )
+
+    if ($null -eq $Context -or $null -eq $ActualName) { return $false }
+    Ensure-CFGBlockedTaintMap -Context $Context
+    return $Context.BlockedTaintedVariables.ContainsKey([string]$ActualName)
+}
+
+function Get-AstReferencedActualVariableNames {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Ast) { return @() }
+
+    $names = [System.Collections.Generic.List[string]]::new()
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $varAsts = @($Ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.VariableExpressionAst]
+        }, $true))
+
+    foreach ($varAst in $varAsts) {
+        $actualName = Resolve-VariableExpressionActualName -VariableExpressionAst $varAst -Context $Context
+        if ($null -eq $actualName) { continue }
+        if ($seen.Add([string]$actualName)) {
+            $names.Add([string]$actualName) | Out-Null
+        }
+    }
+
+    return @($names)
+}
+
+function Test-ValueContainsBlockedPlaceholder {
+    param($Value)
+
+    if ($null -eq $Value) { return $false }
+
+    if (Test-ExecutionResultSequenceContainer -Value $Value) {
+        $Value = Normalize-ExecutionResultValue -Value $Value
+    }
+
+    if ($Value -is [BlockedCommandPlaceholder]) { return $true }
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -is [BlockedCommandPlaceholder]) {
+        return $true
+    }
+
+    if ($Value -is [string]) {
+        return ([string]$Value -eq $script:BlockedPlaceholderMarker)
+    }
+
+    if ($Value -is [array]) {
+        foreach ($item in $Value) {
+            if (Test-ValueContainsBlockedPlaceholder -Value $item) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Test-AstDependsOnBlockedTaint {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Ast -or $null -eq $Context) { return $false }
+
+    foreach ($actualName in @(Get-AstReferencedActualVariableNames -Ast $Ast -Context $Context)) {
+        if (Test-CFGVariableBlockedTaint -Context $Context -ActualName $actualName) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Update-CFGAssignmentBlockedTaint {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Node -or $null -eq $Context) { return }
+    if ($Node.Ast -isnot [System.Management.Automation.Language.AssignmentStatementAst]) { return }
+    if ($Node.Ast.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) { return }
+    if ($null -eq $Node.Ast.Right) { return }
+
+    $actualName = Resolve-VariableExpressionActualName -VariableExpressionAst $Node.Ast.Left -Context $Context
+    if ($null -eq $actualName) { return }
+
+    $isTainted = Test-AstDependsOnBlockedTaint -Ast $Node.Ast.Right -Context $Context
+    $storedValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualName
+    if (-not $isTainted) {
+        $isTainted = Test-ValueContainsBlockedPlaceholder -Value $storedValue
+    }
+
+    if ($isTainted) {
+        Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualName
+    } else {
+        Clear-CFGVariableBlockedTaint -Context $Context -ActualName $actualName
+    }
+}
+
+function Test-ResolvableAstHasImplicitSideEffects {
+    param($Ast)
+
+    if ($null -eq $Ast -or -not $Ast.PSObject.Methods['FindAll']) {
+        return $false
+    }
+
+    $sideEffectAst = @($Ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.AssignmentStatementAst]
+            }, $true) | Select-Object -First 1)
+
+    return ($sideEffectAst.Count -gt 0)
+}
+
+function Get-UnwrappedAssignmentExpressionAst {
+    param($Ast)
+
+    $current = $Ast
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
+            $pipeline = $current.Pipeline
+            if ($pipeline -and $pipeline.PipelineElements.Count -eq 1 -and
+                $pipeline.PipelineElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                $current = $pipeline.PipelineElements[0].Expression
+                continue
+            }
+        }
+        break
+    }
+
+    return $current
+}
+
+function Resolve-AssignmentScriptBlockMapping {
+    param(
+        $AssignmentAst,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $AssignmentAst -or $AssignmentAst -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return $null
+    }
+    if ($AssignmentAst.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
+        return $null
+    }
+
+    $variableName = [string]$AssignmentAst.Left.VariablePath.UserPath
+    if ([string]::IsNullOrWhiteSpace($variableName)) {
+        return $null
+    }
+
+    $rightAst = Get-UnwrappedAssignmentExpressionAst -Ast $AssignmentAst.Right
+    if ($null -eq $rightAst) {
+        return [PSCustomObject]@{
+            VariableName = $variableName
+            BlockName    = $null
+        }
+    }
+
+    $blockName = $null
+    if ($rightAst -is [System.Management.Automation.Language.ScriptBlockExpressionAst] -or
+        $rightAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $blockName = Get-ScriptBlockNameFromAst -Ast $rightAst -Context $Context
+    }
+
+    return [PSCustomObject]@{
+        VariableName = $variableName
+        BlockName    = $blockName
+    }
+}
+
+function Update-VariableScriptBlockMappingAfterNodeExecution {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Node -or $null -eq $Context -or -not $Node.Ast) { return }
+
+    $mapping = Resolve-AssignmentScriptBlockMapping -AssignmentAst $Node.Ast -Context $Context
+    if ($null -eq $mapping -or [string]::IsNullOrWhiteSpace([string]$mapping.VariableName)) {
+        return
+    }
+
+    $variableName = [string]$mapping.VariableName
+    $blockName = if ([string]::IsNullOrWhiteSpace([string]$mapping.BlockName)) { $null } else { [string]$mapping.BlockName }
+
+    if ($blockName) {
+        $Context.VarToBlockMapping[$variableName] = $blockName
+        Write-ExecutionLog -Context $Context -Message "  [MAPPING] `$$variableName -> $blockName"
+        return
+    }
+
+    if ($Context.VarToBlockMapping -and $Context.VarToBlockMapping.ContainsKey($variableName)) {
+        $null = $Context.VarToBlockMapping.Remove($variableName)
+        Write-ExecutionLog -Context $Context -Message "  [MAPPING] Removed `$$variableName scriptblock mapping"
+    }
 }
 
 function Record-LiteralizedCommandResult {
@@ -1115,6 +1409,9 @@ function Record-LiteralizedCommandResult {
 
     $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName $info.VariableName
     $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
+    if (Test-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName) {
+        return
+    }
 
     if (-not $Context.ContainsKey('LiteralizedCommandResults') -or $null -eq $Context.LiteralizedCommandResults) {
         $Context.LiteralizedCommandResults = @()
@@ -1506,13 +1803,20 @@ function Get-PrimaryCommandAstFromScriptAst {
         return Find-FirstCommandAst -AstRoot $statement.Right
     }
 
-    # 2) Pipeline：优先按 PipelineElements 顺序找“直接命令”，否则在 CommandExpressionAst.Expression 中找
+    # 2) Pipeline：优先按 PipelineElements 顺序找“最后一个直接命令”，否则在 CommandExpressionAst.Expression 中找
     if ($statement -is [System.Management.Automation.Language.PipelineAst] -and
         $statement.PipelineElements -and $statement.PipelineElements.Count -gt 0) {
+        $directCommands = @()
         foreach ($elem in $statement.PipelineElements) {
             if ($elem -is [System.Management.Automation.Language.CommandAst]) {
-                return $elem
-            }
+                $directCommands += $elem
+                }
+        }
+        if ($directCommands.Count -gt 0) {
+            return $directCommands[$directCommands.Count - 1]
+        }
+
+        foreach ($elem in $statement.PipelineElements) {
             if ($elem -is [System.Management.Automation.Language.CommandExpressionAst]) {
                 $cmd = Find-FirstCommandAst -AstRoot $elem.Expression
                 if ($cmd) { return $cmd }
@@ -1535,13 +1839,58 @@ function Get-PrimaryCommandAstFromScriptAst {
     return Find-FirstCommandAst -AstRoot $statement
 }
 
+function Get-AstSourceTextRange {
+    param(
+        $ParseInfo,
+        $StartAst,
+        $EndAst
+    )
+
+    if ($null -eq $ParseInfo -or -not $ParseInfo.PSObject.Properties['SourceText']) { return $null }
+    if ($null -eq $StartAst -or $null -eq $EndAst -or -not $StartAst.Extent -or -not $EndAst.Extent) { return $null }
+
+    $sourceText = [string]$ParseInfo.SourceText
+    $startOffset = [int]$StartAst.Extent.StartOffset
+    $endOffset = [int]$EndAst.Extent.EndOffset
+    if ($startOffset -lt 0 -or $endOffset -le $startOffset -or $endOffset -gt $sourceText.Length) {
+        return $null
+    }
+
+    return $sourceText.Substring($startOffset, $endOffset - $startOffset)
+}
+
+function Get-CommandArgumentText {
+    param(
+        $CommandAst,
+        $ParseInfo
+    )
+
+    if ($null -eq $CommandAst -or -not $CommandAst.CommandElements -or $CommandAst.CommandElements.Count -le 1) {
+        return $null
+    }
+
+    $firstArgument = $CommandAst.CommandElements[1]
+    $lastArgument = $CommandAst.CommandElements[$CommandAst.CommandElements.Count - 1]
+    $argumentText = Get-AstSourceTextRange -ParseInfo $ParseInfo -StartAst $firstArgument -EndAst $lastArgument
+    if (-not [string]::IsNullOrWhiteSpace($argumentText)) {
+        return $argumentText
+    }
+
+    return [string]$firstArgument.Extent.Text
+}
+
 function Get-NodeTextExecutionInfo {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [string]$SourceText = $null
     )
 
-    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    $parseInfo = if ($PSBoundParameters.ContainsKey('SourceText') -and -not [string]::IsNullOrEmpty($SourceText)) {
+        Get-NodeTextParseInfo -Node $Node -Context $Context -SourceText $SourceText
+    } else {
+        Get-NodeTextParseInfo -Node $Node -Context $Context
+    }
     if (-not $parseInfo.Success) {
         return [PSCustomObject]@{
             Success       = $false
@@ -1569,6 +1918,81 @@ function Get-NodeTextExecutionInfo {
         Statement     = $statement
         CommandAst    = Get-PrimaryCommandAstFromScriptAst -ScriptAst $parseInfo.Ast
         TargetVarName = $targetVarName
+    }
+}
+
+function Get-NodeTextExecutionInfoWithFallback {
+    param(
+        $Node,
+        [hashtable]$Context,
+        [AllowEmptyCollection()][string[]]$CandidateSourceTexts = @(),
+        [switch]$AllowOriginalAstFallback
+    )
+
+    $sources = New-Object System.Collections.Generic.List[string]
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+
+    foreach ($text in @($CandidateSourceTexts)) {
+        if ($null -eq $text) { continue }
+        $value = [string]$text
+        if ([string]::IsNullOrWhiteSpace($value)) { continue }
+        if ($seen.Add($value)) {
+            $sources.Add($value) | Out-Null
+        }
+    }
+
+    if ($sources.Count -eq 0 -and $Node) {
+        $nodeText = [string]$Node.Text
+        if (-not [string]::IsNullOrWhiteSpace($nodeText) -and $seen.Add($nodeText)) {
+            $sources.Add($nodeText) | Out-Null
+        }
+    }
+
+    if ($AllowOriginalAstFallback -and $Node -and $Node.Ast -and $Node.Ast.Extent) {
+        $astText = [string]$Node.Ast.Extent.Text
+        if (-not [string]::IsNullOrWhiteSpace($astText) -and $seen.Add($astText)) {
+            $sources.Add($astText) | Out-Null
+        }
+    }
+
+    if ($sources.Count -eq 0) {
+        return [PSCustomObject]@{
+            Success       = $false
+            Error         = 'No available source text for parse fallback'
+            ParseInfo     = $null
+            Statement     = $null
+            CommandAst    = $null
+            TargetVarName = $null
+            SourceTextUsed = $null
+        }
+    }
+
+    $errors = New-Object System.Collections.Generic.List[string]
+    foreach ($sourceText in $sources) {
+        $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context -SourceText $sourceText
+        if ($execInfo.Success) {
+            $execInfo | Add-Member -NotePropertyName SourceTextUsed -NotePropertyValue $sourceText -Force
+            return $execInfo
+        }
+
+        $sourceLabel = if ($Node -and $Node.Ast -and $Node.Ast.Extent -and ([string]$Node.Ast.Extent.Text -ceq $sourceText)) {
+            'AstText'
+        } elseif ($Node -and ([string]$Node.Text -ceq $sourceText)) {
+            'NodeText'
+        } else {
+            'Override'
+        }
+        $errors.Add(("{0}: {1}" -f $sourceLabel, [string]$execInfo.Error)) | Out-Null
+    }
+
+    return [PSCustomObject]@{
+        Success        = $false
+        Error          = ($errors -join ' | ')
+        ParseInfo      = $null
+        Statement      = $null
+        CommandAst     = $null
+        TargetVarName  = $null
+        SourceTextUsed = $null
     }
 }
 
@@ -1732,10 +2156,16 @@ function Get-DynamicArgumentCodeFromNodeText {
     param(
         $Node,
         [hashtable]$Context,
-        [string]$DynamicType
+        [string]$DynamicType,
+        [string]$NodeTextOverride = $null,
+        $CommandInfo = $null
     )
 
-    $parseInfo = Get-NodeTextParseInfo -Node $Node -Context $Context
+    $parseInfo = if (-not [string]::IsNullOrEmpty($NodeTextOverride)) {
+        Get-NodeTextParseInfo -Node $Node -Context $Context -SourceText $NodeTextOverride
+    } else {
+        Get-NodeTextParseInfo -Node $Node -Context $Context
+    }
     if (-not $parseInfo.Success) {
         return [PSCustomObject]@{
             Success = $false
@@ -1747,6 +2177,24 @@ function Get-DynamicArgumentCodeFromNodeText {
     $scriptAst = $parseInfo.Ast
     $argCode = $null
     $displayCode = $null
+    $fromPipelineInput = $false
+
+    function Get-PipelineInputExpressionText {
+        param($StatementAst, $TargetCommandAst)
+
+        if ($null -eq $StatementAst -or $null -eq $TargetCommandAst) { return $null }
+        if ($StatementAst -isnot [System.Management.Automation.Language.PipelineAst]) { return $null }
+
+        $elements = @($StatementAst.PipelineElements)
+        for ($i = 0; $i -lt $elements.Count; $i++) {
+            if ($elements[$i] -ne $TargetCommandAst) { continue }
+            if ($i -le 0) { return $null }
+
+            return (($elements[0..($i - 1)] | ForEach-Object { $_.Extent.Text }) -join ' | ')
+        }
+
+        return $null
+    }
 
     if ($DynamicType -in @("ScriptBlockCreate", "NewScriptBlock")) {
         $invokeAsts = @($scriptAst.FindAll({
@@ -1780,16 +2228,32 @@ function Get-DynamicArgumentCodeFromNodeText {
         $cmdAst = Get-PrimaryCommandAstFromScriptAst -ScriptAst $scriptAst
         if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
             $cmdName = $cmdAst.GetCommandName()
+            if (($null -eq $cmdName -or [string]::IsNullOrWhiteSpace([string]$cmdName) -or [string]$cmdName -match '^[&\.]') -and
+                $CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName']) {
+                $cmdName = [string]$CommandInfo.ResolvedName
+            }
             $isIex = $cmdName -in @("Invoke-Expression", "iex")
             $isScriptBlockCreateCommand = $cmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$'
             $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
             if (($DynamicType -eq "IEX" -and $isIex) -or
                 ($DynamicType -eq "ScriptBlockCreate" -and $isScriptBlockCreateCommand)) {
-                $argCode = $cmdAst.CommandElements[1].Extent.Text
+                $argCode = Get-CommandArgumentText -CommandAst $cmdAst -ParseInfo $parseInfo
+                if ([string]::IsNullOrWhiteSpace($argCode)) {
+                    $argCode = $cmdAst.CommandElements[1].Extent.Text
+                }
                 $displayCode = $argCode
             } elseif ($DynamicType -eq 'PowerShellCommand' -and $hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
                 $argCode = $hostDynamicInfo.EvaluationCode
                 $displayCode = $hostDynamicInfo.PayloadText
+            }
+        }
+
+        if (-not $argCode -and $DynamicType -eq "IEX" -and $cmdAst) {
+            $statement = Get-FirstStatementFromScriptAst -ScriptAst $scriptAst
+            $pipelineInputCode = Get-PipelineInputExpressionText -StatementAst $statement -TargetCommandAst $cmdAst
+            if (-not [string]::IsNullOrWhiteSpace($pipelineInputCode)) {
+                $displayCode = $pipelineInputCode
+                $fromPipelineInput = $true
             }
         }
     }
@@ -1799,6 +2263,7 @@ function Get-DynamicArgumentCodeFromNodeText {
         Error       = $null
         Code        = $argCode
         DisplayCode = $displayCode
+        FromPipelineInput = $fromPipelineInput
     }
 }
 
@@ -2345,8 +2810,24 @@ function Format-ResolvableValue {
         $Value = Normalize-ExecutionResultValue -Value $Value
     }
 
+    if ($Value -is [byte[]]) {
+        return ConvertTo-Expression -Object $Value -Expand -1 -Strong
+    }
+
     # 处理普通数组
     if ($Value -is [array]) {
+        if ($Value.Count -gt 0) {
+            $isByteSequence = $true
+            foreach ($item in $Value) {
+                if ($item -isnot [byte]) {
+                    $isByteSequence = $false
+                    break
+                }
+            }
+            if ($isByteSequence) {
+                return '[byte[]](' + (($Value | ForEach-Object { [string][byte]$_ }) -join ',') + ')'
+            }
+        }
         if ($Value.Count -eq 0) { return '$null' }
         if ($Value.Count -eq 1) {
             if ($Value[0] -is [BlockedCommandPlaceholder]) {
@@ -2438,14 +2919,25 @@ function Evaluate-NodeResolvables {
             continue
         }
 
+        if ($resolvable.Ast -and (Test-ResolvableAstHasImplicitSideEffects -Ast $resolvable.Ast)) {
+            continue
+        }
+
+        if ($resolvable.Ast -and (Test-AstDependsOnBlockedTaint -Ast $resolvable.Ast -Context $Context)) {
+            continue
+        }
+
         # 获取表达式代码
         $code = $resolvable.Text
 
         # 如果处于函数/脚本块作用域中，对局部变量应用前缀转换
         $code = Convert-CodeForCurrentScope -Code $code -Context $Context
 
+        # 包一层数组字面量，避免 byte[] / char[] 等被 PowerShell 管道自动打散
+        $wrappedCode = ",($code)"
+
         # 在当前 Runspace 上下文中求值
-        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $wrappedCode
 
         if ($evalResult.Success) {
             # 检查结果是否为适合还原的简单类型
@@ -2762,8 +3254,10 @@ function Invoke-NodeSafe {
 
         if ($Node.VarsWritten) {
             foreach ($varInfo in $Node.VarsWritten) {
-                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varInfo.Name, $placeholder)
-                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($varInfo.Name) = [BlockedPlaceholder]"
+                $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$varInfo.Name)
+                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $placeholder)
+                Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName -Reason $methodCheck.Reason
+                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($actualVarName) = [BlockedPlaceholder]"
             }
         }
 
@@ -2788,8 +3282,10 @@ function Invoke-NodeSafe {
 
         if ($Node.VarsWritten) {
             foreach ($varInfo in $Node.VarsWritten) {
-                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varInfo.Name, $placeholder)
-                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($varInfo.Name) = [BlockedPlaceholder]"
+                $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$varInfo.Name)
+                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $placeholder)
+                Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName -Reason $comCheck.Reason
+                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($actualVarName) = [BlockedPlaceholder]"
             }
         }
 
@@ -2815,9 +3311,13 @@ function Invoke-NodeSafe {
     # 4. Phase 3: 安全检查
     $checkResult = Test-CommandSafety -CommandInfo $commandInfo -Context $Context
 
-    # 4.5. 记录别名解析结果为可还原表达式
-    if ($commandInfo.HasCommand -and $commandInfo.IsAlias) {
-        Record-AliasResolution -Node $Node -Context $Context -CommandInfo $commandInfo
+    # 4.5. 记录高置信命令名解析结果为可还原表达式
+    if ($commandInfo.HasCommand -and
+        $commandInfo.PSObject.Properties['ResolutionKind'] -and
+        [string]$commandInfo.ResolutionKind -ne 'Direct' -and
+        $commandInfo.PSObject.Properties['ResolutionConfidence'] -and
+        [string]$commandInfo.ResolutionConfidence -eq 'High') {
+        Record-CommandNameResolution -Node $Node -Context $Context -CommandInfo $commandInfo
     }
 
     if ($checkResult.IsForbidden) {
@@ -2831,8 +3331,10 @@ function Invoke-NodeSafe {
         # 如果节点有写入的变量，将其设置为占位符，防止后续引用报错
         if ($Node.VarsWritten) {
             foreach ($varInfo in $Node.VarsWritten) {
-                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varInfo.Name, $placeholder)
-                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($varInfo.Name) = [BlockedPlaceholder]"
+                $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$varInfo.Name)
+                $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $placeholder)
+                Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName -Reason $checkResult.Reason
+                Write-ExecutionLog -Context $Context -Message "  [BLOCKED] Set `$$($actualVarName) = [BlockedPlaceholder]"
             }
         }
 
@@ -2854,7 +3356,13 @@ function Invoke-NodeSafe {
     switch ($checkResult.Action) {
         "Execute" {
             # 普通执行
-            $result = Invoke-NodeDirect -Node $Node -Context $Context
+            $codeOverride = if ($commandInfo -and $commandInfo.PSObject.Properties['ResolvedNodeText'] -and
+                -not [string]::IsNullOrWhiteSpace([string]$commandInfo.ResolvedNodeText)) {
+                [string]$commandInfo.ResolvedNodeText
+            } else {
+                $null
+            }
+            $result = Invoke-NodeDirect -Node $Node -Context $Context -CodeOverride $codeOverride
 
             # 执行成功或超时后，都尝试求值 Resolvables
             # 超时时虽然整体执行失败，但部分表达式（如 ExpandableString）可能已经求值
@@ -2868,13 +3376,13 @@ function Invoke-NodeSafe {
             return $result
         }
         "ForEachObject" {
-            return Invoke-ForEachObjectCmdlet -Node $Node -Context $Context
+            return Invoke-ForEachObjectCmdlet -Node $Node -Context $Context -CommandInfo $commandInfo
         }
         "WhereObject" {
-            return Invoke-WhereObjectCmdlet -Node $Node -Context $Context
+            return Invoke-WhereObjectCmdlet -Node $Node -Context $Context -CommandInfo $commandInfo
         }
         "SelectObject" {
-            return Invoke-SelectObjectCmdlet -Node $Node -Context $Context
+            return Invoke-SelectObjectCmdlet -Node $Node -Context $Context -CommandInfo $commandInfo
         }
         "CallFunction" {
             Write-ExecutionLog -Context $Context -Message "  [CALL] Function: $($checkResult.Target)"
@@ -2890,7 +3398,13 @@ function Invoke-NodeSafe {
         }
         default {
             # 默认执行
-            $result = Invoke-NodeDirect -Node $Node -Context $Context
+            $codeOverride = if ($commandInfo -and $commandInfo.PSObject.Properties['ResolvedNodeText'] -and
+                -not [string]::IsNullOrWhiteSpace([string]$commandInfo.ResolvedNodeText)) {
+                [string]$commandInfo.ResolvedNodeText
+            } else {
+                $null
+            }
+            $result = Invoke-NodeDirect -Node $Node -Context $Context -CodeOverride $codeOverride
 
             # 执行成功或超时后，都尝试求值 Resolvables
             if ($result.Success -or $result.Timeout) {
@@ -3298,10 +3812,12 @@ function Invoke-ScriptBlockInline {
 function Get-ForEachObjectInvocationInfo {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [string]$NodeTextOverride = $null,
+        $CommandInfo = $null
     )
 
-    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    $execInfo = Get-NodeTextExecutionInfoWithFallback -Node $Node -Context $Context -CandidateSourceTexts @($NodeTextOverride, [string]$Node.Text) -AllowOriginalAstFallback
     if (-not $execInfo.Success) {
         return @{
             Success = $false
@@ -3318,6 +3834,9 @@ function Get-ForEachObjectInvocationInfo {
     }
 
     $cmdName = $cmdAst.GetCommandName()
+    if (-not $cmdName -and $CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName']) {
+        $cmdName = [string]$CommandInfo.ResolvedName
+    }
     if ($cmdName -notin @('ForEach-Object', 'ForEach', '%')) {
         return @{
             Success = $false
@@ -3401,13 +3920,21 @@ function Get-ForEachObjectInvocationInfo {
 function Invoke-ForEachObjectCmdlet {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        $CommandInfo = $null
     )
 
-    $info = Get-ForEachObjectInvocationInfo -Node $Node -Context $Context
+    $nodeTextOverride = if ($CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedNodeText'] -and
+        -not [string]::IsNullOrWhiteSpace([string]$CommandInfo.ResolvedNodeText)) {
+        [string]$CommandInfo.ResolvedNodeText
+    } else {
+        $null
+    }
+
+    $info = Get-ForEachObjectInvocationInfo -Node $Node -Context $Context -NodeTextOverride $nodeTextOverride -CommandInfo $CommandInfo
     if (-not $info.Success) {
         Write-ExecutionLog -Context $Context -Message "  [FOREACH] Parse failed, fallback to direct execute: $($info.Error)"
-        return Invoke-NodeDirect -Node $Node -Context $Context
+        return Invoke-NodeDirect -Node $Node -Context $Context -CodeOverride $nodeTextOverride
     }
 
     $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
@@ -3496,10 +4023,12 @@ function Invoke-ForEachObjectCmdlet {
 function Get-WhereObjectInvocationInfo {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [string]$NodeTextOverride = $null,
+        $CommandInfo = $null
     )
 
-    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    $execInfo = Get-NodeTextExecutionInfoWithFallback -Node $Node -Context $Context -CandidateSourceTexts @($NodeTextOverride, [string]$Node.Text) -AllowOriginalAstFallback
     if (-not $execInfo.Success) {
         return @{
             Success = $false
@@ -3516,6 +4045,9 @@ function Get-WhereObjectInvocationInfo {
     }
 
     $cmdName = $cmdAst.GetCommandName()
+    if (-not $cmdName -and $CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName']) {
+        $cmdName = [string]$CommandInfo.ResolvedName
+    }
     if ($cmdName -notin @('Where-Object', 'Where', '?')) {
         return @{
             Success = $false
@@ -3581,13 +4113,21 @@ function Get-WhereObjectInvocationInfo {
 function Invoke-WhereObjectCmdlet {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        $CommandInfo = $null
     )
 
-    $info = Get-WhereObjectInvocationInfo -Node $Node -Context $Context
+    $nodeTextOverride = if ($CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedNodeText'] -and
+        -not [string]::IsNullOrWhiteSpace([string]$CommandInfo.ResolvedNodeText)) {
+        [string]$CommandInfo.ResolvedNodeText
+    } else {
+        $null
+    }
+
+    $info = Get-WhereObjectInvocationInfo -Node $Node -Context $Context -NodeTextOverride $nodeTextOverride -CommandInfo $CommandInfo
     if (-not $info.Success) {
         Write-ExecutionLog -Context $Context -Message "  [WHERE] Parse failed, fallback to direct execute: $($info.Error)"
-        return Invoke-NodeDirect -Node $Node -Context $Context
+        return Invoke-NodeDirect -Node $Node -Context $Context -CodeOverride $nodeTextOverride
     }
 
     $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
@@ -3747,10 +4287,12 @@ function Get-SelectObjectCalculatedPropertySpecFromHashtableAst {
 function Get-SelectObjectInvocationInfo {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [string]$NodeTextOverride = $null,
+        $CommandInfo = $null
     )
 
-    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    $execInfo = Get-NodeTextExecutionInfoWithFallback -Node $Node -Context $Context -CandidateSourceTexts @($NodeTextOverride, [string]$Node.Text) -AllowOriginalAstFallback
     if (-not $execInfo.Success) {
         return @{
             Success = $false
@@ -3767,6 +4309,9 @@ function Get-SelectObjectInvocationInfo {
     }
 
     $cmdName = $cmdAst.GetCommandName()
+    if (-not $cmdName -and $CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName']) {
+        $cmdName = [string]$CommandInfo.ResolvedName
+    }
     if ($cmdName -notin @('Select-Object', 'Select')) {
         return @{
             Success = $false
@@ -3998,13 +4543,21 @@ function Get-SelectObjectInvocationInfo {
 function Invoke-SelectObjectCmdlet {
     param(
         $Node,
-        [hashtable]$Context
+        [hashtable]$Context,
+        $CommandInfo = $null
     )
 
-    $info = Get-SelectObjectInvocationInfo -Node $Node -Context $Context
+    $nodeTextOverride = if ($CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedNodeText'] -and
+        -not [string]::IsNullOrWhiteSpace([string]$CommandInfo.ResolvedNodeText)) {
+        [string]$CommandInfo.ResolvedNodeText
+    } else {
+        $null
+    }
+
+    $info = Get-SelectObjectInvocationInfo -Node $Node -Context $Context -NodeTextOverride $nodeTextOverride -CommandInfo $CommandInfo
     if (-not $info.Success) {
         Write-ExecutionLog -Context $Context -Message "  [SELECT] Parse failed, fallback to direct execute: $($info.Error)"
-        return Invoke-NodeDirect -Node $Node -Context $Context
+        return Invoke-NodeDirect -Node $Node -Context $Context -CodeOverride $nodeTextOverride
     }
 
     $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
@@ -4824,7 +5377,14 @@ function Handle-DynamicInvoke {
         $dynType = "IEX"
     }
 
-    $argCodeInfo = Get-DynamicArgumentCodeFromNodeText -Node $Node -Context $Context -DynamicType $dynType
+    $nodeTextOverride = if ($CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedNodeText'] -and
+        -not [string]::IsNullOrWhiteSpace([string]$CommandInfo.ResolvedNodeText)) {
+        [string]$CommandInfo.ResolvedNodeText
+    } else {
+        $null
+    }
+
+    $argCodeInfo = Get-DynamicArgumentCodeFromNodeText -Node $Node -Context $Context -DynamicType $dynType -NodeTextOverride $nodeTextOverride -CommandInfo $CommandInfo
     if (-not $argCodeInfo.Success) {
         return @{
             Success       = $false
@@ -4841,8 +5401,23 @@ function Handle-DynamicInvoke {
     } else {
         $argCode
     }
+    $fromPipelineInput = ($argCodeInfo.PSObject.Properties['FromPipelineInput'] -and [bool]$argCodeInfo.FromPipelineInput)
 
-    if ($argCode) {
+    if ($fromPipelineInput) {
+        $pipeInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
+        if ($pipeInput -and $pipeInput.Items -and @($pipeInput.Items).Count -gt 0) {
+            $pipeItems = @($pipeInput.Items)
+            if ($pipeItems.Count -eq 1) {
+                $argumentValue = Normalize-ExecutionResultValue -Value $pipeItems[0] -TreatArraysAsSequence
+            } else {
+                $argumentValue = ($pipeItems | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($displayArgCode) -and $pipeInput -and $pipeInput.PipeVar) {
+            $displayArgCode = "`$$($pipeInput.PipeVar)"
+        }
+    } elseif ($argCode) {
         $evalCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
         $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $evalCode
         if ($evalResult.Success -and $null -ne $evalResult.Result) {
@@ -4860,11 +5435,29 @@ function Handle-DynamicInvoke {
         ArgumentValue = $argumentValue
         ReplacementText = $null
         PreservedCommandText = $null
+        ReplacementStartOffset = $null
+        ReplacementEndOffset = $null
         Timestamp     = Get-Date
         RecursionStopped = $false
         StopReason    = $null
         StopMessage   = $null
     }
+
+    if ($fromPipelineInput -and $Node -and $Node.Ast -is [System.Management.Automation.Language.CommandAst] -and
+        $Node.Ast.Parent -is [System.Management.Automation.Language.PipelineAst]) {
+        $pipelineAsts = @($Node.Ast.Parent.PipelineElements)
+        if ($pipelineAsts.Count -gt 1) {
+            for ($i = 0; $i -lt $pipelineAsts.Count; $i++) {
+                if ($pipelineAsts[$i] -ne $Node.Ast) { continue }
+                if ($i -gt 0 -and $pipelineAsts[0].Extent -and $pipelineAsts[$i].Extent) {
+                    $dynamicRecord.ReplacementStartOffset = [int]$pipelineAsts[0].Extent.StartOffset
+                    $dynamicRecord.ReplacementEndOffset = [int]$pipelineAsts[$i].Extent.EndOffset
+                }
+                break
+            }
+        }
+    }
+
     $Context.DynamicInvokeResults += $dynamicRecord
 
     Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Type: $dynType"
@@ -5350,7 +5943,7 @@ function Invoke-NodeTraverse {
 
             # 记录到 VariableReadResults（只记录有位置信息且是简单类型的变量）
             # 生成的辅助变量（如 $__fe_xxx）没有位置信息，跳过
-            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value)) {
+            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value) -and -not (Test-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName)) {
                 $key = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
                 if (-not $Context.VariableReadResults.ContainsKey($key)) {
                     $Context.VariableReadResults[$key] = @{
@@ -5418,6 +6011,9 @@ function Invoke-NodeTraverse {
             $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
             $varsAfter[$varInfo.Name] = $value
         }
+
+        Update-CFGAssignmentBlockedTaint -Node $currentNode -Context $Context
+        Update-VariableScriptBlockMappingAfterNodeExecution -Node $currentNode -Context $Context
 
         # 写日志
         $shortText = $currentNode.Text  # 显示完整代码
@@ -5708,6 +6304,947 @@ function Test-SuspiciousVariables {
 
 # ========== 命令解析与安全检查 ==========
 
+function Convert-ResolvedCommandCandidateToName {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
+        $parts = @()
+        foreach ($item in $Value) {
+            if ($null -eq $item) { continue }
+            $parts += [string]$item
+        }
+        $text = ($parts -join '')
+    } else {
+        $text = [string]$Value
+    }
+
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    $text = $text.Trim()
+
+    if ($text.Length -ge 2 -and $text.StartsWith("'") -and $text.EndsWith("'")) {
+        return $text.Substring(1, $text.Length - 2).Replace("''", "'")
+    }
+    if ($text.Length -ge 2 -and $text.StartsWith('"') -and $text.EndsWith('"')) {
+        return $text.Substring(1, $text.Length - 2).Replace('""', '"')
+    }
+
+    return $text
+}
+
+function Resolve-CompatibilityVariableNamePattern {
+    param([string]$Pattern)
+
+    if ([string]::IsNullOrWhiteSpace($Pattern)) { return $null }
+
+    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        foreach ($var in @(Get-Variable -ErrorAction SilentlyContinue)) {
+            if ($var -and -not [string]::IsNullOrWhiteSpace([string]$var.Name)) {
+                $null = $names.Add([string]$var.Name)
+            }
+        }
+    } catch {
+    }
+
+    foreach ($compatName in @(
+            'MaximumDriveCount',
+            'ExecutionContext',
+            'ErrorActionPreference',
+            'VerbosePreference',
+            'DebugPreference',
+            'InformationPreference',
+            'WarningPreference',
+            'ConfirmPreference',
+            'ProgressPreference',
+            'PSHome',
+            'PSEdition',
+            'PSVersionTable',
+            'PSCulture',
+            'PSUICulture',
+            'NestedPromptLevel',
+            'MyInvocation',
+            'ShellId',
+            'Host',
+            'PID',
+            'HOME',
+            'OFS'
+        )) {
+        $null = $names.Add($compatName)
+    }
+
+    $matches = @()
+    foreach ($name in $names) {
+        if ($name -like $Pattern) {
+            $matches += $name
+        }
+    }
+
+    if ($matches.Count -eq 0) { return $null }
+    return @($matches | Sort-Object Length, @{ Expression = { $_ } })[0]
+}
+
+function Resolve-CompatibilityAliasName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+
+    $map = @{
+        'sc'   = 'Set-Content'
+        'curl' = 'Invoke-WebRequest'
+        'wget' = 'Invoke-WebRequest'
+        'fc'   = 'Format-Custom'
+    }
+
+    $key = $Name.ToLowerInvariant()
+    if ($map.ContainsKey($key)) {
+        return [string]$map[$key]
+    }
+
+    return $null
+}
+
+function Resolve-SafeCommandNameExpressionValue {
+    param(
+        $Ast,
+        [hashtable]$Context,
+        [int]$Depth = 0
+    )
+
+    if ($null -eq $Ast -or $Depth -gt 24) {
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return Resolve-SafeCommandNameExpressionValue -Ast $Ast.Expression -Context $Context -Depth ($Depth + 1)
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        if ($Ast.Pipeline -and $Ast.Pipeline.PipelineElements -and $Ast.Pipeline.PipelineElements.Count -eq 1) {
+            $elem = $Ast.Pipeline.PipelineElements[0]
+            if ($elem -is [System.Management.Automation.Language.CommandAst]) {
+                return Resolve-SafeCommandNameExpressionValue -Ast $elem -Context $Context -Depth ($Depth + 1)
+            }
+            if ($elem -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                return Resolve-SafeCommandNameExpressionValue -Ast $elem.Expression -Context $Context -Depth ($Depth + 1)
+            }
+            if ($elem.PSObject.Properties['Expression']) {
+                return Resolve-SafeCommandNameExpressionValue -Ast $elem.Expression -Context $Context -Depth ($Depth + 1)
+            }
+        }
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return [PSCustomObject]@{ Success = $true; Value = [string]$Ast.Value }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
+        return [PSCustomObject]@{ Success = $true; Value = $Ast.Value }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $cmdName = $Ast.GetCommandName()
+        if ($cmdName -in @('Get-Variable', 'gv', 'Variable')) {
+            $patternText = $null
+
+            for ($i = 1; $i -lt $Ast.CommandElements.Count; $i++) {
+                $elem = $Ast.CommandElements[$i]
+                if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                    $paramName = [string]$elem.ParameterName
+                    if ([string]::IsNullOrWhiteSpace($paramName)) { continue }
+                    if (-not 'name'.StartsWith($paramName.ToLowerInvariant())) { continue }
+
+                    $argAst = if ($elem.Argument) { $elem.Argument } elseif ($i + 1 -lt $Ast.CommandElements.Count) { $Ast.CommandElements[++$i] } else { $null }
+                    if ($argAst) {
+                        $argResult = Resolve-SafeCommandNameExpressionValue -Ast $argAst -Context $Context -Depth ($Depth + 1)
+                        if ($argResult.Success) {
+                            $patternText = [string]$argResult.Value
+                            break
+                        }
+                    }
+                    continue
+                }
+
+                $argResult = Resolve-SafeCommandNameExpressionValue -Ast $elem -Context $Context -Depth ($Depth + 1)
+                if ($argResult.Success) {
+                    $patternText = [string]$argResult.Value
+                    break
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($patternText)) {
+                return [PSCustomObject]@{ Success = $false; Value = $null }
+            }
+
+            $resolvedName = Resolve-CompatibilityVariableNamePattern -Pattern $patternText
+            if ([string]::IsNullOrWhiteSpace($resolvedName)) {
+                return [PSCustomObject]@{ Success = $false; Value = $null }
+            }
+
+            $psVar = Get-Variable -Name $resolvedName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($psVar) {
+                return [PSCustomObject]@{ Success = $true; Value = $psVar }
+            }
+
+            return [PSCustomObject]@{
+                Success = $true
+                Value   = [PSCustomObject]@{
+                    Name       = $resolvedName
+                    Definition = $resolvedName
+                    Value      = $null
+                }
+            }
+        }
+
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        $items = @()
+        foreach ($elem in $Ast.Elements) {
+            $itemResult = Resolve-SafeCommandNameExpressionValue -Ast $elem -Context $Context -Depth ($Depth + 1)
+            if (-not $itemResult.Success) {
+                return [PSCustomObject]@{ Success = $false; Value = $null }
+            }
+            $items += $itemResult.Value
+        }
+        return [PSCustomObject]@{ Success = $true; Value = @($items) }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $varName = Resolve-VariableExpressionActualName -VariableExpressionAst $Ast -Context $Context
+        if ($null -eq $varName) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varName
+        if ($null -eq $value) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        return [PSCustomObject]@{ Success = $true; Value = $value }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.IndexExpressionAst]) {
+        $targetResult = Resolve-SafeCommandNameExpressionValue -Ast $Ast.Target -Context $Context -Depth ($Depth + 1)
+        if (-not $targetResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $indexAst = if ($Ast.Index -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $Ast.Index.Expression
+        } else {
+            $Ast.Index
+        }
+        $indexResult = Resolve-SafeCommandNameExpressionValue -Ast $indexAst -Context $Context -Depth ($Depth + 1)
+        if (-not $indexResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $targetValue = $targetResult.Value
+        $indexValue = $indexResult.Value
+        $indexes = if ($indexValue -is [array]) { @($indexValue) } else { @($indexValue) }
+        $resolved = @()
+
+        if ($targetValue -is [string]) {
+            foreach ($idx in $indexes) {
+                try {
+                    $resolved += $targetValue[[int]$idx]
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; Value = $null }
+                }
+            }
+        } else {
+            $targetItems = if (($targetValue -is [System.Collections.IEnumerable]) -and -not ($targetValue -is [string])) {
+                @($targetValue)
+            } else {
+                @($targetValue)
+            }
+            foreach ($idx in $indexes) {
+                try {
+                    $resolved += $targetItems[[int]$idx]
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; Value = $null }
+                }
+            }
+        }
+
+        if ($resolved.Count -eq 1) {
+            return [PSCustomObject]@{ Success = $true; Value = $resolved[0] }
+        }
+        return [PSCustomObject]@{ Success = $true; Value = @($resolved) }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.BinaryExpressionAst]) {
+        $op = [string]$Ast.Operator
+        $leftResult = Resolve-SafeCommandNameExpressionValue -Ast $Ast.Left -Context $Context -Depth ($Depth + 1)
+        $rightResult = Resolve-SafeCommandNameExpressionValue -Ast $Ast.Right -Context $Context -Depth ($Depth + 1)
+        if (-not $leftResult.Success -or -not $rightResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        switch ($op) {
+            'Plus' {
+                $leftValue = $leftResult.Value
+                $rightValue = $rightResult.Value
+                if ($leftValue -is [array] -or $rightValue -is [array]) {
+                    return [PSCustomObject]@{ Success = $true; Value = @(@($leftValue) + @($rightValue)) }
+                }
+                return [PSCustomObject]@{ Success = $true; Value = ([string]$leftValue + [string]$rightValue) }
+            }
+            'Join' {
+                $separator = [string]$rightResult.Value
+                $items = @($leftResult.Value)
+                $joined = ($items | ForEach-Object { [string]$_ }) -join $separator
+                return [PSCustomObject]@{ Success = $true; Value = $joined }
+            }
+            default {
+                return [PSCustomObject]@{ Success = $false; Value = $null }
+            }
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+        $childResult = Resolve-SafeCommandNameExpressionValue -Ast $Ast.Child -Context $Context -Depth ($Depth + 1)
+        if (-not $childResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $typeName = [string]$Ast.Type.TypeName.FullName
+        try {
+            switch ($typeName.ToLowerInvariant()) {
+                'string' { return [PSCustomObject]@{ Success = $true; Value = [string]$childResult.Value } }
+                'char'   { return [PSCustomObject]@{ Success = $true; Value = [char]$childResult.Value } }
+                'int'    { return [PSCustomObject]@{ Success = $true; Value = [int]$childResult.Value } }
+            }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        $targetResult = Resolve-SafeCommandNameExpressionValue -Ast $Ast.Expression -Context $Context -Depth ($Depth + 1)
+        if (-not $targetResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $memberName = if ($Ast.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            [string]$Ast.Member.Value
+        } else {
+            [string]$Ast.Member.Extent.Text
+        }
+
+        $argValues = @()
+        $invokeArgs = if ($null -ne $Ast.Arguments) { @($Ast.Arguments) } else { @() }
+        foreach ($argAst in $invokeArgs) {
+            $argResult = Resolve-SafeCommandNameExpressionValue -Ast $argAst -Context $Context -Depth ($Depth + 1)
+            if (-not $argResult.Success) {
+                return [PSCustomObject]@{ Success = $false; Value = $null }
+            }
+            $argValues += $argResult.Value
+        }
+
+        $targetValue = $targetResult.Value
+
+        try {
+            switch -Regex ($memberName) {
+                '^(?i:ToString)$' {
+                    if ($argValues.Count -eq 0) {
+                        return [PSCustomObject]@{ Success = $true; Value = [string]$targetValue.ToString() }
+                    }
+                }
+                '^(?i:Substring)$' {
+                    if ($targetValue -isnot [string]) { break }
+                    if ($argValues.Count -eq 1) {
+                        return [PSCustomObject]@{ Success = $true; Value = $targetValue.Substring([int]$argValues[0]) }
+                    }
+                    if ($argValues.Count -eq 2) {
+                        return [PSCustomObject]@{ Success = $true; Value = $targetValue.Substring([int]$argValues[0], [int]$argValues[1]) }
+                    }
+                }
+                '^(?i:Replace)$' {
+                    if ($targetValue -isnot [string] -or $argValues.Count -ne 2) { break }
+                    return [PSCustomObject]@{ Success = $true; Value = $targetValue.Replace([string]$argValues[0], [string]$argValues[1]) }
+                }
+                '^(?i:ToLower)$' {
+                    if ($targetValue -isnot [string] -or $argValues.Count -ne 0) { break }
+                    return [PSCustomObject]@{ Success = $true; Value = $targetValue.ToLowerInvariant() }
+                }
+                '^(?i:ToUpper)$' {
+                    if ($targetValue -isnot [string] -or $argValues.Count -ne 0) { break }
+                    return [PSCustomObject]@{ Success = $true; Value = $targetValue.ToUpperInvariant() }
+                }
+                '^(?i:Trim)$' {
+                    if ($targetValue -isnot [string] -or $argValues.Count -ne 0) { break }
+                    return [PSCustomObject]@{ Success = $true; Value = $targetValue.Trim() }
+                }
+            }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.MemberExpressionAst]) {
+        $targetResult = Resolve-SafeCommandNameExpressionValue -Ast $Ast.Expression -Context $Context -Depth ($Depth + 1)
+        if (-not $targetResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $memberName = if ($Ast.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            [string]$Ast.Member.Value
+        } else {
+            [string]$Ast.Member.Extent.Text
+        }
+        if ([string]::IsNullOrWhiteSpace($memberName)) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $targetValue = $targetResult.Value
+        try {
+            switch -Regex ($memberName) {
+                '^(?i:Name|Definition|Value)$' {
+                    $prop = $targetValue.PSObject.Properties[$memberName]
+                    if ($prop) {
+                        return [PSCustomObject]@{ Success = $true; Value = $prop.Value }
+                    }
+                }
+                '^(?i:Length|Count)$' {
+                    if ($targetValue.PSObject.Properties[$memberName]) {
+                        return [PSCustomObject]@{ Success = $true; Value = $targetValue.$memberName }
+                    }
+                }
+            }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null }
+}
+
+function Get-SafeCommandLookupResults {
+    param(
+        [string]$Name,
+        [switch]$AllowWildcard
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return @() }
+
+    $query = [string]$Name
+    if (-not $AllowWildcard) {
+        $query = [System.Management.Automation.WildcardPattern]::Escape($query)
+    }
+
+    try {
+        return @(Get-Command -Name $query -ErrorAction SilentlyContinue)
+    } catch [System.Management.Automation.WildcardPatternException] {
+        return @()
+    } catch {
+        return @()
+    }
+}
+
+function Test-TextCommandTokenLooksLiteral {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+
+    $candidate = [string]$Text
+    if ($candidate -in @('&', '.')) { return $false }
+    if ($candidate.StartsWith('&')) { return $false }
+    if ($candidate.StartsWith('.')) {
+        if (-not ($candidate.StartsWith('.\') -or $candidate.StartsWith('./'))) {
+            return $false
+        }
+    }
+
+    foreach ($ch in @('$', '{', '}', '(', ')', '[', ']', '*', '?', '`', '"', "'")) {
+        if ($candidate.Contains($ch)) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Test-CommandNameExistsInContext {
+    param(
+        [string]$CommandName,
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CommandName)) { return $false }
+
+    $name = [string]$CommandName
+
+    if ($Context -and $Context.CFG -and $Context.CFG.DefinedAliases -and $Context.CFG.DefinedAliases.ContainsKey($name)) {
+        return $true
+    }
+    if ($Context -and $Context.FunctionSubgraphs -and $Context.FunctionSubgraphs.ContainsKey($name)) {
+        return $true
+    }
+    if ($Context -and $Context.ScriptBlockSubgraphs -and $Context.ScriptBlockSubgraphs.ContainsKey($name)) {
+        return $true
+    }
+    if ($name -in $script:DynamicInvokeCommands) {
+        return $true
+    }
+    if ($name -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$') {
+        return $true
+    }
+
+    $compatAlias = Resolve-CompatibilityAliasName -Name $name
+    if (-not [string]::IsNullOrWhiteSpace($compatAlias)) {
+        return $true
+    }
+
+    return ($null -ne (@(Get-SafeCommandLookupResults -Name $name) | Select-Object -First 1))
+}
+
+function Get-ResolvedCommandHeadText {
+    param(
+        $CommandAst,
+        [string]$ResolvedName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ResolvedName)) {
+        return $ResolvedName
+    }
+    if ($null -eq $CommandAst) {
+        return $ResolvedName
+    }
+
+    switch ([string]$CommandAst.InvocationOperator) {
+        'Ampersand' { return "& $ResolvedName" }
+        'Dot' { return ". $ResolvedName" }
+        default { return $ResolvedName }
+    }
+}
+
+function Get-CommandElementResolvedNodeText {
+    param(
+        [string]$NodeText,
+        $CommandElementAst,
+        [string]$ResolvedName,
+        $CommandAst = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($NodeText) -or $null -eq $CommandElementAst -or [string]::IsNullOrWhiteSpace($ResolvedName)) {
+        return $null
+    }
+    if (-not $CommandElementAst.Extent) { return $null }
+
+    $start = [int]$CommandElementAst.Extent.StartOffset
+    $end = [int]$CommandElementAst.Extent.EndOffset
+    if ($start -lt 0 -or $end -le $start -or $end -gt $NodeText.Length) {
+        return $null
+    }
+
+    if ($null -ne $CommandAst -and $CommandAst.Extent -and $CommandAst.CommandElements -and $CommandAst.CommandElements.Count -gt 0 -and
+        $CommandAst.CommandElements[0] -eq $CommandElementAst) {
+        $commandStart = [int]$CommandAst.Extent.StartOffset
+        if ($commandStart -ge 0 -and $commandStart -le $start -and $commandStart -le $NodeText.Length) {
+            $resolvedHead = Get-ResolvedCommandHeadText -CommandAst $CommandAst -ResolvedName $ResolvedName
+            return $NodeText.Substring(0, $commandStart) + $resolvedHead + $NodeText.Substring($end)
+        }
+    }
+
+    return $NodeText.Substring(0, $start) + $ResolvedName + $NodeText.Substring($end)
+}
+
+function Get-CommandNamedParameterUsageInfo {
+    param($CommandAst)
+
+    $names = @()
+    if ($null -eq $CommandAst -or -not $CommandAst.CommandElements) { return @() }
+
+    for ($i = 1; $i -lt $CommandAst.CommandElements.Count; $i++) {
+        $elem = $CommandAst.CommandElements[$i]
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst] -and
+            -not [string]::IsNullOrWhiteSpace([string]$elem.ParameterName)) {
+            $names += [string]$elem.ParameterName
+        }
+    }
+
+    return @($names | Select-Object -Unique)
+}
+
+function Resolve-CommandParameterNameForMetadata {
+    param(
+        [string]$ParameterName,
+        $CandidateCommand
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ParameterName) -or $null -eq $CandidateCommand -or -not $CandidateCommand.Parameters) {
+        return $null
+    }
+
+    $actual = $ParameterName.ToLowerInvariant()
+    $keys = @($CandidateCommand.Parameters.Keys)
+    foreach ($key in $keys) {
+        if ($key -ieq $actual) {
+            return [string]$key
+        }
+    }
+
+    $matches = @($keys | Where-Object {
+            $candidate = [string]$_
+            $candidate.ToLowerInvariant().StartsWith($actual)
+        })
+    if ($matches.Count -eq 1) {
+        return [string]$matches[0]
+    }
+
+    return $null
+}
+
+function Test-CommandMetadataAcceptsPipelineInput {
+    param($CandidateCommand)
+
+    if ($null -eq $CandidateCommand -or -not $CandidateCommand.Parameters) { return $false }
+
+    foreach ($paramMeta in $CandidateCommand.Parameters.Values) {
+        foreach ($attr in @($paramMeta.Attributes)) {
+            if ($attr -is [System.Management.Automation.ParameterAttribute] -and
+                ($attr.ValueFromPipeline -or $attr.ValueFromPipelineByPropertyName)) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Test-CommandMetadataSupportsScriptBlockArgument {
+    param($CandidateCommand)
+
+    if ($null -eq $CandidateCommand -or -not $CandidateCommand.Parameters) { return $false }
+
+    foreach ($paramMeta in $CandidateCommand.Parameters.Values) {
+        if ($paramMeta.ParameterType -eq [scriptblock] -or $paramMeta.ParameterType -eq [scriptblock[]]) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-WildcardPatternFitScore {
+    param(
+        [string]$Pattern,
+        [string]$CommandName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Pattern) -or [string]::IsNullOrWhiteSpace($CommandName)) {
+        return 0
+    }
+
+    $score = 0
+    $patternText = $Pattern.ToLowerInvariant()
+    $nameText = $CommandName.ToLowerInvariant()
+
+    $literals = @($patternText -split '\*')
+    $literalLength = 0
+    foreach ($part in $literals) {
+        if ($null -ne $part) {
+            $literalLength += $part.Length
+        }
+    }
+
+    if ($literals.Count -gt 0 -and -not [string]::IsNullOrEmpty($literals[0]) -and $nameText.StartsWith($literals[0])) {
+        $score += 30
+    }
+    if ($literals.Count -gt 0 -and -not [string]::IsNullOrEmpty($literals[$literals.Count - 1]) -and $nameText.EndsWith($literals[$literals.Count - 1])) {
+        $score += 30
+    }
+
+    $inserted = [Math]::Max(0, ($CommandName.Length - $literalLength))
+    $score += [Math]::Max(0, (120 - ($inserted * 6)))
+    $score += [Math]::Max(0, (60 - ($CommandName.Length * 2)))
+
+    return [int]$score
+}
+
+function Get-CommandInvocationShapeInfo {
+    param($CommandAst)
+
+    $hasPipelineInput = $false
+    if ($CommandAst -and $CommandAst.Parent -is [System.Management.Automation.Language.PipelineAst]) {
+        $pipelineElements = @($CommandAst.Parent.PipelineElements)
+        for ($i = 0; $i -lt $pipelineElements.Count; $i++) {
+            if ($pipelineElements[$i] -eq $CommandAst) {
+                $hasPipelineInput = ($i -gt 0)
+                break
+            }
+        }
+    }
+
+    $hasScriptBlockArgument = $false
+    if ($CommandAst -and $CommandAst.CommandElements) {
+        for ($i = 1; $i -lt $CommandAst.CommandElements.Count; $i++) {
+            if ($CommandAst.CommandElements[$i] -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                $hasScriptBlockArgument = $true
+                break
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        HasPipelineInput     = $hasPipelineInput
+        HasScriptBlockArgument = $hasScriptBlockArgument
+    }
+}
+
+function Get-GetCommandPipelinePatternInfo {
+    param($FirstElementAst)
+
+    if ($null -eq $FirstElementAst -or $FirstElementAst -isnot [System.Management.Automation.Language.ParenExpressionAst]) {
+        return $null
+    }
+    if ($null -eq $FirstElementAst.Pipeline) { return $null }
+
+    $pipeline = $FirstElementAst.Pipeline
+    $commands = @($pipeline.PipelineElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandAst] })
+    if ($commands.Count -eq 0) { return $null }
+
+    $getCommandAst = $commands[0]
+    $gcName = $getCommandAst.GetCommandName()
+    if ($gcName -notin @('Get-Command', 'gcm')) {
+        return $null
+    }
+
+    $patternAst = $null
+    $positionals = @()
+    for ($i = 1; $i -lt $getCommandAst.CommandElements.Count; $i++) {
+        $elem = $getCommandAst.CommandElements[$i]
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramName = [string]$elem.ParameterName
+            if (-not [string]::IsNullOrWhiteSpace($paramName) -and 'name'.StartsWith($paramName.ToLowerInvariant())) {
+                $argAst = $elem.Argument
+                if (-not $argAst -and ($i + 1 -lt $getCommandAst.CommandElements.Count)) {
+                    $i++
+                    $argAst = $getCommandAst.CommandElements[$i]
+                }
+                $patternAst = $argAst
+            }
+            continue
+        }
+
+        $positionals += $elem
+    }
+
+    if (-not $patternAst -and $positionals.Count -gt 0) {
+        $patternAst = $positionals[0]
+    }
+    if (-not $patternAst) { return $null }
+
+    $patternText = $null
+    if ($patternAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $patternText = [string]$patternAst.Value
+    } elseif ($patternAst.PSObject.Properties['Value']) {
+        $patternText = [string]$patternAst.Value
+    }
+    if ([string]::IsNullOrWhiteSpace($patternText)) {
+        return [PSCustomObject]@{
+            Recognized = $true
+            Pattern    = $null
+        }
+    }
+
+    if ($commands.Count -ge 2) {
+        $selectAst = $commands[$commands.Count - 1]
+        $selectName = $selectAst.GetCommandName()
+        if ($selectName -notin @('Select-Object', 'select')) {
+            return $null
+        }
+
+        $expandPropertyOk = $false
+        for ($i = 1; $i -lt $selectAst.CommandElements.Count; $i++) {
+            $elem = $selectAst.CommandElements[$i]
+            if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+
+            $paramName = [string]$elem.ParameterName
+            if ([string]::IsNullOrWhiteSpace($paramName)) { continue }
+            if (-not 'expandproperty'.StartsWith($paramName.ToLowerInvariant())) { continue }
+
+            $argAst = $elem.Argument
+            if (-not $argAst -and ($i + 1 -lt $selectAst.CommandElements.Count)) {
+                $i++
+                $argAst = $selectAst.CommandElements[$i]
+            }
+
+            $argText = if ($argAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                [string]$argAst.Value
+            } elseif ($argAst) {
+                [string]$argAst.Extent.Text
+            } else {
+                $null
+            }
+
+            if ($argText -ieq 'Name') {
+                $expandPropertyOk = $true
+                break
+            }
+        }
+
+        if (-not $expandPropertyOk) {
+            return $null
+        }
+    }
+
+    return [PSCustomObject]@{
+        Recognized = $true
+        Pattern    = $patternText
+    }
+}
+
+function Resolve-CommandNameFromGetCommandExpression {
+    param(
+        $CommandAst,
+        $FirstElementAst,
+        [hashtable]$Context
+    )
+
+    $patternInfo = Get-GetCommandPipelinePatternInfo -FirstElementAst $FirstElementAst
+    if (-not $patternInfo) {
+        return [PSCustomObject]@{
+            Success           = $false
+            RecognizedPattern = $false
+            ResolvedName      = $null
+            Confidence        = 'None'
+            ScoreGap          = 0
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$patternInfo.Pattern)) {
+        return [PSCustomObject]@{
+            Success           = $false
+            RecognizedPattern = $true
+            ResolvedName      = $null
+            Confidence        = 'None'
+            ScoreGap          = 0
+        }
+    }
+
+    $pattern = [string]$patternInfo.Pattern
+    $namedParams = @(Get-CommandNamedParameterUsageInfo -CommandAst $CommandAst)
+    $shapeInfo = Get-CommandInvocationShapeInfo -CommandAst $CommandAst
+    $rawCandidates = @(Get-SafeCommandLookupResults -Name $pattern -AllowWildcard)
+    if ($rawCandidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Success           = $false
+            RecognizedPattern = $true
+            ResolvedName      = $null
+            Confidence        = 'None'
+            ScoreGap          = 0
+        }
+    }
+
+    $scored = @()
+    $seen = @{}
+
+    foreach ($rawCandidate in $rawCandidates) {
+        if ($null -eq $rawCandidate) { continue }
+
+        $effectiveName = if ($rawCandidate.CommandType -eq [System.Management.Automation.CommandTypes]::Alias -and
+            -not [string]::IsNullOrWhiteSpace([string]$rawCandidate.Definition)) {
+            [string]$rawCandidate.Definition
+        } else {
+            [string]$rawCandidate.Name
+        }
+
+        if ([string]::IsNullOrWhiteSpace($effectiveName)) { continue }
+        $dedupeKey = $effectiveName.ToLowerInvariant()
+        if ($seen.ContainsKey($dedupeKey)) { continue }
+        $seen[$dedupeKey] = $true
+
+        $candidateCommand = @(Get-SafeCommandLookupResults -Name $effectiveName) | Select-Object -First 1
+        if (-not $candidateCommand) { continue }
+
+        $rejectReason = $null
+        $score = 0
+
+        foreach ($paramName in $namedParams) {
+            $matchedParam = Resolve-CommandParameterNameForMetadata -ParameterName $paramName -CandidateCommand $candidateCommand
+            if (-not $matchedParam) {
+                $rejectReason = "missing_param:$paramName"
+                break
+            }
+            $score += 120
+        }
+
+        if (-not $rejectReason -and $shapeInfo.HasPipelineInput) {
+            if (-not (Test-CommandMetadataAcceptsPipelineInput -CandidateCommand $candidateCommand)) {
+                $rejectReason = 'no_pipeline_input'
+            } else {
+                $score += 80
+            }
+        }
+
+        if (-not $rejectReason -and $shapeInfo.HasScriptBlockArgument) {
+            if (-not (Test-CommandMetadataSupportsScriptBlockArgument -CandidateCommand $candidateCommand)) {
+                $rejectReason = 'no_scriptblock_param'
+            } else {
+                $score += 100
+            }
+        }
+
+        if ($rejectReason) {
+            continue
+        }
+
+        $score += Get-WildcardPatternFitScore -Pattern $pattern -CommandName $candidateCommand.Name
+        if ($candidateCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Cmdlet) {
+            $score += 90
+        } elseif ($candidateCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Function) {
+            $score += 15
+        } else {
+            $score += 10
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$candidateCommand.ModuleName) -and
+            [string]$candidateCommand.ModuleName -like 'Microsoft.PowerShell.*') {
+            $score += 70
+        }
+        if ($candidateCommand.Name -match '^[A-Za-z]+-[A-Za-z]+$') {
+            $score += 20
+        }
+
+        $scored += [PSCustomObject]@{
+            Name    = [string]$candidateCommand.Name
+            Score   = [int]$score
+            Module  = [string]$candidateCommand.ModuleName
+            Type    = [string]$candidateCommand.CommandType
+        }
+    }
+
+    if ($scored.Count -eq 0) {
+        return [PSCustomObject]@{
+            Success           = $false
+            RecognizedPattern = $true
+            ResolvedName      = $null
+            Confidence        = 'None'
+            ScoreGap          = 0
+        }
+    }
+
+    $ordered = @($scored | Sort-Object @{ Expression = { -$_.Score } }, @{ Expression = { $_.Name.Length } }, Name)
+    $best = $ordered[0]
+    $secondScore = if ($ordered.Count -gt 1) { [int]$ordered[1].Score } else { -100000 }
+    $gap = [int]($best.Score - $secondScore)
+    $success = ($best.Score -ge 150 -and $gap -ge 20)
+
+    return [PSCustomObject]@{
+        Success           = $success
+        RecognizedPattern = $true
+        ResolvedName      = if ($success) { [string]$best.Name } else { $null }
+        Confidence        = if ($success) { 'High' } else { 'Low' }
+        ScoreGap          = $gap
+        Pattern           = $pattern
+    }
+}
+
 # 从节点中提取命令信息
 function Get-ResolvedCommandInfo {
     param(
@@ -5716,54 +7253,107 @@ function Get-ResolvedCommandInfo {
         [hashtable]$ResolvedValues   # 已还原的表达式值
     )
 
-    $execInfo = Get-NodeTextExecutionInfo -Node $Node -Context $Context
+    $execInfo = Get-NodeTextExecutionInfoWithFallback -Node $Node -Context $Context -CandidateSourceTexts @([string]$Node.Text) -AllowOriginalAstFallback
     if (-not $execInfo.Success) {
-        return @{ HasCommand = $false }
+        return [PSCustomObject]@{ HasCommand = $false }
     }
 
     $cmdAst = $execInfo.CommandAst
     if (-not $cmdAst) {
-        return @{ HasCommand = $false }
+        return [PSCustomObject]@{ HasCommand = $false }
     }
 
     $cmdName = $null
+    $originalName = $null
+    $commandElementAst = if ($cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 0) {
+        $cmdAst.CommandElements[0]
+    } else {
+        $null
+    }
+    $resolutionKind = 'Direct'
+    $resolutionConfidence = 'High'
+    $resolvedNodeText = $null
+    $wildcardResolution = $null
 
     # 优先尝试静态命令名
     if ($cmdAst.GetCommandName) {
         $cmdName = $cmdAst.GetCommandName()
+        $originalName = $cmdName
     }
 
     # 动态命令名：优先使用本轮解析出的表达式值（local 偏移）
     if (-not $cmdName -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 0) {
         $firstElement = $cmdAst.CommandElements[0]
+        $originalName = [string]$firstElement.Extent.Text
+
+        $safeEval = Resolve-SafeCommandNameExpressionValue -Ast $firstElement -Context $Context
+        if ($safeEval.Success) {
+            $candidateName = Convert-ResolvedCommandCandidateToName -Value $safeEval.Value
+            if (Test-CommandNameExistsInContext -CommandName $candidateName -Context $Context) {
+                $cmdName = $candidateName
+                $resolutionKind = 'StaticExpression'
+                $resolutionConfidence = 'High'
+            }
+        }
+
+        $wildcardResolution = Resolve-CommandNameFromGetCommandExpression -CommandAst $cmdAst -FirstElementAst $firstElement -Context $Context
+        $suppressExpressionFallback = ($wildcardResolution -and $wildcardResolution.RecognizedPattern)
+        if ($wildcardResolution.Success) {
+            $cmdName = [string]$wildcardResolution.ResolvedName
+            $resolutionKind = 'WildcardPattern'
+            $resolutionConfidence = [string]$wildcardResolution.Confidence
+        }
+
         $localKey = "local:$($Node.Id):$($firstElement.Extent.StartOffset):$($firstElement.Extent.EndOffset)"
-        if ($ResolvedValues -and $ResolvedValues.ContainsKey($localKey)) {
-            $cmdName = $ResolvedValues[$localKey]
+        if (-not $cmdName -and -not $suppressExpressionFallback -and $ResolvedValues -and $ResolvedValues.ContainsKey($localKey)) {
+            $candidateName = Convert-ResolvedCommandCandidateToName -Value $ResolvedValues[$localKey]
+            if (Test-CommandNameExistsInContext -CommandName $candidateName -Context $Context) {
+                $cmdName = $candidateName
+                $resolutionKind = 'EvaluatedExpression'
+                $resolutionConfidence = 'High'
+            }
         }
 
         # 兜底：直接在当前上下文求值首元素
-        if (-not $cmdName) {
+        if (-not $cmdName -and -not $suppressExpressionFallback) {
             $nameCode = Convert-CodeForCurrentScope -Code $firstElement.Extent.Text -Context $Context
             $nameEval = Invoke-InContext -ExecContext $Context.ExecContext -Code $nameCode
             if ($nameEval.Success) {
                 $nameValue = Normalize-ExecutionResultValue -Value $nameEval.Result -TreatArraysAsSequence
                 if ($null -ne $nameValue) {
-                    $cmdName = [string]$nameValue
+                    $candidateName = Convert-ResolvedCommandCandidateToName -Value $nameValue
+                    if (Test-CommandNameExistsInContext -CommandName $candidateName -Context $Context) {
+                        $cmdName = $candidateName
+                        $resolutionKind = 'EvaluatedExpression'
+                        $resolutionConfidence = 'High'
+                    }
                 }
             }
+        }
+
+        if ($cmdName) {
+            $resolvedNodeText = Get-CommandElementResolvedNodeText -NodeText ([string]$Node.Text) -CommandElementAst $firstElement -ResolvedName ([string]$cmdName) -CommandAst $cmdAst
         }
     }
 
     # 最后从文本提取 token（不依赖 AST 原文）
     if (-not $cmdName -and $cmdAst.Extent -and $cmdAst.Extent.Text -match '^\s*([^\s\(]+)') {
-        $cmdName = $Matches[1]
+        $textCandidate = [string]$Matches[1]
+        if (Test-TextCommandTokenLooksLiteral -Text $textCandidate) {
+            $cmdName = $textCandidate
+            $originalName = $cmdName
+        }
     }
     if (-not $cmdName -and $Node.Text -match '^\s*([^\s\(]+)') {
-        $cmdName = $Matches[1]
+        $textCandidate = [string]$Matches[1]
+        if (Test-TextCommandTokenLooksLiteral -Text $textCandidate) {
+            $cmdName = $textCandidate
+            $originalName = $cmdName
+        }
     }
 
     if (-not $cmdName) {
-        return @{ HasCommand = $false }
+        return [PSCustomObject]@{ HasCommand = $false }
     }
 
     $cmdName = [string]$cmdName
@@ -5780,23 +7370,66 @@ function Get-ResolvedCommandInfo {
     $realName = $cmdName
     if ($Context.CFG.DefinedAliases -and $Context.CFG.DefinedAliases.ContainsKey($cmdName)) {
         $realName = $Context.CFG.DefinedAliases[$cmdName]
-        return @{
+        return [PSCustomObject]@{
             HasCommand   = $true
             OriginalName = $cmdName
             ResolvedName = $realName
             IsAlias      = $true
             Ast          = $cmdAst
             Resolvable   = $matchedResolvable
+            ResolutionKind = 'Alias'
+            ResolutionConfidence = 'High'
+            CommandElementAst = $commandElementAst
+            ResolvedNodeText = (Get-CommandElementResolvedNodeText -NodeText ([string]$Node.Text) -CommandElementAst $commandElementAst -ResolvedName $realName -CommandAst $cmdAst)
         }
     }
 
-    return @{
+    $builtinAlias = @(Get-SafeCommandLookupResults -Name $cmdName) | Select-Object -First 1
+    if ($builtinAlias -and $builtinAlias.CommandType -eq [System.Management.Automation.CommandTypes]::Alias -and
+        -not [string]::IsNullOrWhiteSpace([string]$builtinAlias.Definition)) {
+        $realName = [string]$builtinAlias.Definition
+        return [PSCustomObject]@{
+            HasCommand   = $true
+            OriginalName = $cmdName
+            ResolvedName = $realName
+            IsAlias      = $true
+            Ast          = $cmdAst
+            Resolvable   = $matchedResolvable
+            ResolutionKind = 'BuiltinAlias'
+            ResolutionConfidence = 'High'
+            CommandElementAst = $commandElementAst
+            ResolvedNodeText = (Get-CommandElementResolvedNodeText -NodeText ([string]$Node.Text) -CommandElementAst $commandElementAst -ResolvedName $realName -CommandAst $cmdAst)
+        }
+    }
+
+    $compatAlias = Resolve-CompatibilityAliasName -Name $cmdName
+    if (-not [string]::IsNullOrWhiteSpace($compatAlias)) {
+        return [PSCustomObject]@{
+            HasCommand   = $true
+            OriginalName = $cmdName
+            ResolvedName = $compatAlias
+            IsAlias      = $true
+            Ast          = $cmdAst
+            Resolvable   = $matchedResolvable
+            ResolutionKind = 'CompatibilityAlias'
+            ResolutionConfidence = 'High'
+            CommandElementAst = $commandElementAst
+            ResolvedNodeText = (Get-CommandElementResolvedNodeText -NodeText ([string]$Node.Text) -CommandElementAst $commandElementAst -ResolvedName $compatAlias -CommandAst $cmdAst)
+        }
+    }
+
+    return [PSCustomObject]@{
         HasCommand   = $true
-        OriginalName = $cmdName
+        OriginalName = if ($originalName) { $originalName } else { $cmdName }
         ResolvedName = $cmdName
         IsAlias      = $false
         Ast          = $cmdAst
         Resolvable   = $matchedResolvable
+        ResolutionKind = $resolutionKind
+        ResolutionConfidence = $resolutionConfidence
+        CommandElementAst = $commandElementAst
+        ResolvedNodeText = $resolvedNodeText
+        WildcardPatternRecognized = if ($wildcardResolution) { [bool]$wildcardResolution.RecognizedPattern } else { $false }
     }
 }
 
@@ -6026,7 +7659,8 @@ function Test-DangerousMethodCall {
         if (-not $memberName) { continue }
 
         # 检查是否是静态方法调用 [Type]::Method()
-        if ($methodCall.Expression -is [System.Management.Automation.Language.TypeExpressionAst]) {
+        $isStaticMethodCall = ($methodCall.Expression -is [System.Management.Automation.Language.TypeExpressionAst])
+        if ($isStaticMethodCall) {
             $typeName = $methodCall.Expression.TypeName.FullName
 
             foreach ($pattern in $dangerousPatterns) {
@@ -6040,6 +7674,9 @@ function Test-DangerousMethodCall {
                     }
                 }
             }
+
+            # 静态方法若未命中危险类型表，不应再落入实例方法的“未知类型”拦截。
+            continue
         }
 
         # 检查是否是实例方法调用 $obj.Method()
@@ -6118,6 +7755,14 @@ function Resolve-NonCommandExpressions {
 
     foreach ($resolvable in $resolved.Items) {
         if ($resolvable.Type -in $skipEvalTypes) {
+            continue
+        }
+
+        if ($resolvable.Ast -and (Test-ResolvableAstHasImplicitSideEffects -Ast $resolvable.Ast)) {
+            continue
+        }
+
+        if ($resolvable.Ast -and (Test-AstDependsOnBlockedTaint -Ast $resolvable.Ast -Context $Context)) {
             continue
         }
 
@@ -6483,8 +8128,8 @@ function Get-AstValue {
     return $null
 }
 
-# 记录别名解析结果为可还原表达式
-function Record-AliasResolution {
+# 记录命令名解析结果（别名 / wildcard / 受控表达式）为可还原表达式
+function Record-CommandNameResolution {
     param(
         $Node,
         [hashtable]$Context,
@@ -6499,6 +8144,8 @@ function Record-AliasResolution {
     # - 最后：无法映射则跳过（避免错误替换）
 
     $cmdNameElement = $null
+    $manualStartOffset = $null
+    $manualEndOffset = $null
 
     # 1) 优先：使用生成期的原始 AST 位置信息（最可靠）
     if ($CommandInfo.Resolvable -and $CommandInfo.Resolvable.Ast -and
@@ -6530,7 +8177,14 @@ function Record-AliasResolution {
             $matched = @()
             foreach ($c in $cmdAsts) {
                 $name = $c.GetCommandName()
-                if ($name -and $name -eq $CommandInfo.OriginalName) {
+                $firstText = if ($c.CommandElements -and $c.CommandElements.Count -gt 0 -and $c.CommandElements[0].Extent) {
+                    [string]$c.CommandElements[0].Extent.Text
+                } else {
+                    $null
+                }
+
+                if (($name -and $name -eq $CommandInfo.OriginalName) -or
+                    ((-not $name) -and -not [string]::IsNullOrWhiteSpace($firstText) -and $firstText -eq [string]$CommandInfo.OriginalName)) {
                     $matched += $c
                 }
             }
@@ -6544,19 +8198,34 @@ function Record-AliasResolution {
         }
     }
 
+    # 3) 对于 & (...) / . (...) 这类动态命令位点，直接使用解析阶段保存的首元素 AST。
+    if (-not $cmdNameElement -and $CommandInfo -and $CommandInfo.PSObject.Properties['CommandElementAst'] -and $CommandInfo.CommandElementAst -and $CommandInfo.CommandElementAst.Extent) {
+        $cmdNameElement = $CommandInfo.CommandElementAst
+        if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) {
+            $manualStartOffset = [int]$Node.TextStartOffset + [int]$CommandInfo.CommandElementAst.Extent.StartOffset
+            $manualEndOffset = [int]$Node.TextStartOffset + [int]$CommandInfo.CommandElementAst.Extent.EndOffset
+        }
+    }
+
     if (-not $cmdNameElement -or -not $cmdNameElement.Extent) {
         Write-ExecutionLog -Context $Context -Message "  [ALIAS] Cannot record alias resolution: no original position info"
         return
     }
 
-    $startOffset = $cmdNameElement.Extent.StartOffset
-    $endOffset = $cmdNameElement.Extent.EndOffset
+    $startOffset = if ($null -ne $manualStartOffset) { $manualStartOffset } else { $cmdNameElement.Extent.StartOffset }
+    $endOffset = if ($null -ne $manualEndOffset) { $manualEndOffset } else { $cmdNameElement.Extent.EndOffset }
 
     $key = "$($Node.Id):${startOffset}:${endOffset}"
 
-    # 创建一个伪 Resolvable 对象来记录别名
-    $aliasResolvable = @{
-        Type        = "Alias"
+    $resolutionKind = if ($CommandInfo.PSObject.Properties['ResolutionKind']) {
+        [string]$CommandInfo.ResolutionKind
+    } else {
+        if ($CommandInfo.IsAlias) { 'Alias' } else { 'CommandName' }
+    }
+
+    # 创建一个伪 Resolvable 对象来记录命令名解析
+    $commandResolvable = @{
+        Type        = "CommandName"
         Text        = $CommandInfo.OriginalName
         StartOffset = $startOffset
         EndOffset   = $endOffset
@@ -6565,21 +8234,32 @@ function Record-AliasResolution {
         # 额外信息
         AliasName   = $CommandInfo.OriginalName
         TargetName  = $CommandInfo.ResolvedName
+        ResolutionKind = $resolutionKind
     }
 
     # 记录到结果集
     if (-not $Context.ResolvableResults.ContainsKey($key)) {
         $Context.ResolvableResults[$key] = @{
             NodeId     = $Node.Id
-            Resolvable = $aliasResolvable
+            Resolvable = $commandResolvable
             Values     = @()
         }
     }
 
-    # 别名解析结果是目标命令名
+    # 命令名解析结果是最终目标命令名
     $Context.ResolvableResults[$key].Values += $CommandInfo.ResolvedName
 
-    Write-ExecutionLog -Context $Context -Message "  [ALIAS] Recorded: $($CommandInfo.OriginalName) -> $($CommandInfo.ResolvedName)"
+    Write-ExecutionLog -Context $Context -Message "  [CMDNAME] Recorded ($resolutionKind): $($CommandInfo.OriginalName) -> $($CommandInfo.ResolvedName)"
+}
+
+function Record-AliasResolution {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo
+    )
+
+    Record-CommandNameResolution -Node $Node -Context $Context -CommandInfo $CommandInfo
 }
 
 # 初始化函数和脚本块子图映射
@@ -6647,6 +8327,7 @@ function Invoke-CFGTraversal {
         ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
         VariableReadResults = @{}  # Key: "StartOffset:EndOffset", Value: @{ VarInfo; Values }
         LiteralizedCommandResults = @()
+        BlockedTaintedVariables = @{}
         TrackedEnvironmentVariables = @{}
 
         # 新增字段 - 安全执行与作用域管理
@@ -6826,6 +8507,7 @@ function New-CFGExecutionSession {
         ResolvableResults   = @{}
         VariableReadResults = @{}
         LiteralizedCommandResults = @()
+        BlockedTaintedVariables = @{}
         TrackedEnvironmentVariables = @{}
 
         ScopeStack            = @()
@@ -7407,7 +9089,7 @@ function Invoke-CFGStep {
             $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
             $varsBefore[$varInfo.Name] = $value
 
-            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value)) {
+            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value) -and -not (Test-CFGVariableBlockedTaint -Context $context -ActualName $actualVarName)) {
                 $key = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
                 if (-not $context.VariableReadResults.ContainsKey($key)) {
                     $context.VariableReadResults[$key] = @{
@@ -7470,6 +9152,9 @@ function Invoke-CFGStep {
                 $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
                 $varsAfter[$varInfo.Name] = $value
             }
+
+            Update-CFGAssignmentBlockedTaint -Node $currentNode -Context $context
+            Update-VariableScriptBlockMappingAfterNodeExecution -Node $currentNode -Context $context
 
             $status = if ($execResult.Action -eq 'Blocked') {
                 'BLOCKED'
@@ -7908,7 +9593,7 @@ function Resolve-CFGVariableStackActualName {
         [string]$VariableName
     )
 
-    if ([string]::IsNullOrWhiteSpace($VariableName)) { return $VariableName }
+    if ($null -eq $VariableName) { return $VariableName }
 
     $name = [string]$VariableName
     if ($name.StartsWith('$')) {
@@ -7958,7 +9643,7 @@ function Get-CFGVariableStackPlaceholderRows {
     $rows = New-Object System.Collections.Generic.List[object]
     $seenActualNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($name in @($ExistingActualNames)) {
-        if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
+        if ($null -ne $name) {
             $null = $seenActualNames.Add([string]$name)
         }
     }
@@ -7969,10 +9654,10 @@ function Get-CFGVariableStackPlaceholderRows {
         if (-not $Node) { return }
         $varInfos = @($Node.VarsRead) + @($Node.VarsWritten)
         foreach ($varInfo in @($varInfos)) {
-            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) { continue }
+            if ($null -eq $varInfo -or $null -eq $varInfo.Name) { continue }
 
             $actualName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varInfo.Name)
-            if ([string]::IsNullOrWhiteSpace($actualName)) { continue }
+            if ($null -eq $actualName) { continue }
             Register-CFGTrackedEnvironmentVariable -Context $context -ActualName $actualName
             if ($seenActualNames.Contains($actualName)) { continue }
 
