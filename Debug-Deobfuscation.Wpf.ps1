@@ -783,6 +783,27 @@ function Get-ReplacementCandidatePriority {
     return 300
 }
 
+function Get-SyntaxGuardDropPriority {
+    param($Candidate)
+
+    if (-not $Candidate) { return 0 }
+
+    $type = if ($Candidate.PSObject.Properties['Type']) { [string]$Candidate.Type } else { '' }
+    switch ($type) {
+        'VarRead' { return 10 }
+        'Inline' { return 20 }
+    }
+
+    $sourceKind = if ($Candidate.PSObject.Properties['SourceKind']) { [string]$Candidate.SourceKind } else { '' }
+    switch ($sourceKind) {
+        'Static' { return 30 }
+        'Resolvable' { return 40 }
+        'VariableRead' { return 50 }
+        'DynamicInvoke' { return 100 }
+        default { return 60 }
+    }
+}
+
 function Get-DynamicInvokeReplacementCandidates {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -828,8 +849,17 @@ function Get-DynamicInvokeReplacementCandidates {
             continue
         }
 
-        $start = $node.TextStartOffset
-        $end = $node.TextEndOffset
+        $start = $null
+        $end = $null
+        if ($rec -is [hashtable]) {
+            if ($rec.ContainsKey('ReplacementStartOffset') -and $null -ne $rec['ReplacementStartOffset']) { $start = [int]$rec['ReplacementStartOffset'] }
+            if ($rec.ContainsKey('ReplacementEndOffset') -and $null -ne $rec['ReplacementEndOffset']) { $end = [int]$rec['ReplacementEndOffset'] }
+        } else {
+            if ($rec.PSObject.Properties['ReplacementStartOffset'] -and $null -ne $rec.ReplacementStartOffset) { $start = [int]$rec.ReplacementStartOffset }
+            if ($rec.PSObject.Properties['ReplacementEndOffset'] -and $null -ne $rec.ReplacementEndOffset) { $end = [int]$rec.ReplacementEndOffset }
+        }
+        if ($null -eq $start) { $start = $node.TextStartOffset }
+        if ($null -eq $end) { $end = $node.TextEndOffset }
         if ($null -eq $start -or $null -eq $end) {
             $skipped += New-SkipRecord -Reason 'dynamic_no_offset' -Message 'DynamicInvoke 无原始 offset，跳过' -Item $baseItem
             continue
@@ -875,6 +905,159 @@ function Get-DynamicInvokeReplacementCandidates {
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-WholeScriptDynamicLoaderReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+    if (-not $Context.ExecContext) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+    if ($ScriptText -notmatch '(?i)\b(?:Invoke-Expression|iex)\b') {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+    if ($ScriptText -notmatch '(?i)(DeflateStream|ReadToEnd|ToInt16|FromBase64String|-bxor|\[char\])') {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    if ($errors -and @($errors).Count -gt 0) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $statement = Get-FirstStatementFromScriptAst -ScriptAst $ast
+    if ($null -eq $statement -or -not $statement.Extent) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $payloadText = $null
+    $dynamicType = $null
+
+    if ($statement -is [System.Management.Automation.Language.PipelineAst]) {
+        $elements = @($statement.PipelineElements)
+        if ($elements.Count -ge 1) {
+            $last = $elements[$elements.Count - 1]
+            if ($last -is [System.Management.Automation.Language.CommandAst]) {
+                if ($elements.Count -gt 1) {
+                    $cmdName = Convert-DynamicCommandCandidateToName -Value $last.GetCommandName()
+                    if ($cmdName -in @('Invoke-Expression', 'iex')) {
+                        $payloadText = (($elements[0..($elements.Count - 2)] | ForEach-Object { $_.Extent.Text }) -join ' | ')
+                        $dynamicType = 'IEX'
+                    }
+                }
+                if ([string]::IsNullOrWhiteSpace($payloadText)) {
+                    $parseInfo = [PSCustomObject]@{ SourceText = $ScriptText }
+                    $wrapped = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $last -Context $Context
+                    $cmdName = Convert-DynamicCommandCandidateToName -Value $last.GetCommandName()
+                    if ($wrapped.Success -and $wrapped.DynamicType -eq 'IEX') {
+                        $payloadText = Get-CommandArgumentText -CommandAst $last -ParseInfo $parseInfo -FirstArgumentIndex $wrapped.ArgumentStartIndex
+                        $dynamicType = 'IEX'
+                    } elseif ($cmdName -in @('Invoke-Expression', 'iex')) {
+                        $payloadText = Get-CommandArgumentText -CommandAst $last -ParseInfo $parseInfo
+                        $dynamicType = 'IEX'
+                    }
+                }
+            }
+        }
+    } elseif ($statement -is [System.Management.Automation.Language.CommandAst]) {
+        $parseInfo = [PSCustomObject]@{ SourceText = $ScriptText }
+        $wrapped = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $statement -Context $Context
+        $cmdName = Convert-DynamicCommandCandidateToName -Value $statement.GetCommandName()
+        if ($wrapped.Success -and $wrapped.DynamicType -eq 'IEX') {
+            $payloadText = Get-CommandArgumentText -CommandAst $statement -ParseInfo $parseInfo -FirstArgumentIndex $wrapped.ArgumentStartIndex
+            $dynamicType = 'IEX'
+        } elseif ($cmdName -in @('Invoke-Expression', 'iex')) {
+            $payloadText = Get-CommandArgumentText -CommandAst $statement -ParseInfo $parseInfo
+            $dynamicType = 'IEX'
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($payloadText)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $evalCode = Convert-CodeForCurrentScope -Code $payloadText -Context $Context
+    $evalResult = $null
+    $tempExecContext = $null
+    $contextExecUsable = $false
+    if ($Context.ExecContext -and $Context.ExecContext.Runspace -and
+        $Context.ExecContext.Runspace.RunspaceStateInfo -and
+        [string]$Context.ExecContext.Runspace.RunspaceStateInfo.State -eq 'Opened') {
+        $contextExecUsable = $true
+    }
+    if ($contextExecUsable) {
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $evalCode
+    } else {
+        $tempExecContext = New-ExecutionContext
+        try {
+            $evalResult = Invoke-InContext -ExecContext $tempExecContext -Code $evalCode
+        } finally {
+            if ($tempExecContext) {
+                Close-ExecutionContext -ExecContext $tempExecContext
+            }
+        }
+    }
+    if (-not $evalResult.Success -or $null -eq $evalResult.Result) {
+        $skipped += [PSCustomObject]@{
+            Reason = 'dynamic_loader_eval_failed'
+            Message = if ($evalResult -and $evalResult.Error) { [string]$evalResult.Error } else { 'dynamic loader evaluation failed' }
+            StartOffset = [int]$statement.Extent.StartOffset
+            EndOffset = [int]$statement.Extent.EndOffset
+            Type = 'DynamicInvoke'
+            Depth = $null
+            NodeId = $null
+        }
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @($skipped) }
+    }
+
+    $normalizedValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
+    $materialized = Convert-DynamicInvocationValueToScriptText -Value $normalizedValue
+    if (-not $materialized.Success -or [string]::IsNullOrWhiteSpace([string]$materialized.Text)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @($skipped) }
+    }
+
+    $replacement = [string]$materialized.Text
+    $original = $ScriptText.Substring([int]$statement.Extent.StartOffset, [int]$statement.Extent.EndOffset - [int]$statement.Extent.StartOffset)
+    if ($original -eq $replacement) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @($skipped) }
+    }
+
+    $candidates += [PSCustomObject]@{
+        StartOffset = [int]$statement.Extent.StartOffset
+        EndOffset   = [int]$statement.Extent.EndOffset
+        Replacement = $replacement
+        Original    = $original
+        Type        = 'DynamicInvoke'
+        Depth       = $null
+        NodeId      = $null
+        SourceKind  = 'DynamicInvoke'
+        Confidence  = 'High'
+        UsedEmptyFallback = $false
+        ResultType  = 'String'
+        Executed    = $true
+        VariableName = $null
+        IsSimpleVariable = $false
+        IsValueChanged = $false
+        ObservedValueCount = 1
+        DynamicStopReason = "WholeScriptLoader:$dynamicType"
+        DynamicStopMessage = "Recovered whole-script dynamic loader via $($materialized.Kind)"
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($candidates)
+        Skipped    = @($skipped)
     }
 }
 
@@ -1487,7 +1670,7 @@ function Ensure-SyntaxSafeReplacements {
     }
 
     if (-not $check.IsValid -and $effective.Count -gt 0) {
-        $ordered = @($effective | Sort-Object @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
+        $ordered = @($effective | Sort-Object @{ Expression = { Get-SyntaxGuardDropPriority -Candidate $_ } }, @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
         foreach ($cand in $ordered) {
             if ($check.IsValid) { break }
             $candId = Get-ReplacementIdentity -Replacement $cand
@@ -1525,9 +1708,10 @@ function Build-DebugPreview {
     )
 
     $dynamic = Get-DynamicInvokeReplacementCandidates -Context $Context -ScriptText $ScriptText
+    $wholeScriptDynamic = Get-WholeScriptDynamicLoaderReplacementCandidates -Context $Context -ScriptText $ScriptText
     $base = Get-ReplacementsFromResolvableResults -Context $Context -ScriptText $ScriptText
     $static = Get-StaticReplacementCandidates -Context $Context -ScriptText $ScriptText
-    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($base.Candidates) + @($static.Candidates))
+    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($wholeScriptDynamic.Candidates) + @($base.Candidates) + @($static.Candidates))
     $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($merged.Candidates)
 
     $candidates = @()
@@ -1600,7 +1784,7 @@ function Build-DebugPreview {
     return [PSCustomObject]@{
         Candidates = @($candidates)
         Selected   = @($finalSelected)
-        Skipped    = @($dynamic.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped) + @($resolved.Skipped) + @($syntaxGuard.Skipped)
+        Skipped    = @($dynamic.Skipped) + @($wholeScriptDynamic.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($preferred.Skipped) + @($resolved.Skipped) + @($syntaxGuard.Skipped)
         Rebuilt    = $newText
     }
 }

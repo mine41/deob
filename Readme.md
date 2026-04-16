@@ -188,6 +188,9 @@ PowerShell 反混淆工具链。当前版本已经从“仅动态回写”扩展
 | `-MaxRounds` | `5` | 最大迭代轮数。 |
 | `-MaxIterations` | `1000` | 单轮 CFG 执行迭代上限（防死循环）。 |
 | `-MaxTotalNodes` | `50000` | 单轮最大节点访问数上限。 |
+| `-GlobalTimeBudgetMs` | `120000` | 单次重建全过程的总预算；`0` 表示不限制。 |
+| `-DynamicTimeBudgetMs` | `15000` | 单次动态 payload 展开的预算；`0` 表示不限制。 |
+| `-SafeMode` | `$true` | `true`：保留全部高风险提前停止规则；`false`：仅关闭 `Network+IEX` 与 `Network+Sleep` 两条误伤研究样本的规则。 |
 | `-DryRun` | `$false` | 仅运行分析与统计，不写最终输出文件。 |
 
 这一入口现在采用**动态 + 静态混合策略**，不再是单纯“把执行结果回写到脚本”。每轮大致流程为：
@@ -202,6 +205,8 @@ PowerShell 反混淆工具链。当前版本已经从“仅动态回写”扩展
 - 若某轮 `AppliedCount = 0`，该轮会视为已收敛并停止，通常不会保留“空替换轮次”的完整产物。
 - 若启用 `-FullOutput:$true`，round 文件按 `round01.*`、`round02.*` 这种两位编号输出。
 - round report 会额外区分 `DynamicCount`、`StaticHighCount`、`StaticLowCount`。
+- 最终写出前会统一做一次语法校验；若当前结果语法无效，会回退到最后一个语法有效版本，而不是直接输出坏脚本。
+- `SafeMode=$false` 不是完全关闭保护，只是放宽对无害化研究样本最常见的两条误伤规则。
 
 常用示例：
 
@@ -214,6 +219,9 @@ PowerShell 反混淆工具链。当前版本已经从“仅动态回写”扩展
 
 # 保守策略：变化变量一律跳过（默认）
 <host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -VariableConflictPolicy skip
+
+# 研究评测模式：放宽对 Network+IEX / Network+Sleep 的提前停止
+<host> -NoProfile -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -SafeMode:$false
 ```
 
 ### 2) `Debug-Deobfuscation.Wpf.ps1`（交互调试）

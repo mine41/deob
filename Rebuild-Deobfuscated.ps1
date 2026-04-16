@@ -47,9 +47,11 @@ param(
 
     [int]$MaxTotalNodes = 50000,
 
-    [int]$GlobalTimeBudgetMs = 45000,
+    [int]$GlobalTimeBudgetMs = 120000,
 
-    [int]$DynamicTimeBudgetMs = 3000,
+    [int]$DynamicTimeBudgetMs = 15000,
+
+    [bool]$SafeMode = $true,
 
     [switch]$DryRun
 )
@@ -616,9 +618,13 @@ function Resolve-DynamicInvokeOriginInfo {
             $end = Get-DynamicRecordValue -Record $creatorRecord -Name 'ReplacementEndOffset'
         }
 
+        $missingCallerNode = $false
         if (-not $creatorNode -and $runtimeInfo -and $Context.CFG -and $runtimeInfo.CallerNodeId) {
             $creatorNodeId = [int]$runtimeInfo.CallerNodeId
             $creatorNode = Get-NodeById -CFG $Context.CFG -Id $creatorNodeId
+            if (-not $creatorNode) {
+                $missingCallerNode = $true
+            }
         }
 
         if ($null -eq $start -and $runtimeInfo -and $null -ne $runtimeInfo.CallerStartOffset) {
@@ -669,7 +675,7 @@ function Resolve-DynamicInvokeOriginInfo {
         NodeId        = [int]$Node.Id
         RuntimeDepth  = $depth
         ViaRuntime    = $true
-        FailureReason = 'runtime_origin_unmapped'
+        FailureReason = if ($missingCallerNode) { 'caller_node_missing' } else { 'runtime_origin_unmapped' }
     }
 }
 
@@ -1200,6 +1206,256 @@ function Resolve-StaticTypeMemberAccessValue {
     return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('不支持的安全静态成员访问: ' + $TargetType.FullName + '::' + $MemberName) }
 }
 
+function Convert-StaticMethodArguments {
+    param(
+        [object[]]$Arguments,
+        [hashtable]$Context,
+        [int]$Depth = 0
+    )
+
+    $values = @()
+    $usedFallback = $false
+    foreach ($argAst in @($Arguments)) {
+        $argResult = Resolve-StaticAstValue -Ast $argAst -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+        if (-not $argResult.Success) {
+            return [PSCustomObject]@{
+                Success           = $false
+                Values            = @()
+                UsedEmptyFallback = ($usedFallback -or [bool]$argResult.UsedEmptyFallback)
+                Message           = $argResult.Message
+            }
+        }
+        $usedFallback = ($usedFallback -or [bool]$argResult.UsedEmptyFallback)
+        $values += ,$argResult.Value
+    }
+
+    return [PSCustomObject]@{
+        Success           = $true
+        Values            = @($values)
+        UsedEmptyFallback = $usedFallback
+        Message           = $null
+    }
+}
+
+function Convert-StaticValueToStringArray {
+    param($Value)
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($null -eq $Value) { return @('') }
+    if ($Value -is [string]) { return @([string]$Value) }
+    if ($Value -is [char]) { return @([string]$Value) }
+    if ($Value -is [char[]]) { return @((-join $Value)) }
+
+    if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
+        $items = @()
+        foreach ($item in $Value) {
+            if ($item -is [psobject] -and $null -ne $item.BaseObject -and $item.BaseObject -ne $item) {
+                $item = $item.BaseObject
+            }
+            if ($null -eq $item) {
+                $items += ''
+            } else {
+                $items += [string]$item
+            }
+        }
+        return @($items)
+    }
+
+    return @([string]$Value)
+}
+
+function Convert-StaticValueToCharArray {
+    param($Value)
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($null -eq $Value) { return @() }
+    if ($Value -is [char[]]) { return @($Value) }
+    if ($Value -is [char]) { return @([char]$Value) }
+    if ($Value -is [string]) { return @(([string]$Value).ToCharArray()) }
+
+    if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
+        $chars = New-Object System.Collections.Generic.List[char]
+        foreach ($item in $Value) {
+            if ($item -is [psobject] -and $null -ne $item.BaseObject -and $item.BaseObject -ne $item) {
+                $item = $item.BaseObject
+            }
+            try {
+                if ($item -is [char]) {
+                    $chars.Add([char]$item) | Out-Null
+                } elseif ($item -is [string] -and $item.Length -eq 1) {
+                    $chars.Add([char]$item[0]) | Out-Null
+                } elseif ($item -is [byte] -or $item -is [sbyte] -or $item -is [int16] -or $item -is [uint16] -or
+                    $item -is [int] -or $item -is [uint32] -or $item -is [int64] -or $item -is [uint64]) {
+                    $chars.Add([char][int]$item) | Out-Null
+                } else {
+                    return $null
+                }
+            } catch {
+                return $null
+            }
+        }
+        return @($chars.ToArray())
+    }
+
+    return $null
+}
+
+function Convert-StaticValueToStringSplitOptions {
+    param($Value)
+
+    if ($Value -is [System.StringSplitOptions]) {
+        return [PSCustomObject]@{ Success = $true; Value = $Value }
+    }
+
+    if ($Value -is [string]) {
+        try {
+            return [PSCustomObject]@{ Success = $true; Value = [System.StringSplitOptions]::Parse([System.StringSplitOptions], $Value, $true) }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    try {
+        return [PSCustomObject]@{ Success = $true; Value = [System.StringSplitOptions][int]$Value }
+    } catch {
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+}
+
+function Resolve-StaticStringSplitInvocationValue {
+    param(
+        [string]$TargetValue,
+        [object[]]$Arguments
+    )
+
+    if ($null -eq $TargetValue) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Split 目标为空' }
+    }
+    if (-not $Arguments -or $Arguments.Count -eq 0) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Split 缺少参数' }
+    }
+
+    $options = [System.StringSplitOptions]::None
+    $count = $null
+    $separatorArg = $Arguments[0]
+
+    if ($Arguments.Count -ge 2) {
+        $optionInfo = Convert-StaticValueToStringSplitOptions -Value $Arguments[-1]
+        if ($optionInfo.Success) {
+            $options = $optionInfo.Value
+            if ($Arguments.Count -ge 3) {
+                try { $count = [int]$Arguments[1] } catch { $count = $null }
+            }
+        } elseif ($Arguments.Count -eq 2) {
+            try { $count = [int]$Arguments[1] } catch { $count = $null }
+        } else {
+            try { $count = [int]$Arguments[1] } catch { $count = $null }
+        }
+    }
+
+    $charSeparators = Convert-StaticValueToCharArray -Value $separatorArg
+    $stringSeparators = Convert-StaticValueToStringArray -Value $separatorArg
+
+    try {
+        if ($null -ne $count) {
+            if ($stringSeparators.Count -gt 1 -or (($stringSeparators.Count -eq 1) -and $stringSeparators[0].Length -gt 1)) {
+                return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Split($stringSeparators, $count, $options); Message = $null }
+            }
+            if ($null -ne $charSeparators) {
+                return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Split($charSeparators, $count, $options); Message = $null }
+            }
+        } else {
+            if ($stringSeparators.Count -gt 1 -or (($stringSeparators.Count -eq 1) -and $stringSeparators[0].Length -gt 1)) {
+                return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Split($stringSeparators, $options); Message = $null }
+            }
+            if ($null -ne $charSeparators) {
+                if ($options -eq [System.StringSplitOptions]::None) {
+                    return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Split($charSeparators); Message = $null }
+                }
+                return [PSCustomObject]@{ Success = $true; Value = $TargetValue.Split($charSeparators, $options); Message = $null }
+            }
+        }
+    } catch {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = $_.Exception.Message }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Split 参数类型不受支持' }
+}
+
+function Resolve-StaticMethodInvocationValue {
+    param(
+        $TargetValue,
+        [string]$MemberName,
+        [object[]]$Arguments
+    )
+
+    if ([string]::IsNullOrWhiteSpace($MemberName)) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '方法名为空' }
+    }
+
+    if ($TargetValue -is [psobject] -and $null -ne $TargetValue.BaseObject -and $TargetValue.BaseObject -ne $TargetValue) {
+        $TargetValue = $TargetValue.BaseObject
+    }
+
+    switch -Regex ($MemberName) {
+        '^(?i:Split)$' {
+            if ($TargetValue -isnot [string]) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Split 仅支持字符串目标' }
+            }
+            return Resolve-StaticStringSplitInvocationValue -TargetValue ([string]$TargetValue) -Arguments $Arguments
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('不支持的安全方法调用: ' + $MemberName) }
+}
+
+function Resolve-StaticTypeMethodInvocationValue {
+    param(
+        [Type]$TargetType,
+        [string]$MemberName,
+        [object[]]$Arguments
+    )
+
+    if ($null -eq $TargetType -or [string]::IsNullOrWhiteSpace($MemberName)) {
+        return [PSCustomObject]@{ Success = $false; Value = $null; Message = '静态方法调用缺少类型或方法名' }
+    }
+
+    if ($TargetType -eq [string] -and $MemberName -match '^(?i:Join)$') {
+        if (-not $Arguments -or $Arguments.Count -lt 2) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'String::Join 缺少参数' }
+        }
+
+        $separator = [string]$Arguments[0]
+        $values = Convert-StaticValueToStringArray -Value $Arguments[1]
+
+        try {
+            if ($Arguments.Count -ge 4) {
+                return [PSCustomObject]@{
+                    Success = $true
+                    Value   = [string]::Join($separator, $values, [int]$Arguments[2], [int]$Arguments[3])
+                    Message = $null
+                }
+            }
+
+            return [PSCustomObject]@{
+                Success = $true
+                Value   = [string]::Join($separator, $values)
+                Message = $null
+            }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = $_.Exception.Message }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null; Message = ('不支持的安全静态方法调用: ' + $TargetType.FullName + '::' + $MemberName) }
+}
+
 function Resolve-StaticIndexAccessValue {
     param(
         $TargetValue,
@@ -1556,6 +1812,55 @@ function Get-BestEffortParseFallbackScriptText {
     }
 
     return "# [ParseFallback] $errorText`r`n$body"
+}
+
+function Get-NoReplacementTerminationReason {
+    param(
+        [int]$CandidateCount,
+        [AllowEmptyCollection()][array]$Skipped = @()
+    )
+
+    if ($CandidateCount -le 0) {
+        return 'no_candidates_generated'
+    }
+
+    $reasons = @($Skipped | Where-Object { $_ -and $_.PSObject.Properties['Reason'] } | ForEach-Object { [string]$_.Reason })
+    if ($reasons.Count -eq 0) {
+        return 'unknown'
+    }
+
+    if (@($reasons | Where-Object { $_ -match '^syntax_guard' }).Count -gt 0) {
+        return 'all_candidates_skipped_by_syntax_guard'
+    }
+    if (@($reasons | Where-Object { $_ -in @('dynamic_runtime_unmapped', 'dynamic_no_offset', 'dynamic_node_missing', 'dynamic_out_of_range', 'caller_node_missing', 'runtime_origin_unmapped', 'missing_offset', 'node_missing') }).Count -gt 0) {
+        return 'all_candidates_unmapped'
+    }
+    if (@($reasons | Where-Object { $_ -in @('dynamic_outer_candidate_ineffective', 'dynamic_outer_candidate_ineffective', 'literalized_no_change', 'dynamic_same_range_preferred', 'duplicate') }).Count -gt 0) {
+        return 'all_candidates_ineffective'
+    }
+
+    return 'unknown'
+}
+
+function Test-FileSyntaxInfo {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+        return [PSCustomObject]@{
+            Exists     = $false
+            IsValid    = $false
+            FirstError = 'file_not_found'
+        }
+    }
+
+    $text = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path))
+    $syntax = Test-PowerShellSyntax -ScriptText $text
+    return [PSCustomObject]@{
+        Exists     = $true
+        IsValid    = [bool]$syntax.IsValid
+        FirstError = $syntax.FirstError
+        Text       = $text
+    }
 }
 
 function Get-PreTraversalStopCheckInfo {
@@ -2555,6 +2860,48 @@ function Resolve-StaticAstValue {
                     $result = [PSCustomObject]@{ Success = $true; Value = @($values); UsedEmptyFallback = $usedFallback; Reason = $null; Message = $null }
                 }
             }
+        } elseif ($Ast -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+            $argResult = Convert-StaticMethodArguments -Arguments $Ast.Arguments -Context $Context -Depth ($Depth + 1)
+            if (-not $argResult.Success) {
+                $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$argResult.UsedEmptyFallback; Reason = 'invoke_args'; Message = $argResult.Message }
+            } elseif ($Ast.Static) {
+                $memberName = Get-StaticMemberNameText -MemberAst $Ast.Member -Context $Context
+                $targetType = if ($Ast.Expression -is [System.Management.Automation.Language.TypeExpressionAst]) {
+                    Resolve-StaticTypeFromTypeExpressionAst -TypeExpressionAst $Ast.Expression
+                } else {
+                    $null
+                }
+
+                if ([string]::IsNullOrWhiteSpace($memberName)) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$argResult.UsedEmptyFallback; Reason = 'invoke_name'; Message = '静态方法名无法解析' }
+                } elseif ($null -eq $targetType) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$argResult.UsedEmptyFallback; Reason = 'invoke_type'; Message = '静态方法调用的类型无法解析' }
+                } else {
+                    $invokeResult = Resolve-StaticTypeMethodInvocationValue -TargetType $targetType -MemberName $memberName -Arguments $argResult.Values
+                    if (-not $invokeResult.Success) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = [bool]$argResult.UsedEmptyFallback; Reason = 'invoke_failed'; Message = $invokeResult.Message }
+                    } else {
+                        $result = [PSCustomObject]@{ Success = $true; Value = $invokeResult.Value; UsedEmptyFallback = [bool]$argResult.UsedEmptyFallback; Reason = $null; Message = $null }
+                    }
+                }
+            } else {
+                $targetResult = Resolve-StaticAstValue -Ast $Ast.Expression -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $targetResult.Success) {
+                    $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$argResult.UsedEmptyFallback); Reason = 'invoke_target'; Message = $targetResult.Message }
+                } else {
+                    $memberName = Get-StaticMemberNameText -MemberAst $Ast.Member -Context $Context
+                    if ([string]::IsNullOrWhiteSpace($memberName)) {
+                        $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$argResult.UsedEmptyFallback); Reason = 'invoke_name'; Message = '方法名无法静态解析' }
+                    } else {
+                        $invokeResult = Resolve-StaticMethodInvocationValue -TargetValue $targetResult.Value -MemberName $memberName -Arguments $argResult.Values
+                        if (-not $invokeResult.Success) {
+                            $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$argResult.UsedEmptyFallback); Reason = 'invoke_failed'; Message = $invokeResult.Message }
+                        } else {
+                            $result = [PSCustomObject]@{ Success = $true; Value = $invokeResult.Value; UsedEmptyFallback = ([bool]$targetResult.UsedEmptyFallback -or [bool]$argResult.UsedEmptyFallback); Reason = $null; Message = $null }
+                        }
+                    }
+                }
+            }
         } elseif ($Ast -is [System.Management.Automation.Language.MemberExpressionAst]) {
             if ($Ast.Static) {
                 $memberName = Get-StaticMemberNameText -MemberAst $Ast.Member -Context $Context
@@ -2652,14 +2999,45 @@ function Get-ReplacementCandidatePriority {
 
     if (-not $Candidate) { return 0 }
     $sourceKind = if ($Candidate.PSObject.Properties['SourceKind']) { [string]$Candidate.SourceKind } else { '' }
+    $materializationKind = if ($Candidate.PSObject.Properties['MaterializationKind']) { [string]$Candidate.MaterializationKind } else { $null }
+    $protectsInner = ($Candidate.PSObject.Properties['ProtectsInnerCandidates'] -and [bool]$Candidate.ProtectsInnerCandidates)
+    $wholeScriptMaterialized = ($Candidate.PSObject.Properties['WholeScriptMaterialized'] -and [bool]$Candidate.WholeScriptMaterialized)
+    if ($wholeScriptMaterialized) {
+        return 520
+    }
+    if ($sourceKind -eq 'DynamicInvoke') {
+        if ($protectsInner -and -not [string]::IsNullOrWhiteSpace($materializationKind)) { return 460 }
+        if ($protectsInner) { return 440 }
+        return 400
+    }
+    if ($sourceKind -eq 'LoaderMaterialized') { return 430 }
+    if ($sourceKind -eq 'LiteralizedCommand') { return 380 }
+    if ($sourceKind -eq 'VariableRead') { return 350 }
     if ($sourceKind -eq 'Static') {
         if ($Candidate.PSObject.Properties['UsedEmptyFallback'] -and [bool]$Candidate.UsedEmptyFallback) { return 100 }
         return 200
     }
-    if ($sourceKind -eq 'DynamicInvoke') { return 400 }
-    if ($sourceKind -eq 'LiteralizedCommand') { return 380 }
-    if ($sourceKind -eq 'VariableRead') { return 350 }
     return 300
+}
+
+function Get-SyntaxGuardDropPriority {
+    param($Candidate)
+
+    if (-not $Candidate) { return 0 }
+
+    $priority = Get-ReplacementCandidatePriority -Candidate $Candidate
+    if ($Candidate.PSObject.Properties['WholeScriptMaterialized'] -and [bool]$Candidate.WholeScriptMaterialized) {
+        return $priority + 200
+    }
+    $type = if ($Candidate.PSObject.Properties['Type']) { [string]$Candidate.Type } else { '' }
+
+    switch ($type) {
+        'VarRead' { return $priority - 250 }
+        'Inline' { return $priority - 220 }
+        'CommandName' { return $priority - 180 }
+        'Binary' { return $priority - 150 }
+        default { return $priority }
+    }
 }
 
 function Get-LiteralizedCommandReplacementCandidates {
@@ -2782,6 +3160,11 @@ function Get-DynamicInvokeReplacementCandidates {
         } else {
             if ($rec.PSObject.Properties['PreservedCommandText'] -and $null -ne $rec.PreservedCommandText) { [string]$rec.PreservedCommandText } else { $null }
         }
+        $materializationKind = if ($rec -is [hashtable]) {
+            if ($rec.ContainsKey('MaterializationKind') -and $null -ne $rec['MaterializationKind']) { [string]$rec['MaterializationKind'] } else { $null }
+        } else {
+            if ($rec.PSObject.Properties['MaterializationKind'] -and $null -ne $rec.MaterializationKind) { [string]$rec.MaterializationKind } else { $null }
+        }
 
         $baseItem = [PSCustomObject]@{
             StartOffset = if ($node) { $node.TextStartOffset } else { $null }
@@ -2798,11 +3181,18 @@ function Get-DynamicInvokeReplacementCandidates {
 
         $originInfo = Resolve-DynamicInvokeOriginInfo -Context $Context -Record $rec -Node $node
         if (-not $originInfo.Success) {
-            $skipReason = if (Test-RuntimeGeneratedNode -Node $node) { 'dynamic_runtime_unmapped' } else { 'dynamic_no_offset' }
-            $skipMessage = if ($skipReason -eq 'dynamic_runtime_unmapped') {
-                '运行时子图中的 DynamicInvoke 已有结果，但未能映射回原脚本位点'
-            } else {
-                'DynamicInvoke 无原始 offset，跳过'
+            $skipReason = switch ([string]$originInfo.FailureReason) {
+                'caller_node_missing' { 'caller_node_missing' }
+                'runtime_origin_unmapped' { 'dynamic_runtime_unmapped' }
+                'missing_offset' { 'dynamic_no_offset' }
+                'node_missing' { 'dynamic_node_missing' }
+                default { if (Test-RuntimeGeneratedNode -Node $node) { 'dynamic_runtime_unmapped' } else { 'dynamic_no_offset' } }
+            }
+            $skipMessage = switch ($skipReason) {
+                'caller_node_missing' { '运行时子图的调用者节点缺失，无法映射回原脚本位点' }
+                'dynamic_runtime_unmapped' { '运行时子图中的 DynamicInvoke 已有结果，但未能映射回原脚本位点' }
+                'dynamic_node_missing' { "DynamicInvoke 节点不存在: NodeId=$nodeId" }
+                default { 'DynamicInvoke 无原始 offset，跳过' }
             }
             $skipped += New-SkipRecord -Reason $skipReason -Message $skipMessage -Item $baseItem
             continue
@@ -2858,15 +3248,179 @@ function Get-DynamicInvokeReplacementCandidates {
             IsOriginMappedFromRuntime = [bool]$originInfo.ViaRuntime
             DynamicRecordIndex = $recordIndex
             ProtectsInnerCandidates = $true
+            MaterializationKind = $materializationKind
             DynamicStopReason = if ($rec -is [hashtable]) { [string]$rec['StopReason'] } else { [string]$rec.StopReason }
             DynamicStopMessage = if ($rec -is [hashtable]) { [string]$rec['StopMessage'] } else { [string]$rec.StopMessage }
         }
     }
 
-    $merged = Merge-DynamicInvokeReplacementCandidates -Candidates $candidates
+    $merged = Merge-DynamicInvokeReplacementCandidates -Candidates $candidates -ScriptText $ScriptText
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-WholeScriptDynamicLoaderReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+    if (-not $Context.ExecContext) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+    if ($ScriptText -notmatch '(?i)(DeflateStream|ReadToEnd|ToInt16|FromBase64String|-bxor|\[char\]|ConvertTo-SecureString|PSCredential|GetNetworkCredential|SecureStringToGlobalAlloc|PtrToString)') {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $statement = Get-FirstStatementFromScriptAst -ScriptAst $parse.Ast
+    if ($null -eq $statement -or -not $statement.Extent) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $payloadText = $null
+    $dynamicType = $null
+
+    if ($statement -is [System.Management.Automation.Language.PipelineAst]) {
+        $elements = @($statement.PipelineElements)
+        if ($elements.Count -ge 1) {
+            $last = $elements[$elements.Count - 1]
+            if ($last -is [System.Management.Automation.Language.CommandAst]) {
+                if ($elements.Count -gt 1) {
+                    $cmdName = Convert-DynamicCommandCandidateToName -Value $last.GetCommandName()
+                    if ($cmdName -in @('Invoke-Expression', 'iex')) {
+                        $payloadText = (($elements[0..($elements.Count - 2)] | ForEach-Object { $_.Extent.Text }) -join ' | ')
+                        $dynamicType = 'IEX'
+                    }
+                }
+                if ([string]::IsNullOrWhiteSpace($payloadText)) {
+                    $wrapped = $null
+                    try {
+                        $wrapped = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $last -Context $Context
+                    } catch {
+                        $wrapped = [PSCustomObject]@{
+                            Success = $false
+                            DynamicType = $null
+                            ArgumentStartIndex = $null
+                        }
+                    }
+                    $cmdName = Convert-DynamicCommandCandidateToName -Value $last.GetCommandName()
+                    if ($wrapped.Success -and $wrapped.DynamicType -eq 'IEX') {
+                        $payloadText = Get-CommandArgumentText -CommandAst $last -ParseInfo $parse -FirstArgumentIndex $wrapped.ArgumentStartIndex
+                        $dynamicType = 'IEX'
+                    } elseif ($cmdName -in @('Invoke-Expression', 'iex')) {
+                        $payloadText = Get-CommandArgumentText -CommandAst $last -ParseInfo $parse
+                        $dynamicType = 'IEX'
+                    }
+                }
+            }
+        }
+    } elseif ($statement -is [System.Management.Automation.Language.CommandAst]) {
+        $wrapped = $null
+        try {
+            $wrapped = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $statement -Context $Context
+        } catch {
+            $wrapped = [PSCustomObject]@{
+                Success = $false
+                DynamicType = $null
+                ArgumentStartIndex = $null
+            }
+        }
+        $cmdName = Convert-DynamicCommandCandidateToName -Value $statement.GetCommandName()
+        if ($wrapped.Success -and $wrapped.DynamicType -eq 'IEX') {
+            $payloadText = Get-CommandArgumentText -CommandAst $statement -ParseInfo $parse -FirstArgumentIndex $wrapped.ArgumentStartIndex
+            $dynamicType = 'IEX'
+        } elseif ($cmdName -in @('Invoke-Expression', 'iex')) {
+            $payloadText = Get-CommandArgumentText -CommandAst $statement -ParseInfo $parse
+            $dynamicType = 'IEX'
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($payloadText)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $evalCode = Convert-CodeForCurrentScope -Code $payloadText -Context $Context
+    $evalResult = $null
+    $tempExecContext = $null
+    $contextExecUsable = $false
+    if ($Context.ExecContext -and $Context.ExecContext.Runspace -and
+        $Context.ExecContext.Runspace.RunspaceStateInfo -and
+        [string]$Context.ExecContext.Runspace.RunspaceStateInfo.State -eq 'Opened') {
+        $contextExecUsable = $true
+    }
+    if ($contextExecUsable) {
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $evalCode
+    } else {
+        $tempExecContext = New-ExecutionContext
+        try {
+            $evalResult = Invoke-InContext -ExecContext $tempExecContext -Code $evalCode
+        } finally {
+            if ($tempExecContext) {
+                Close-ExecutionContext -ExecContext $tempExecContext
+            }
+        }
+    }
+    if (-not $evalResult.Success -or $null -eq $evalResult.Result) {
+        $skipped += New-SkipRecord -Reason 'dynamic_loader_eval_failed' -Message $(if ($evalResult -and $evalResult.Error) { [string]$evalResult.Error } else { 'dynamic loader evaluation failed' }) -Item ([PSCustomObject]@{
+                StartOffset = [int]$statement.Extent.StartOffset
+                EndOffset = [int]$statement.Extent.EndOffset
+                Type = 'DynamicInvoke'
+                Depth = $null
+                NodeId = $null
+            })
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @($skipped) }
+    }
+
+    $normalizedValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
+    $materialized = Convert-DynamicInvocationValueToScriptText -Value $normalizedValue
+    if (-not $materialized.Success -or [string]::IsNullOrWhiteSpace([string]$materialized.Text)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @($skipped) }
+    }
+
+    $replacement = [string]$materialized.Text
+    $start = [int]$statement.Extent.StartOffset
+    $end = [int]$statement.Extent.EndOffset
+    $original = $ScriptText.Substring($start, $end - $start)
+    if ($original -eq $replacement) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @($skipped) }
+    }
+
+    $candidates += [PSCustomObject]@{
+        StartOffset = $start
+        EndOffset   = $end
+        Replacement = $replacement
+        Original    = $original
+        Type        = 'DynamicInvoke'
+        Depth       = $null
+        NodeId      = $null
+        SourceKind  = 'LoaderMaterialized'
+        Confidence  = 'High'
+        UsedEmptyFallback = $false
+        ResultType  = 'String'
+        Executed    = $true
+        ProtectsInnerCandidates = $true
+        WholeScriptMaterialized = $true
+        MaterializationKind = $materialized.Kind
+        DynamicStopReason = "WholeScriptLoader:$dynamicType"
+        DynamicStopMessage = "Recovered whole-script dynamic loader via $($materialized.Kind)"
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($candidates)
+        Skipped    = @($skipped)
     }
 }
 
@@ -2903,8 +3457,28 @@ function Get-PreferredDynamicReplacementCandidate {
     return $Left
 }
 
+function Test-ReplacementCandidateSyntaxValidity {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)]$Candidate
+    )
+
+    if (-not $Candidate) { return $false }
+    if ($null -eq $Candidate.StartOffset -or $null -eq $Candidate.EndOffset) { return $false }
+
+    $start = [int]$Candidate.StartOffset
+    $end = [int]$Candidate.EndOffset
+    if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) { return $false }
+
+    $candidateText = $ScriptText.Substring(0, $start) + [string]$Candidate.Replacement + $ScriptText.Substring($end)
+    return (Test-PowerShellSyntax -ScriptText $candidateText).IsValid
+}
+
 function Merge-DynamicInvokeReplacementCandidates {
-    param([array]$Candidates)
+    param(
+        [array]$Candidates,
+        [string]$ScriptText
+    )
 
     if (-not $Candidates -or $Candidates.Count -eq 0) {
         return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
@@ -2925,6 +3499,15 @@ function Merge-DynamicInvokeReplacementCandidates {
 
         $existing = $map[$key]
         $preferred = Get-PreferredDynamicReplacementCandidate -Left $existing -Right $cand
+        if (-not [string]::IsNullOrWhiteSpace($ScriptText) -and [string]$existing.Replacement -ne [string]$cand.Replacement) {
+            $preferredIsValid = Test-ReplacementCandidateSyntaxValidity -ScriptText $ScriptText -Candidate $preferred
+            if (-not $preferredIsValid) {
+                $alternate = if ($preferred -eq $existing) { $cand } else { $existing }
+                if (Test-ReplacementCandidateSyntaxValidity -ScriptText $ScriptText -Candidate $alternate) {
+                    $preferred = $alternate
+                }
+            }
+        }
         $dropped = if ($preferred -eq $existing) { $cand } else { $existing }
         if ($preferred -ne $existing) {
             $map[$key] = $preferred
@@ -2996,7 +3579,7 @@ function Filter-CandidatesPreferDynamicInvoke {
         }
     }
 
-    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -eq 'DynamicInvoke' })
+    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized') })
     if ($dynamicCandidates.Count -eq 0) {
         return [PSCustomObject]@{
             Candidates = @($Candidates)
@@ -3009,7 +3592,7 @@ function Filter-CandidatesPreferDynamicInvoke {
 
     foreach ($cand in $Candidates) {
         if (-not $cand) { continue }
-        if ([string]$cand.SourceKind -eq 'DynamicInvoke') {
+        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized')) {
             $kept += $cand
             continue
         }
@@ -3381,6 +3964,7 @@ function Get-ReplacementsFromResolvableResults {
         foreach ($rec in $Context.VariableReadResults.Values) {
             $v = $rec.VarInfo
             if (-not $v) { continue }
+            $varName = if ($v.PSObject.Properties['Name']) { [string]$v.Name } else { $null }
 
             $start = $v.StartOffset
             $end = $v.EndOffset
@@ -3419,6 +4003,11 @@ function Get-ReplacementsFromResolvableResults {
                     $skipped += New-SkipRecord -Reason 'var_write_context' -Message "变量位点为 $accessKind 上下文，跳过替换（避免生成无效语法）" -Item $baseItem
                     continue
                 }
+            }
+
+            if ($type -eq 'VarRead' -and $varName -in @('PSScriptRoot', 'PSCommandPath', 'MyInvocation')) {
+                $skipped += New-SkipRecord -Reason 'host_scoped_variable' -Message "宿主相关自动变量 `$${varName} 不直接回写，保留原始引用" -Item $baseItem
+                continue
             }
 
             $allValues = @($rec.Values)
@@ -3522,37 +4111,48 @@ function Select-NonOverlappingReplacements {
     $selected = @()
     $skipped = @()
 
-    if ($Strategy -eq 'Outer') {
-        # 外层优先：Start 升序，End 降序（同 Start 先选更大跨度），贪心取不重叠集合
-        $sorted = $Candidates | Sort-Object StartOffset, @{ Expression = 'EndOffset'; Descending = $true }
-        $lastEnd = -1
-        foreach ($c in $sorted) {
-            if ($c.StartOffset -ge $lastEnd) {
-                $selected += $c
-                $lastEnd = $c.EndOffset
-            } else {
-                $skipped += New-SkipRecord -Reason 'overlap' -Message '与已选片段重叠（Outer 策略丢弃内层/后续）' -Item $c
-            }
-        }
+    $sorted = if ($Strategy -eq 'Outer') {
+        $Candidates | Sort-Object `
+            @{ Expression = { Get-ReplacementCandidatePriority -Candidate $_ }; Descending = $true }, `
+            @{ Expression = { if ($_.PSObject.Properties['ProtectsInnerCandidates'] -and [bool]$_.ProtectsInnerCandidates) { 1 } else { 0 } }; Descending = $true }, `
+            StartOffset, `
+            @{ Expression = 'EndOffset'; Descending = $true }
     } else {
-        # 内层优先：End 升序，Start 降序，使用“最早结束优先”的区间调度贪心
-        $sorted = $Candidates | Sort-Object EndOffset, @{ Expression = 'StartOffset'; Descending = $true }
-        $lastEnd = -1
-        foreach ($c in $sorted) {
-            if ($c.StartOffset -ge $lastEnd) {
-                $selected += $c
-                $lastEnd = $c.EndOffset
-            } else {
-                $skipped += New-SkipRecord -Reason 'overlap' -Message '与已选片段重叠（Inner 策略丢弃外层/冲突）' -Item $c
-            }
+        $Candidates | Sort-Object `
+            @{ Expression = { Get-ReplacementCandidatePriority -Candidate $_ }; Descending = $true }, `
+            @{ Expression = { if ($_.PSObject.Properties['ProtectsInnerCandidates'] -and [bool]$_.ProtectsInnerCandidates) { 1 } else { 0 } }; Descending = $true }, `
+            EndOffset, `
+            @{ Expression = 'StartOffset'; Descending = $true }
+    }
+
+    foreach ($c in $sorted) {
+        $conflict = $selected | Where-Object {
+            $_.StartOffset -lt $c.EndOffset -and $c.StartOffset -lt $_.EndOffset
+        } | Select-Object -First 1
+
+        if (-not $conflict) {
+            $selected += $c
+            continue
         }
 
-        # 统一按 Start 排序，便于后续替换/展示
-        $selected = @($selected | Sort-Object StartOffset)
+        $skipReason = if (($c.PSObject.Properties['SourceKind'] -and [string]$c.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized')) -or
+            ($c.PSObject.Properties['ProtectsInnerCandidates'] -and [bool]$c.ProtectsInnerCandidates)) {
+            'overlap_retained_higher_priority'
+        } else {
+            'overlap'
+        }
+        $skipMessage = if ($skipReason -eq 'overlap_retained_higher_priority') {
+            '与已选高优先级整段候选重叠，丢弃当前片段'
+        } elseif ($Strategy -eq 'Outer') {
+            '与已选片段重叠（Outer 策略丢弃内层/后续）'
+        } else {
+            '与已选片段重叠（Inner 策略丢弃外层/冲突）'
+        }
+        $skipped += New-SkipRecord -Reason $skipReason -Message $skipMessage -Item $c
     }
 
     return [PSCustomObject]@{
-        Selected = $selected
+        Selected = @($selected | Sort-Object StartOffset)
         Skipped  = $skipped
     }
 }
@@ -3647,8 +4247,29 @@ function Ensure-SyntaxSafeReplacements {
         }
     }
 
-    # 第一阶段：优先移除变量位点替换，再尝试移除 Inline 结果替换。
-    foreach ($dropType in @('VarRead', 'Inline')) {
+    # 优先尝试单独保留“整段物化”候选，避免它被局部 wrapper/碎片拖累。
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        $wholeScriptKeepers = @($effective | Where-Object {
+            $_ -and $_.PSObject.Properties['WholeScriptMaterialized'] -and [bool]$_.WholeScriptMaterialized
+        } | Sort-Object @{ Expression = { Get-ReplacementCandidatePriority -Candidate $_ }; Descending = $true }, @{ Expression = { [int]($_.EndOffset - $_.StartOffset) }; Descending = $true }, StartOffset)
+
+        foreach ($keeper in $wholeScriptKeepers) {
+            $candidateSet = @($keeper)
+            $candidateCheck = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $candidateSet
+            if (-not $candidateCheck.IsValid) { continue }
+
+            foreach ($dropped in @($effective | Where-Object { (Get-ReplacementIdentity -Replacement $_) -ne (Get-ReplacementIdentity -Replacement $keeper) })) {
+                $skipped += New-SkipRecord -Reason 'syntax_guard_preserved_whole_script' -Message '优先保留可解析的整段物化候选，移除其余碎片候选' -Item $dropped
+            }
+
+            $effective = $candidateSet
+            $check = $candidateCheck
+            break
+        }
+    }
+
+    # 第一阶段：优先移除容易打碎语法的低优先级片段。
+    foreach ($dropType in @('VarRead', 'Inline', 'CommandName', 'Binary')) {
         if ($check.IsValid) { break }
 
         $toDrop = @($effective | Where-Object { [string]$_.Type -eq $dropType })
@@ -3662,9 +4283,34 @@ function Ensure-SyntaxSafeReplacements {
         $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
     }
 
-    # 第二阶段：若仍不合法，按“小跨度优先”继续移除，直到可解析或清空。
+    # 第二阶段：若存在高优先级整段候选，优先保留它们，丢弃其余碎片候选。
     if (-not $check.IsValid -and $effective.Count -gt 0) {
-        $ordered = @($effective | Sort-Object @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
+        $highPriority = @($effective | Where-Object { (Get-ReplacementCandidatePriority -Candidate $_) -ge 430 })
+        if ($highPriority.Count -gt 0) {
+            $highPriority = @($highPriority | Sort-Object @{ Expression = { Get-ReplacementCandidatePriority -Candidate $_ }; Descending = $true }, @{ Expression = { [int]($_.EndOffset - $_.StartOffset) }; Descending = $true }, StartOffset)
+            foreach ($keeper in $highPriority) {
+                $candidateSet = @($effective | Where-Object {
+                    $same = ((Get-ReplacementIdentity -Replacement $_) -eq (Get-ReplacementIdentity -Replacement $keeper))
+                    $nonOverlap = ($_.EndOffset -le $keeper.StartOffset -or $_.StartOffset -ge $keeper.EndOffset)
+                    $same -or $nonOverlap
+                })
+                $candidateCheck = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $candidateSet
+                if (-not $candidateCheck.IsValid) { continue }
+
+                foreach ($dropped in @($effective | Where-Object { (Get-ReplacementIdentity -Replacement $_) -notin @($candidateSet | ForEach-Object { Get-ReplacementIdentity -Replacement $_ }) })) {
+                    $skipped += New-SkipRecord -Reason 'syntax_guard_preserved_high_priority' -Message '优先保留高优先级整段候选，移除冲突碎片' -Item $dropped
+                }
+
+                $effective = $candidateSet
+                $check = $candidateCheck
+                break
+            }
+        }
+    }
+
+    # 第三阶段：若仍不合法，按“低优先级、小跨度优先”继续移除，直到可解析或清空。
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        $ordered = @($effective | Sort-Object @{ Expression = { Get-SyntaxGuardDropPriority -Candidate $_ } }, @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
         foreach ($cand in $ordered) {
             if ($check.IsValid) { break }
 
@@ -4066,6 +4712,48 @@ function Invoke-NormalizePlainScriptText {
     return $working
 }
 
+function Try-StripDuplicatedStageWrapper {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $match = [regex]::Match($ScriptText, '(?s)^\s*\$stage\s*=\s*@''\r?\n(?<wrapped>.*?)\r?\n''@\s*(?<tail>.+?)\s*$')
+    if (-not $match.Success) {
+        return $null
+    }
+
+    $wrapped = [string]$match.Groups['wrapped'].Value
+    $tail = [string]$match.Groups['tail'].Value
+    if ([string]::IsNullOrWhiteSpace($wrapped) -or [string]::IsNullOrWhiteSpace($tail)) {
+        return $null
+    }
+
+    $cleanWrapped = $wrapped
+    $cleanWrapped = [regex]::Replace($cleanWrapped, '^\s*PFX\d+', '', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $cleanWrapped = [regex]::Replace($cleanWrapped, '\r?\nSFX\d+\s*$', '', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $cleanWrapped = $cleanWrapped.Trim()
+    $tail = $tail.Trim()
+
+    $tailSyntax = Test-PowerShellSyntax -ScriptText $tail
+    $wrappedSyntax = Test-PowerShellSyntax -ScriptText $cleanWrapped
+
+    if ($tailSyntax.IsValid) {
+        $tailNorm = Get-NormalizedScriptComparisonText -ScriptText $tail
+        $wrappedNorm = Get-NormalizedScriptComparisonText -ScriptText $cleanWrapped
+        if (($wrappedSyntax.IsValid -and $tailNorm -eq $wrappedNorm) -or -not $wrappedSyntax.IsValid) {
+            return ($tail.TrimEnd() + "`r`n")
+        }
+    }
+
+    if ($wrappedSyntax.IsValid) {
+        return ($cleanWrapped.TrimEnd() + "`r`n")
+    }
+
+    return $null
+}
+
 function Invoke-CanonicalizeWildcardCommandTargets {
     param([Parameter(Mandatory)][string]$ScriptText)
 
@@ -4211,6 +4899,11 @@ function Invoke-PostProcessDeobfuscatedScriptText {
         $working = $payloadText
     }
 
+    $stageStripped = Try-StripDuplicatedStageWrapper -ScriptText $working
+    if (-not [string]::IsNullOrWhiteSpace($stageStripped)) {
+        $working = $stageStripped
+    }
+
     $working = Invoke-CanonicalizeWildcardCommandTargets -ScriptText $working
     $normalized = Invoke-NormalizePlainScriptText -ScriptText $working
     $check = Test-PowerShellSyntax -ScriptText $normalized
@@ -4305,6 +4998,7 @@ if ($FullOutput) {
 }
 Write-Host "Strategy   : $OverlapStrategy" -ForegroundColor Gray
 Write-Host "VarPolicy  : $VariableConflictPolicy" -ForegroundColor Gray
+Write-Host "SafeMode   : $SafeMode" -ForegroundColor Gray
 Write-Host "MaxRounds  : $MaxRounds" -ForegroundColor Gray
 Write-Host "TimeBudget : Global=${GlobalTimeBudgetMs}ms Dynamic=${DynamicTimeBudgetMs}ms" -ForegroundColor Gray
 Write-Host "DryRun     : $DryRun" -ForegroundColor Gray
@@ -4315,6 +5009,10 @@ $currentText = $null
 $finalRound = 0
 $finalRoundOutPath = $null
 $terminatedBy = $null
+$lastValidRoundOutPath = $null
+$lastValidText = $null
+$finalOutputSource = $null
+$finalSyntaxFallbackUsed = $false
 $globalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $currentRoundIsMaterializedPayload = $false
 
@@ -4360,8 +5058,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                         ExecutionLog       = $roundLogPath
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
+                        SafeMode           = $SafeMode
                         TerminatedBy       = 'parse_failure'
                         ParseError         = $roundParseInfo.FirstError
+                        FinalSyntaxValid   = $false
+                        FinalOutputSource  = 'rebuilt_output'
                         Timestamp          = (Get-Date).ToString('o')
                     }
                     Write-JsonFile -Path $roundReportPath -Object $report
@@ -4376,7 +5077,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
             $preTraversalCheck = Get-PreTraversalStopCheckInfo -ScriptText $rawRoundText -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
             if ($preTraversalCheck.ShouldCheck) {
-                $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $preTraversalCheck.CheckText
+                $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $preTraversalCheck.CheckText -SafeMode:$SafeMode
             } else {
                 $roundStop = $null
             }
@@ -4393,6 +5094,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                         ExecutionLog       = $roundLogPath
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
+                        SafeMode           = $SafeMode
                         TerminatedBy       = 'pre_traversal_stop'
                         InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
                         PreTraversalCheckApplied = $true
@@ -4400,6 +5102,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                         StopReason         = $roundStop.StopReason
                         StopMessage        = $roundStop.Message
                         StopFeatures       = @($roundStop.Features)
+                        FinalSyntaxValid   = $true
+                        FinalOutputSource  = 'rebuilt_output'
                         Timestamp          = (Get-Date).ToString('o')
                     }
                     Write-JsonFile -Path $roundReportPath -Object $report
@@ -4408,6 +5112,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 $currentText = $rawRoundText
                 $finalRound = $round
                 $finalRoundOutPath = $roundOutPath
+                $lastValidRoundOutPath = $roundOutPath
+                $lastValidText = $rawRoundText
                 $terminatedBy = 'pre_traversal_stop'
                 break
             }
@@ -4426,8 +5132,11 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                         ExecutionLog       = $roundLogPath
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
+                        SafeMode           = $SafeMode
                         TerminatedBy       = 'cfg_generation_failed'
                         ParseError         = $roundParseInfo.FirstError
+                        FinalSyntaxValid   = $false
+                        FinalOutputSource  = 'rebuilt_output'
                         Timestamp          = (Get-Date).ToString('o')
                     }
                     Write-JsonFile -Path $roundReportPath -Object $report
@@ -4440,7 +5149,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 break
             }
 
-            $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs
+            $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs -SafeMode:$SafeMode
 
             $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
         $currentText = $scriptText
@@ -4463,7 +5172,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
         $preTraversalCheck = Get-PreTraversalStopCheckInfo -ScriptText $currentText -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
         if ($preTraversalCheck.ShouldCheck) {
-            $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $preTraversalCheck.CheckText
+            $roundStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $preTraversalCheck.CheckText -SafeMode:$SafeMode
         } else {
             $roundStop = $null
         }
@@ -4483,13 +5192,14 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         }
 
         # fast mode：禁用 execution.log（避免文件 IO）
-        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs
+        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $DynamicTimeBudgetMs -SafeMode:$SafeMode
 
         $scriptText = $currentText
     }
 
     $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
     $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
+    $wholeScriptDynamic = Get-WholeScriptDynamicLoaderReplacementCandidates -Context $ctx -ScriptText $scriptText
     $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
     $remainingStaticBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
     if ($GlobalTimeBudgetMs -gt 0 -and $remainingStaticBudgetMs -le 0) {
@@ -4500,12 +5210,12 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     } else {
         $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs
     }
-    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
+    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($wholeScriptDynamic.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
     $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($merged.Candidates) -Context $ctx -ScriptText $scriptText
     $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
     $candidates = @($preferred.Candidates)
-    $skipped = @($dynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+    $skipped = @($dynamic.Skipped) + @($wholeScriptDynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
     $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
     $autoCandidates = @()
@@ -4551,24 +5261,29 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     # 无替换：本轮不落盘任何 round 产物，直接收敛退出
     if ($selected.Count -eq 0 -and -not $postProcessChanged) {
+        $noReplacementReason = Get-NoReplacementTerminationReason -CandidateCount $candidates.Count -Skipped $skipped
         Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
 
         if ($FullOutput) {
-            # 清理本轮可能已创建的临时文件（in/log）；其余文件本轮不会生成
-            $cleanupPaths = @(
-                $roundInPath,
-                $roundOutPath,
-                $roundLogPath,
-                $roundReportPath,
-                $roundCfgDotPath,
-                $roundCfgPngPath
-            ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-
-            foreach ($p in $cleanupPaths) {
-                if (Test-Path -LiteralPath $p) {
-                    Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
-                }
+            $report = [ordered]@{
+                Round           = $round
+                RoundLabel      = $roundLabel
+                InputPath       = $roundInPath
+                OutputPath      = $null
+                ExecutionLog    = $roundLogPath
+                CfgDotPath      = $roundCfgDotPath
+                CfgPngPath      = $roundCfgPngPath
+                SafeMode        = $SafeMode
+                TerminatedBy    = 'no_replacements'
+                NoReplacementReason = $noReplacementReason
+                CandidateCount  = $candidates.Count
+                SelectedCount   = 0
+                AppliedCount    = 0
+                SkippedCount    = $skipped.Count
+                Skipped         = $skipped
+                Timestamp       = (Get-Date).ToString('o')
             }
+            Write-JsonFile -Path $roundReportPath -Object $report
 
             Write-Host "  no replacements in this round, artifacts skipped." -ForegroundColor DarkGray
 
@@ -4625,6 +5340,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 UsedEmptyFallback = if ($a.PSObject.Properties['UsedEmptyFallback']) { [bool]$a.UsedEmptyFallback } else { $false }
                 Executed          = if ($a.PSObject.Properties['Executed']) { [bool]$a.Executed } else { $true }
                 ResultType        = if ($a.PSObject.Properties['ResultType']) { $a.ResultType } else { $null }
+                MaterializationKind = if ($a.PSObject.Properties['MaterializationKind']) { $a.MaterializationKind } else { $null }
                 DynamicStopReason = if ($a.PSObject.Properties['DynamicStopReason']) { $a.DynamicStopReason } else { $null }
                 DynamicStopMessage = if ($a.PSObject.Properties['DynamicStopMessage']) { $a.DynamicStopMessage } else { $null }
             }
@@ -4645,6 +5361,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             CfgDotPath      = $roundCfgDotPath
             CfgPngPath      = $roundCfgPngPath
             HostInfo        = $ctx.HostInfo
+            SafeMode        = $SafeMode
             OverlapStrategy = $OverlapStrategy
             VariableConflictPolicy = $VariableConflictPolicy
             MaxIterations   = $MaxIterations
@@ -4655,6 +5372,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
             PreTraversalCheckApplied = [bool]$preTraversalCheck.ShouldCheck
             PreTraversalCheckReason = $preTraversalCheck.Reason
+            RemainingGlobalBudgetBeforeStatic = $remainingStaticBudgetMs
+            StaticSkippedByBudget = ($GlobalTimeBudgetMs -gt 0 -and $remainingStaticBudgetMs -le 0)
             CandidateCount  = $candidates.Count
             DynamicCount    = $dynamicCount
             LiteralizedCommandCount = $literalizedCount
@@ -4677,6 +5396,8 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         Write-JsonFile -Path $roundReportPath -Object $report
 
         Set-Content -LiteralPath $roundOutPath -Value $newText -Encoding UTF8
+        $lastValidRoundOutPath = $roundOutPath
+        $lastValidText = $newText
 
         Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
         Write-Host ("  in    : {0}" -f $roundInPath) -ForegroundColor Gray
@@ -4692,6 +5413,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     } else {
         Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
         $currentText = $newText
+        $lastValidText = $newText
     }
 
     $currentRoundIsMaterializedPayload = [bool]$nextRoundMaterializedPayload.IsMaterializedPayload
@@ -4725,6 +5447,71 @@ if ($null -eq $terminatedBy) {
     $terminatedBy = 'max_rounds'
 }
 
+$finalOutputPathToCopy = $null
+$finalOutputText = $null
+$finalSyntaxValid = $false
+
+if ($FullOutput) {
+    $preferredInfo = Test-FileSyntaxInfo -Path $finalRoundOutPath
+    if ($preferredInfo.Exists -and $preferredInfo.IsValid) {
+        $finalOutputPathToCopy = $finalRoundOutPath
+        $finalOutputText = $preferredInfo.Text
+        $finalOutputSource = 'rebuilt_output'
+        $finalSyntaxValid = $true
+    } elseif (-not [string]::IsNullOrWhiteSpace($lastValidRoundOutPath)) {
+        $fallbackInfo = Test-FileSyntaxInfo -Path $lastValidRoundOutPath
+        if ($fallbackInfo.Exists -and $fallbackInfo.IsValid) {
+            $finalOutputPathToCopy = $lastValidRoundOutPath
+            $finalOutputText = $fallbackInfo.Text
+            $finalOutputSource = 'last_valid_round'
+            $finalSyntaxValid = $true
+            $finalSyntaxFallbackUsed = $true
+        }
+    }
+
+    if (-not $finalSyntaxValid) {
+        $inputInfo = Test-FileSyntaxInfo -Path $currentPath
+        if ($inputInfo.Exists -and $inputInfo.IsValid) {
+            $finalOutputPathToCopy = $currentPath
+            $finalOutputText = $inputInfo.Text
+            $finalOutputSource = 'current_input'
+            $finalSyntaxValid = $true
+            $finalSyntaxFallbackUsed = $true
+        }
+    }
+} else {
+    $preferredText = if ($null -eq $currentText) { '' } else { [string]$currentText }
+    $preferredSyntax = Test-PowerShellSyntax -ScriptText $preferredText
+    if ($preferredSyntax.IsValid) {
+        $finalOutputText = $preferredText
+        $finalOutputSource = 'rebuilt_output'
+        $finalSyntaxValid = $true
+    } elseif (-not [string]::IsNullOrWhiteSpace($lastValidText)) {
+        $lastValidSyntax = Test-PowerShellSyntax -ScriptText $lastValidText
+        if ($lastValidSyntax.IsValid) {
+            $finalOutputText = $lastValidText
+            $finalOutputSource = 'last_valid_round'
+            $finalSyntaxValid = $true
+            $finalSyntaxFallbackUsed = $true
+        }
+    }
+
+    if (-not $finalSyntaxValid) {
+        $inputText = Get-FullScriptTextFromFile -Path $scriptFullPath
+        $inputSyntax = Test-PowerShellSyntax -ScriptText $inputText
+        if ($inputSyntax.IsValid) {
+            $finalOutputText = $inputText
+            $finalOutputSource = 'current_input'
+            $finalSyntaxValid = $true
+            $finalSyntaxFallbackUsed = $true
+        }
+    }
+}
+
+if (-not $finalSyntaxValid) {
+    throw '最终输出语法仍无效，且无法回退到语法有效版本。'
+}
+
 if (-not $DryRun) {
     $outDir = [System.IO.Path]::GetDirectoryName($OutPath)
     if (-not [string]::IsNullOrWhiteSpace($outDir) -and -not (Test-Path -LiteralPath $outDir)) {
@@ -4732,9 +5519,9 @@ if (-not $DryRun) {
     }
 
     if ($FullOutput) {
-        Copy-Item -LiteralPath $finalRoundOutPath -Destination $OutPath -Force
+        Copy-Item -LiteralPath $finalOutputPathToCopy -Destination $OutPath -Force
     } else {
-        Set-Content -LiteralPath $OutPath -Value $currentText -Encoding UTF8
+        Set-Content -LiteralPath $OutPath -Value $finalOutputText -Encoding UTF8
     }
 }
 
@@ -4744,6 +5531,8 @@ Write-Host ("FinalRound   : {0}" -f $finalRound) -ForegroundColor Gray
 if ($FullOutput) {
     Write-Host ("FinalWorkOut : {0}" -f $finalRoundOutPath) -ForegroundColor Gray
 }
+Write-Host ("FinalSource  : {0}" -f $finalOutputSource) -ForegroundColor Gray
+Write-Host ("FinalSyntax  : {0}" -f $finalSyntaxValid) -ForegroundColor Gray
 Write-Host ("OutPath      : {0}" -f $OutPath) -ForegroundColor Gray
 if ($FullOutput) {
     Write-Host ("WorkDir      : {0}" -f $WorkDir) -ForegroundColor Gray

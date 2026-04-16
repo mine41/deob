@@ -1504,6 +1504,26 @@ function Get-ContextBudgetStatus {
     }
 }
 
+function Get-StopwatchBudgetStatus {
+    param(
+        [int]$BudgetMs,
+        [System.Diagnostics.Stopwatch]$Stopwatch,
+        [Parameter(Mandatory)][string]$StopReason
+    )
+
+    $elapsedMs = if ($Stopwatch) { [int64]$Stopwatch.ElapsedMilliseconds } else { 0 }
+    $remainingMs = if ($BudgetMs -gt 0) { [int64]($BudgetMs - $elapsedMs) } else { $null }
+
+    return [PSCustomObject]@{
+        Enabled     = ($BudgetMs -gt 0)
+        BudgetMs    = $BudgetMs
+        ElapsedMs   = $elapsedMs
+        RemainingMs = $remainingMs
+        Exceeded    = ($BudgetMs -gt 0 -and $elapsedMs -ge $BudgetMs)
+        StopReason  = $StopReason
+    }
+}
+
 function Normalize-LoopConditionText {
     param([string]$ConditionText)
 
@@ -1569,7 +1589,8 @@ function Test-DynamicPayloadAliasDefinitionStatement {
 
 function Test-DynamicPayloadShouldStopRecursing {
     param(
-        [Parameter(Mandatory)][string]$ScriptText
+        [Parameter(Mandatory)][string]$ScriptText,
+        [bool]$SafeMode = $true
     )
 
     $result = [ordered]@{
@@ -1681,14 +1702,14 @@ function Test-DynamicPayloadShouldStopRecursing {
         return [PSCustomObject]$result
     }
 
-    if ($hasNetwork -and $hasInvokeExpression) {
+    if ($SafeMode -and $hasNetwork -and $hasInvokeExpression) {
         $result.ShouldStop = $true
         $result.StopReason = 'DynamicPayloadNetworkInvokeExpression'
         $result.Message = '检测到网络获取与动态执行组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
         return [PSCustomObject]$result
     }
 
-    if ($hasNetwork -and $hasStartSleep) {
+    if ($SafeMode -and $hasNetwork -and $hasStartSleep) {
         $result.ShouldStop = $true
         $result.StopReason = 'DynamicPayloadNetworkSleep'
         $result.Message = '检测到网络轮询与休眠组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
@@ -1862,14 +1883,15 @@ function Get-AstSourceTextRange {
 function Get-CommandArgumentText {
     param(
         $CommandAst,
-        $ParseInfo
+        $ParseInfo,
+        [int]$FirstArgumentIndex = 1
     )
 
-    if ($null -eq $CommandAst -or -not $CommandAst.CommandElements -or $CommandAst.CommandElements.Count -le 1) {
+    if ($null -eq $CommandAst -or -not $CommandAst.CommandElements -or $CommandAst.CommandElements.Count -le $FirstArgumentIndex) {
         return $null
     }
 
-    $firstArgument = $CommandAst.CommandElements[1]
+    $firstArgument = $CommandAst.CommandElements[$FirstArgumentIndex]
     $lastArgument = $CommandAst.CommandElements[$CommandAst.CommandElements.Count - 1]
     $argumentText = Get-AstSourceTextRange -ParseInfo $ParseInfo -StartAst $firstArgument -EndAst $lastArgument
     if (-not [string]::IsNullOrWhiteSpace($argumentText)) {
@@ -1877,6 +1899,337 @@ function Get-CommandArgumentText {
     }
 
     return [string]$firstArgument.Extent.Text
+}
+
+function Convert-DynamicCommandCandidateToName {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($Value -is [string]) {
+        $name = $Value.Trim()
+    } elseif ($Value -is [char[]]) {
+        $name = (-join $Value).Trim()
+    } elseif ($Value -is [array]) {
+        if (@($Value).Count -eq 1) {
+            return Convert-DynamicCommandCandidateToName -Value $Value[0]
+        }
+        return $null
+    } else {
+        $name = [string]$Value
+        if (-not [string]::IsNullOrWhiteSpace($name)) {
+            $name = $name.Trim()
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($name)) { return $null }
+    if ($name -match '^[&\.]\s*(.+)$') {
+        $name = [string]$Matches[1].Trim()
+    }
+
+    return $name
+}
+
+function Get-CommandAstWrappedDynamicInvocationInfo {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $CommandAst -or -not $CommandAst.CommandElements -or $CommandAst.CommandElements.Count -lt 1) {
+        return [PSCustomObject]@{
+            Success            = $false
+            EffectiveCommand   = $null
+            DynamicType        = $null
+            WrapperOperator    = $null
+            ArgumentStartIndex = $null
+        }
+    }
+
+    $wrapperOperator = $null
+    $targetAst = $null
+    $argumentStartIndex = $null
+
+    switch ([string]$CommandAst.InvocationOperator) {
+        'Ampersand' {
+            $wrapperOperator = '&'
+            $targetAst = $CommandAst.CommandElements[0]
+            $argumentStartIndex = 1
+        }
+        'Dot' {
+            $wrapperOperator = '.'
+            $targetAst = $CommandAst.CommandElements[0]
+            $argumentStartIndex = 1
+        }
+    }
+
+    if (-not $wrapperOperator) {
+        $headText = if ($CommandAst.CommandElements[0] -and $CommandAst.CommandElements[0].Extent) {
+            [string]$CommandAst.CommandElements[0].Extent.Text
+        } else {
+            $null
+        }
+        if ($headText -in @('&', '.')) {
+            if ($CommandAst.CommandElements.Count -lt 2) {
+                return [PSCustomObject]@{
+                    Success            = $false
+                    EffectiveCommand   = $null
+                    DynamicType        = $null
+                    WrapperOperator    = $headText
+                    ArgumentStartIndex = $null
+                }
+            }
+            $wrapperOperator = $headText
+            $targetAst = $CommandAst.CommandElements[1]
+            $argumentStartIndex = 2
+        }
+    }
+
+    if (-not $wrapperOperator) {
+        return [PSCustomObject]@{
+            Success            = $false
+            EffectiveCommand   = $null
+            DynamicType        = $null
+            WrapperOperator    = $null
+            ArgumentStartIndex = $null
+        }
+    }
+
+    if ($null -eq $targetAst) {
+        return [PSCustomObject]@{
+            Success            = $false
+            EffectiveCommand   = $null
+            DynamicType        = $null
+            WrapperOperator    = $wrapperOperator
+            ArgumentStartIndex = $null
+        }
+    }
+
+    $candidateName = $null
+    if ($targetAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $candidateName = Convert-DynamicCommandCandidateToName -Value $targetAst.Value
+    }
+
+    if (-not $candidateName -and $Context) {
+        $safeEval = Resolve-SafeCommandNameExpressionValue -Ast $targetAst -Context $Context
+        if ($safeEval.Success) {
+            $candidateName = Convert-DynamicCommandCandidateToName -Value $safeEval.Value
+        }
+    }
+
+    if (-not $candidateName -and $Context -and $targetAst.Extent) {
+        $nameCode = Convert-CodeForCurrentScope -Code $targetAst.Extent.Text -Context $Context
+        $nameEval = Invoke-InContext -ExecContext $Context.ExecContext -Code $nameCode
+        if ($nameEval.Success) {
+            $candidateName = Convert-DynamicCommandCandidateToName -Value (Normalize-ExecutionResultValue -Value $nameEval.Result -TreatArraysAsSequence)
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($candidateName)) {
+        return [PSCustomObject]@{
+            Success            = $false
+            EffectiveCommand   = $null
+            DynamicType        = $null
+            WrapperOperator    = $wrapperOperator
+            ArgumentStartIndex = $argumentStartIndex
+        }
+    }
+
+    $dynamicType = $null
+    if ($candidateName -in @('Invoke-Expression', 'iex')) {
+        $dynamicType = 'IEX'
+    } elseif ($candidateName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$') {
+        $dynamicType = 'ScriptBlockCreate'
+    }
+
+    return [PSCustomObject]@{
+        Success            = (-not [string]::IsNullOrWhiteSpace($dynamicType))
+        EffectiveCommand   = $candidateName
+        DynamicType        = $dynamicType
+        WrapperOperator    = $wrapperOperator
+        ArgumentStartIndex = $argumentStartIndex
+    }
+}
+
+function Test-PowerShellTextCandidate {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return [PSCustomObject]@{ IsUseful = $false; Score = -1; IsValid = $false }
+    }
+
+    $tokens = $null
+    $errors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseInput($Text, [ref]$tokens, [ref]$errors)
+    $isValid = (-not $errors -or $errors.Count -eq 0)
+    $score = if ($isValid) { 100 } else { [Math]::Max(0, 60 - (@($errors).Count * 10)) }
+
+    if ($Text -match '(?i)\b(function|param|if|foreach|for|while|switch|return|try|catch|Invoke-|New-Object|Write-|Set-)\b') {
+        $score += 10
+    }
+    if ($Text -match '(?m)^\s*\$[A-Za-z_][\w:]*\s*=') {
+        $score += 5
+    }
+    if ($Text -match "(?m)^\s*#|[`r`n;]") {
+        $score += 3
+    }
+
+    return [PSCustomObject]@{
+        IsUseful = ($score -gt 0)
+        Score    = $score
+        IsValid  = $isValid
+    }
+}
+
+function Convert-ByteArrayToLikelyScriptText {
+    param([byte[]]$Bytes)
+
+    if ($null -eq $Bytes -or $Bytes.Length -eq 0) {
+        return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
+    }
+
+    $encodings = @(
+        @{ Name = 'UTF8'; Encoding = [System.Text.Encoding]::UTF8 },
+        @{ Name = 'Unicode'; Encoding = [System.Text.Encoding]::Unicode },
+        @{ Name = 'BigEndianUnicode'; Encoding = [System.Text.Encoding]::BigEndianUnicode },
+        @{ Name = 'ASCII'; Encoding = [System.Text.Encoding]::ASCII }
+    )
+
+    $best = $null
+    foreach ($item in $encodings) {
+        try {
+            $text = $item.Encoding.GetString($Bytes)
+        } catch {
+            continue
+        }
+
+        $test = Test-PowerShellTextCandidate -Text $text
+        if (-not $test.IsUseful) { continue }
+
+        if ($null -eq $best -or $test.Score -gt $best.Score) {
+            $best = [PSCustomObject]@{
+                Success = $true
+                Text    = $text
+                Kind    = "ByteArray:$($item.Name)"
+                Score   = $test.Score
+            }
+        }
+    }
+
+    if ($best) { return $best }
+    return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
+}
+
+function Convert-DynamicInvocationValueToScriptText {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
+    }
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        return Convert-DynamicInvocationValueToScriptText -Value $Value.BaseObject
+    }
+
+    if ($Value -is [string]) {
+        return [PSCustomObject]@{ Success = (-not [string]::IsNullOrWhiteSpace($Value)); Text = [string]$Value; Kind = 'String' }
+    }
+
+    if ($Value -is [System.Management.Automation.ScriptBlock]) {
+        $text = [string]$Value.ToString()
+        return [PSCustomObject]@{ Success = (-not [string]::IsNullOrWhiteSpace($text)); Text = $text; Kind = 'ScriptBlock' }
+    }
+
+    if ($Value -is [System.Security.SecureString]) {
+        $bstr = [IntPtr]::Zero
+        try {
+            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+            $text = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+            return [PSCustomObject]@{ Success = (-not [string]::IsNullOrWhiteSpace($text)); Text = $text; Kind = 'SecureString' }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
+        } finally {
+            if ($bstr -ne [IntPtr]::Zero) {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+            }
+        }
+    }
+
+    if ($Value -is [char[]]) {
+        return [PSCustomObject]@{ Success = ($Value.Length -gt 0); Text = (-join $Value); Kind = 'CharArray' }
+    }
+
+    if ($Value -is [byte[]]) {
+        return Convert-ByteArrayToLikelyScriptText -Bytes $Value
+    }
+
+    if ((Test-ExecutionResultSequenceContainer -Value $Value) -or ($Value -is [array])) {
+        $items = @($Value)
+        if ($items.Count -eq 0) {
+            return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
+        }
+
+        if ($items.Count -eq 1) {
+            return Convert-DynamicInvocationValueToScriptText -Value $items[0]
+        }
+
+        $allChars = $true
+        $allStrings = $true
+        $singleCharStrings = $true
+        foreach ($item in $items) {
+            if ($item -is [char]) { continue }
+
+            if ($item -is [string]) {
+                if ($item.Length -ne 1) {
+                    $singleCharStrings = $false
+                }
+                continue
+            }
+
+            if ($item -is [ValueType]) {
+                try {
+                    $null = [char][int]$item
+                    $allStrings = $false
+                    continue
+                } catch {
+                }
+            }
+
+            $allChars = $false
+            $allStrings = $false
+            $singleCharStrings = $false
+            break
+        }
+
+        if ($allChars) {
+            $chars = foreach ($item in $items) {
+                if ($item -is [char]) { $item }
+                elseif ($item -is [string]) { [char]$item }
+                else { [char][int]$item }
+            }
+            return [PSCustomObject]@{ Success = ($chars.Count -gt 0); Text = (-join $chars); Kind = 'SequenceChars' }
+        }
+
+        if ($allStrings) {
+            $joinEmpty = ($items | ForEach-Object { [string]$_ }) -join ''
+            if ($singleCharStrings) {
+                return [PSCustomObject]@{ Success = (-not [string]::IsNullOrWhiteSpace($joinEmpty)); Text = $joinEmpty; Kind = 'SequenceStrings' }
+            }
+
+            $joinNewLine = ($items | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+            $emptyScore = Test-PowerShellTextCandidate -Text $joinEmpty
+            $newlineScore = Test-PowerShellTextCandidate -Text $joinNewLine
+            if ($newlineScore.Score -gt $emptyScore.Score) {
+                return [PSCustomObject]@{ Success = (-not [string]::IsNullOrWhiteSpace($joinNewLine)); Text = $joinNewLine; Kind = 'SequenceStrings:NewLine' }
+            }
+            return [PSCustomObject]@{ Success = (-not [string]::IsNullOrWhiteSpace($joinEmpty)); Text = $joinEmpty; Kind = 'SequenceStrings:EmptyJoin' }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
 }
 
 function Get-NodeTextExecutionInfo {
@@ -2178,6 +2531,13 @@ function Get-DynamicArgumentCodeFromNodeText {
     $argCode = $null
     $displayCode = $null
     $fromPipelineInput = $false
+    $replacementStartOffset = $null
+    $replacementEndOffset = $null
+    $statement = Get-FirstStatementFromScriptAst -ScriptAst $scriptAst
+    if ($statement -and $statement.Extent) {
+        $replacementStartOffset = [int]$statement.Extent.StartOffset
+        $replacementEndOffset = [int]$statement.Extent.EndOffset
+    }
 
     function Get-PipelineInputExpressionText {
         param($StatementAst, $TargetCommandAst)
@@ -2232,10 +2592,25 @@ function Get-DynamicArgumentCodeFromNodeText {
                 $CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName']) {
                 $cmdName = [string]$CommandInfo.ResolvedName
             }
+            $wrappedDynamic = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $cmdAst -Context $Context
+            $normalizedCmdName = Convert-DynamicCommandCandidateToName -Value $cmdName
             $isIex = $cmdName -in @("Invoke-Expression", "iex")
+            if (-not $isIex -and $normalizedCmdName -in @('Invoke-Expression', 'iex')) {
+                $isIex = $true
+            }
             $isScriptBlockCreateCommand = $cmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$'
+            if (-not $isScriptBlockCreateCommand -and $normalizedCmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$') {
+                $isScriptBlockCreateCommand = $true
+            }
             $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
-            if (($DynamicType -eq "IEX" -and $isIex) -or
+            if (($DynamicType -eq "IEX" -and $wrappedDynamic.Success -and $wrappedDynamic.DynamicType -eq 'IEX') -or
+                ($DynamicType -eq 'ScriptBlockCreate' -and $wrappedDynamic.Success -and $wrappedDynamic.DynamicType -eq 'ScriptBlockCreate')) {
+                $argCode = Get-CommandArgumentText -CommandAst $cmdAst -ParseInfo $parseInfo -FirstArgumentIndex $wrappedDynamic.ArgumentStartIndex
+                if ([string]::IsNullOrWhiteSpace($argCode) -and $cmdAst.CommandElements.Count -gt $wrappedDynamic.ArgumentStartIndex) {
+                    $argCode = $cmdAst.CommandElements[$wrappedDynamic.ArgumentStartIndex].Extent.Text
+                }
+                $displayCode = $argCode
+            } elseif (($DynamicType -eq "IEX" -and $isIex) -or
                 ($DynamicType -eq "ScriptBlockCreate" -and $isScriptBlockCreateCommand)) {
                 $argCode = Get-CommandArgumentText -CommandAst $cmdAst -ParseInfo $parseInfo
                 if ([string]::IsNullOrWhiteSpace($argCode)) {
@@ -2264,6 +2639,8 @@ function Get-DynamicArgumentCodeFromNodeText {
         Code        = $argCode
         DisplayCode = $displayCode
         FromPipelineInput = $fromPipelineInput
+        ReplacementStartOffset = $replacementStartOffset
+        ReplacementEndOffset = $replacementEndOffset
     }
 }
 
@@ -3916,6 +4293,545 @@ function Get-ForEachObjectInvocationInfo {
     }
 }
 
+function Convert-AstIntegerLiteralValue {
+    param($Ast)
+
+    if ($null -eq $Ast) { return $null }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return Convert-AstIntegerLiteralValue -Ast $Ast.Expression
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        if ($Ast.Pipeline -and $Ast.Pipeline.PipelineElements -and $Ast.Pipeline.PipelineElements.Count -eq 1) {
+            $elem = $Ast.Pipeline.PipelineElements[0]
+            if ($elem -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                return Convert-AstIntegerLiteralValue -Ast $elem.Expression
+            }
+            if ($elem.PSObject.Properties['Expression']) {
+                return Convert-AstIntegerLiteralValue -Ast $elem.Expression
+            }
+        }
+        return $null
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
+        if ($Ast.Value -is [int]) { return [int]$Ast.Value }
+        if ($Ast.Value -is [long]) { return [int]$Ast.Value }
+    }
+
+    $text = [string]$Ast.Extent.Text
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    $text = $text.Trim()
+    if (($text.StartsWith("'") -and $text.EndsWith("'")) -or ($text.StartsWith('"') -and $text.EndsWith('"'))) {
+        if ($text.Length -ge 2) {
+            $text = $text.Substring(1, $text.Length - 2)
+        }
+    }
+
+    $parsed = 0
+    if ($text -match '^(?i)0x([0-9a-f]+)$') {
+        try { return [Convert]::ToInt32($Matches[1], 16) } catch { return $null }
+    }
+    if ([int]::TryParse($text, [ref]$parsed)) {
+        return $parsed
+    }
+
+    return $null
+}
+
+function Get-ForEachObjectCommandBlockInfoFromCommandAst {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    if ($null -eq $CommandAst) {
+        return [PSCustomObject]@{
+            Success         = $false
+            Error           = 'CommandAst 为空'
+            CommandName     = $null
+            BeginBlockAst   = $null
+            ProcessBlockAst = $null
+            EndBlockAst     = $null
+        }
+    }
+
+    $cmdName = $CommandAst.GetCommandName()
+    if ($cmdName -notin @('ForEach-Object', 'ForEach', '%')) {
+        return [PSCustomObject]@{
+            Success         = $false
+            Error           = "Not a ForEach-Object command: $cmdName"
+            CommandName     = $cmdName
+            BeginBlockAst   = $null
+            ProcessBlockAst = $null
+            EndBlockAst     = $null
+        }
+    }
+
+    $beginAst = $null
+    $processAst = $null
+    $endAst = $null
+    $positional = @()
+
+    for ($i = 1; $i -lt $CommandAst.CommandElements.Count; $i++) {
+        $elem = $CommandAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $pname = [string]$elem.ParameterName
+            if ($pname -in @('Begin', 'Process', 'End', 'b', 'p', 'e')) {
+                $argAst = $elem.Argument
+                if (-not $argAst -and ($i + 1 -lt $CommandAst.CommandElements.Count)) {
+                    $i++
+                    $argAst = $CommandAst.CommandElements[$i]
+                }
+
+                switch -Regex ($pname) {
+                    '^(?i:Begin|b)$'   { $beginAst = $argAst }
+                    '^(?i:Process|p)$' { $processAst = $argAst }
+                    '^(?i:End|e)$'     { $endAst = $argAst }
+                }
+            }
+            continue
+        }
+
+        $positional += $elem
+    }
+
+    if (-not $beginAst -and -not $processAst -and -not $endAst) {
+        $blocks = @($positional | Where-Object { $_ -is [System.Management.Automation.Language.ScriptBlockExpressionAst] })
+        if ($blocks.Count -eq 1) {
+            $processAst = $blocks[0]
+        } elseif ($blocks.Count -eq 2) {
+            $beginAst = $blocks[0]
+            $processAst = $blocks[1]
+        } elseif ($blocks.Count -ge 3) {
+            $beginAst = $blocks[0]
+            $processAst = $blocks[1]
+            $endAst = $blocks[2]
+        }
+    }
+
+    foreach ($pair in @(
+            @{ Name = 'Begin'; Ast = $beginAst },
+            @{ Name = 'Process'; Ast = $processAst },
+            @{ Name = 'End'; Ast = $endAst }
+        )) {
+        if ($null -eq $pair.Ast) { continue }
+        if ($pair.Ast -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+            return [PSCustomObject]@{
+                Success         = $false
+                Error           = "$($pair.Name) block is not a literal scriptblock"
+                CommandName     = $cmdName
+                BeginBlockAst   = $beginAst
+                ProcessBlockAst = $processAst
+                EndBlockAst     = $endAst
+            }
+        }
+    }
+
+    if (-not $processAst) {
+        return [PSCustomObject]@{
+            Success         = $false
+            Error           = 'Process block is missing'
+            CommandName     = $cmdName
+            BeginBlockAst   = $beginAst
+            ProcessBlockAst = $null
+            EndBlockAst     = $endAst
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success         = $true
+        Error           = $null
+        CommandName     = $cmdName
+        BeginBlockAst   = $beginAst
+        ProcessBlockAst = $processAst
+        EndBlockAst     = $endAst
+    }
+}
+
+function Test-ScriptBlockExpressionAstHasExecutableStatements {
+    param($ScriptBlockExpressionAst)
+
+    if ($null -eq $ScriptBlockExpressionAst) { return $false }
+    if ($ScriptBlockExpressionAst -isnot [System.Management.Automation.Language.ScriptBlockExpressionAst]) { return $true }
+
+    $sb = $ScriptBlockExpressionAst.ScriptBlock
+    if ($null -eq $sb) { return $false }
+
+    foreach ($namedBlock in @($sb.BeginBlock, $sb.ProcessBlock, $sb.EndBlock, $sb.CleanBlock)) {
+        if ($namedBlock -and $namedBlock.Statements -and $namedBlock.Statements.Count -gt 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-UnwrappedForEachProcessTransformAst {
+    param($Ast)
+
+    $current = $Ast
+    $changed = $true
+    while ($changed -and $null -ne $current) {
+        $changed = $false
+
+        if ($current -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $current = $current.Expression
+            $changed = $true
+            continue
+        }
+
+        if ($current -is [System.Management.Automation.Language.ParenExpressionAst] -and
+            $current.Pipeline -and $current.Pipeline.PipelineElements -and $current.Pipeline.PipelineElements.Count -eq 1) {
+            $pipeElem = $current.Pipeline.PipelineElements[0]
+            if ($pipeElem -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                $current = $pipeElem.Expression
+                $changed = $true
+                continue
+            }
+            if ($pipeElem.PSObject.Properties['Expression']) {
+                $current = $pipeElem.Expression
+                $changed = $true
+                continue
+            }
+        }
+
+        if ($current -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+            $typeName = if ($current.Type -and $current.Type.TypeName) { [string]$current.Type.TypeName.FullName } else { $null }
+            if ($typeName -and $typeName -match '^(?i:int|int32)$') {
+                $current = $current.Child
+                $changed = $true
+                continue
+            }
+        }
+    }
+
+    return $current
+}
+
+function Get-ForEachObjectProcessCharTransformInfoFromCommandAst {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    $blockInfo = Get-ForEachObjectCommandBlockInfoFromCommandAst -CommandAst $CommandAst
+    if (-not $blockInfo.Success -or -not $blockInfo.ProcessBlockAst) {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    $processAst = $blockInfo.ProcessBlockAst
+    $convertAst = $processAst.ScriptBlock.Find({
+        param($n)
+        $n -is [System.Management.Automation.Language.ConvertExpressionAst] -and
+        [string]$n.Type.TypeName.FullName -match '^(?i:char)$'
+    }, $true)
+    if (-not $convertAst) {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    $childAst = Get-UnwrappedForEachProcessTransformAst -Ast $convertAst.Child
+    if ($null -eq $childAst) {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    if ($childAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $varName = [string]$childAst.VariablePath.UserPath
+        if ($varName -in @('_', 'PSItem')) {
+            return [PSCustomObject]@{
+                Success      = $true
+                Kind         = 'CharCast'
+                XorKey       = $null
+                CommandInfo  = $blockInfo
+            }
+        }
+    }
+
+    if ($childAst -isnot [System.Management.Automation.Language.BinaryExpressionAst] -or
+        [string]$childAst.Operator -ne 'Bxor') {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    $varSide = $null
+    $constSide = $null
+    if ($childAst.Left -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $varSide = $childAst.Left
+        $constSide = $childAst.Right
+    } elseif ($childAst.Right -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $varSide = $childAst.Right
+        $constSide = $childAst.Left
+    }
+    if (-not $varSide -or -not $constSide) {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    $varName = [string]$varSide.VariablePath.UserPath
+    if ($varName -notin @('_', 'PSItem')) {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    $xorKey = Convert-AstIntegerLiteralValue -Ast $constSide
+    if ($null -eq $xorKey) {
+        return [PSCustomObject]@{
+            Success      = $false
+            Kind         = $null
+            XorKey       = $null
+            CommandInfo  = $blockInfo
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success      = $true
+        Kind         = 'CharBxor'
+        XorKey       = [int]$xorKey
+        CommandInfo  = $blockInfo
+    }
+}
+
+function Get-ForEachObjectProcessCharTransformInfo {
+    param(
+        $Node,
+        [hashtable]$Context,
+        [string]$NodeTextOverride = $null,
+        $CommandInfo = $null
+    )
+
+    $execInfo = Get-NodeTextExecutionInfoWithFallback -Node $Node -Context $Context -CandidateSourceTexts @($NodeTextOverride, [string]$Node.Text) -AllowOriginalAstFallback
+    if (-not $execInfo.Success -or -not $execInfo.CommandAst) {
+        return [PSCustomObject]@{ Success = $false; Kind = $null; XorKey = $null }
+    }
+
+    return Get-ForEachObjectProcessCharTransformInfoFromCommandAst -CommandAst $execInfo.CommandAst
+}
+
+function Expand-ForEachNumericStringInputCoreIfNeeded {
+    param(
+        [array]$Items,
+        $TransformInfo
+    )
+
+    $normalizedItems = @($Items)
+    if ($normalizedItems.Count -ne 1) {
+        return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
+    }
+
+    if (-not $TransformInfo -or -not $TransformInfo.Success -or $TransformInfo.Kind -notin @('CharBxor', 'CharCast')) {
+        return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
+    }
+
+    $single = $normalizedItems[0]
+    if ($single -is [psobject] -and $null -ne $single.BaseObject -and $single.BaseObject -ne $single) {
+        $single = $single.BaseObject
+    }
+    if ($single -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$single)) {
+        return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
+    }
+
+    $matches = [regex]::Matches([string]$single, '(?i)0x[0-9a-f]+|\d+')
+    if ($matches.Count -lt 2) {
+        return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
+    }
+
+    $expanded = New-Object System.Collections.Generic.List[object]
+    foreach ($match in $matches) {
+        $value = $match.Value
+        $parsed = if ($value -match '^(?i)0x([0-9a-f]+)$') {
+            try { [Convert]::ToInt32($Matches[1], 16) } catch { $null }
+        } else {
+            $tmp = 0
+            if ([int]::TryParse($value, [ref]$tmp)) { $tmp } else { $null }
+        }
+        if ($null -ne $parsed) {
+            [void]$expanded.Add([int]$parsed)
+        }
+    }
+
+    if ($expanded.Count -lt 2) {
+        return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
+    }
+
+    return [PSCustomObject]@{
+        Changed = $true
+        Items   = @($expanded.ToArray())
+        Reason  = 'ExplodedNumericStringForCharTransform'
+    }
+}
+
+function Expand-ForEachNumericStringInputIfNeeded {
+    param(
+        [array]$Items,
+        $Node,
+        [hashtable]$Context,
+        [string]$NodeTextOverride = $null,
+        $CommandInfo = $null
+    )
+
+    $normalizedItems = @($Items)
+    if ($normalizedItems.Count -ne 1) {
+        return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
+    }
+
+    $transformInfo = Get-ForEachObjectProcessCharTransformInfo -Node $Node -Context $Context -NodeTextOverride $NodeTextOverride -CommandInfo $CommandInfo
+    return Expand-ForEachNumericStringInputCoreIfNeeded -Items $normalizedItems -TransformInfo $transformInfo
+}
+
+function Convert-ForEachItemToInt {
+    param($Value)
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or $Value -is [uint16] -or
+        $Value -is [int] -or $Value -is [uint32] -or $Value -is [long]) {
+        return [PSCustomObject]@{ Success = $true; Value = [int]$Value }
+    }
+
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+    $text = $text.Trim()
+
+    if ($text -match '^(?i)0x([0-9a-f]+)$') {
+        try {
+            return [PSCustomObject]@{ Success = $true; Value = [Convert]::ToInt32($Matches[1], 16) }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    $parsed = 0
+    if ([int]::TryParse($text, [ref]$parsed)) {
+        return [PSCustomObject]@{ Success = $true; Value = $parsed }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null }
+}
+
+function Try-Invoke-ForEachCharBxorFastPath {
+    param(
+        [array]$Items,
+        $TransformInfo
+    )
+
+    $result = Try-Invoke-ForEachCharTransformFastPath -Items $Items -TransformInfo $TransformInfo
+    if (-not $result.Success -or ($TransformInfo -and $TransformInfo.Kind -ne 'CharBxor')) {
+        return [PSCustomObject]@{ Success = $false; Outputs = @(); Reason = $null }
+    }
+    return $result
+}
+
+function Convert-ForEachItemToChar {
+    param($Value)
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($Value -is [char]) {
+        return [PSCustomObject]@{ Success = $true; Value = [char]$Value }
+    }
+
+    if ($Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or $Value -is [uint16] -or
+        $Value -is [int] -or $Value -is [uint32] -or $Value -is [long]) {
+        try {
+            return [PSCustomObject]@{ Success = $true; Value = [char][int]$Value }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return [PSCustomObject]@{ Success = $false; Outputs = @(); Reason = $null }
+    }
+
+    if ($text.Length -eq 1) {
+        return [PSCustomObject]@{ Success = $true; Value = [char]$text[0] }
+    }
+
+    $intInfo = Convert-ForEachItemToInt -Value $text
+    if (-not $intInfo.Success) {
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    try {
+        return [PSCustomObject]@{ Success = $true; Value = [char][int]$intInfo.Value }
+    } catch {
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+}
+
+function Try-Invoke-ForEachCharTransformFastPath {
+    param(
+        [array]$Items,
+        $TransformInfo
+    )
+
+    if (-not $TransformInfo -or -not $TransformInfo.Success -or $TransformInfo.Kind -notin @('CharBxor', 'CharCast')) {
+        return [PSCustomObject]@{ Success = $false; Outputs = @(); Reason = $null }
+    }
+
+    $outputs = New-Object System.Collections.Generic.List[object]
+    foreach ($item in @($Items)) {
+        if ($TransformInfo.Kind -eq 'CharBxor') {
+            $intInfo = Convert-ForEachItemToInt -Value $item
+            if (-not $intInfo.Success) {
+                return [PSCustomObject]@{ Success = $false; Outputs = @(); Reason = 'NonNumericInput' }
+            }
+            try {
+                [void]$outputs.Add([char]([int]$intInfo.Value -bxor [int]$TransformInfo.XorKey))
+            } catch {
+                return [PSCustomObject]@{ Success = $false; Outputs = @(); Reason = 'CharConvertFailed' }
+            }
+            continue
+        }
+
+        $charInfo = Convert-ForEachItemToChar -Value $item
+        if (-not $charInfo.Success) {
+            return [PSCustomObject]@{ Success = $false; Outputs = @(); Reason = 'NonCharInput' }
+        }
+        [void]$outputs.Add([char]$charInfo.Value)
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Outputs = @($outputs.ToArray())
+        Reason  = if ($TransformInfo.Kind -eq 'CharBxor') { 'CharBxorFastPath' } else { 'CharCastFastPath' }
+    }
+}
+
 # 执行 ForEach-Object（逐项执行脚本块子图，并将输出写回 _pipe_ 变量）
 function Invoke-ForEachObjectCmdlet {
     param(
@@ -3940,6 +4856,12 @@ function Invoke-ForEachObjectCmdlet {
     $pipelineInput = Get-CallerPipelineInput -CallerNode $Node -Context $Context
     $items = @($pipelineInput.Items)
     $pipeVar = $pipelineInput.PipeVar
+    $expandedInput = Expand-ForEachNumericStringInputIfNeeded -Items $items -Node $Node -Context $Context -NodeTextOverride $nodeTextOverride -CommandInfo $CommandInfo
+    if ($expandedInput.Changed) {
+        $items = @($expandedInput.Items)
+        Write-ExecutionLog -Context $Context -Message "  [FOREACH] Expanded single numeric string input into $($items.Count) items ($($expandedInput.Reason))"
+    }
+    $transformInfo = Get-ForEachObjectProcessCharTransformInfo -Node $Node -Context $Context -NodeTextOverride $nodeTextOverride -CommandInfo $CommandInfo
 
     $allOutputs = @()
     $stopAll = $false
@@ -3955,12 +4877,22 @@ function Invoke-ForEachObjectCmdlet {
 
     # Process per item
     if (-not $stopAll) {
-        foreach ($item in $items) {
-            $Context.LastPipelineFlowControl = $null
-            $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.ProcessBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
-            if ($Context.LastPipelineFlowControl -eq "Break") {
-                $stopAll = $true
-                break
+        $fastPath = $null
+        if (-not $info.BeginBlockName -and -not $info.EndBlockName) {
+            $fastPath = Try-Invoke-ForEachCharTransformFastPath -Items $items -TransformInfo $transformInfo
+        }
+
+        if ($fastPath -and $fastPath.Success) {
+            $allOutputs += @($fastPath.Outputs)
+            Write-ExecutionLog -Context $Context -Message "  [FOREACH] Applied fast path: $($fastPath.Reason) (Count=$($fastPath.Outputs.Count))"
+        } else {
+            foreach ($item in $items) {
+                $Context.LastPipelineFlowControl = $null
+                $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.ProcessBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+                if ($Context.LastPipelineFlowControl -eq "Break") {
+                    $stopAll = $true
+                    break
+                }
             }
         }
     }
@@ -5286,6 +6218,143 @@ function Invoke-ScriptBlockCall {
     }
 }
 
+function Get-ForEachProcessMacroVariableMap {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Node -or $Node.Type -ne 'ProcessInit') { return $null }
+
+    $ownerAst = $Node.OwnerAst
+    $bindNode = @($Context.CFG.Nodes | Where-Object {
+            $_.Type -eq 'ProcessBind' -and $_.OwnerAst -eq $ownerAst
+        } | Select-Object -First 1)
+
+    $map = [ordered]@{
+        PipeVar    = $null
+        InputVar   = $null
+        IndexVar   = $null
+        OutputVar  = $null
+        CurrentVar = $null
+    }
+
+    foreach ($varInfo in @($Node.VarsRead)) {
+        if ($varInfo.Name -match '^_pipe_[a-f0-9]+$') {
+            $map.PipeVar = [string]$varInfo.Name
+        }
+    }
+    foreach ($varInfo in @($Node.VarsWritten)) {
+        switch -Regex ([string]$varInfo.Name) {
+            '^__pfo_in_'      { $map.InputVar = [string]$varInfo.Name; break }
+            '^__pfo_.*_idx$'  { $map.IndexVar = [string]$varInfo.Name; break }
+            '^__pfo_.*_out$'  { $map.OutputVar = [string]$varInfo.Name; break }
+        }
+    }
+    if ($bindNode.Count -gt 0) {
+        foreach ($varInfo in @($bindNode[0].VarsWritten)) {
+            if ($varInfo.Name -match '^__pfo_.*_cur$') {
+                $map.CurrentVar = [string]$varInfo.Name
+                break
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($map.PipeVar) -or
+        [string]::IsNullOrWhiteSpace($map.InputVar) -or
+        [string]::IsNullOrWhiteSpace($map.IndexVar) -or
+        [string]::IsNullOrWhiteSpace($map.OutputVar)) {
+        return $null
+    }
+
+    return [PSCustomObject]$map
+}
+
+function Invoke-ForEachProcessMacroFastPath {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Node -or $Node.Type -ne 'ProcessInit') {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+    if ($Node.OwnerAst -isnot [System.Management.Automation.Language.CommandAst]) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+
+    $commandAst = $Node.OwnerAst
+    $transformInfo = Get-ForEachObjectProcessCharTransformInfoFromCommandAst -CommandAst $commandAst
+    if (-not $transformInfo.Success) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+
+    $commandBlocks = $transformInfo.CommandInfo
+    if (-not $commandBlocks -or -not $commandBlocks.Success) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+    if ((Test-ScriptBlockExpressionAstHasExecutableStatements -ScriptBlockExpressionAst $commandBlocks.BeginBlockAst) -or
+        (Test-ScriptBlockExpressionAstHasExecutableStatements -ScriptBlockExpressionAst $commandBlocks.EndBlockAst)) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+
+    $varMap = Get-ForEachProcessMacroVariableMap -Node $Node -Context $Context
+    if (-not $varMap) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+
+    $processEndNode = @($Context.CFG.Nodes | Where-Object {
+            $_.Type -eq 'ProcessEnd' -and $_.OwnerAst -eq $commandAst
+        } | Select-Object -First 1)
+    if ($processEndNode.Count -eq 0) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+
+    $inputValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varMap.PipeVar
+    $items = @($inputValue)
+    $expanded = Expand-ForEachNumericStringInputCoreIfNeeded -Items $items -TransformInfo $transformInfo
+    if ($expanded.Changed) {
+        $items = @($expanded.Items)
+    }
+
+    $fastPath = Try-Invoke-ForEachCharTransformFastPath -Items $items -TransformInfo $transformInfo
+    if (-not $fastPath.Success) {
+        return [PSCustomObject]@{ Applied = $false }
+    }
+
+    $inputCollection = [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]::new()
+    foreach ($item in @($items)) {
+        if ($null -ne $item) {
+            [void]$inputCollection.Add([System.Management.Automation.PSObject]$item)
+        }
+    }
+
+    $outputCollection = [System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]]::new()
+    foreach ($o in @($fastPath.Outputs)) {
+        if ($null -ne $o) {
+            [void]$outputCollection.Add([System.Management.Automation.PSObject]$o)
+        }
+    }
+
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varMap.InputVar, $inputCollection)
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varMap.IndexVar, [int]$inputCollection.Count)
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varMap.OutputVar, $outputCollection)
+    if (-not [string]::IsNullOrWhiteSpace($varMap.CurrentVar) -and $inputCollection.Count -gt 0) {
+        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($varMap.CurrentVar, $inputCollection[$inputCollection.Count - 1])
+    }
+
+    return [PSCustomObject]@{
+        Applied      = $true
+        Success      = $true
+        Action       = 'ProcessMacroFastPath'
+        Reason       = $fastPath.Reason
+        Expanded     = [bool]$expanded.Changed
+        InputCount   = [int]$inputCollection.Count
+        OutputCount  = [int]$outputCollection.Count
+        NextNode     = $processEndNode[0]
+    }
+}
+
 function Register-RuntimeSubgraph {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -5441,6 +6510,18 @@ function Handle-DynamicInvoke {
         RecursionStopped = $false
         StopReason    = $null
         StopMessage   = $null
+        MaterializationKind = $null
+    }
+
+    $nodeBaseStartOffset = $null
+    if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) {
+        $nodeBaseStartOffset = [int]$Node.TextStartOffset
+    }
+    if ($null -ne $nodeBaseStartOffset -and
+        $argCodeInfo.PSObject.Properties['ReplacementStartOffset'] -and $null -ne $argCodeInfo.ReplacementStartOffset -and
+        $argCodeInfo.PSObject.Properties['ReplacementEndOffset'] -and $null -ne $argCodeInfo.ReplacementEndOffset) {
+        $dynamicRecord.ReplacementStartOffset = $nodeBaseStartOffset + [int]$argCodeInfo.ReplacementStartOffset
+        $dynamicRecord.ReplacementEndOffset = $nodeBaseStartOffset + [int]$argCodeInfo.ReplacementEndOffset
     }
 
     if ($fromPipelineInput -and $Node -and $Node.Ast -is [System.Management.Automation.Language.CommandAst] -and
@@ -5481,6 +6562,16 @@ function Handle-DynamicInvoke {
         }
     }
 
+    $materializedArgument = Convert-DynamicInvocationValueToScriptText -Value $argumentValue
+    if ($materializedArgument.Success -and -not [string]::IsNullOrWhiteSpace([string]$materializedArgument.Text)) {
+        if (-not ($argumentValue -is [string]) -or ([string]$argumentValue -cne [string]$materializedArgument.Text)) {
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Materialized argument to script text via $($materializedArgument.Kind)"
+        }
+        $argumentValue = [string]$materializedArgument.Text
+        $dynamicRecord.ArgumentValue = $argumentValue
+        $dynamicRecord.MaterializationKind = $materializedArgument.Kind
+    }
+
     # 2. 验证参数值是字符串
     if (-not ($argumentValue -is [string]) -or [string]::IsNullOrWhiteSpace($argumentValue)) {
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Cannot resolve argument to string, falling back to direct execution"
@@ -5505,11 +6596,12 @@ function Handle-DynamicInvoke {
     }
     $dynamicRecord.ReplacementText = $replacementText
 
-    $dynamicBudgetStatus = Get-ContextBudgetStatus -Context $Context -BudgetPropertyName 'DynamicTimeBudgetMs' -StopwatchPropertyName 'DynamicBudgetStopwatch' -StopReason 'DynamicTimeBudgetExceeded' -StartStopwatch
+    $dynamicInvocationStopwatch = if ($Context.DynamicTimeBudgetMs -gt 0) { [System.Diagnostics.Stopwatch]::StartNew() } else { $null }
+    $dynamicBudgetStatus = Get-StopwatchBudgetStatus -BudgetMs $Context.DynamicTimeBudgetMs -Stopwatch $dynamicInvocationStopwatch -StopReason 'DynamicInvocationBudgetExceeded'
     if ($dynamicBudgetStatus.Exceeded) {
         $dynamicRecord.RecursionStopped = $true
         $dynamicRecord.StopReason = $dynamicBudgetStatus.StopReason
-        $dynamicRecord.StopMessage = "动态递归预算已耗尽（Elapsed=${0}ms, Budget=${1}ms），停止继续深入，直接回写当前脚本内容。" -f $dynamicBudgetStatus.ElapsedMs, $dynamicBudgetStatus.BudgetMs
+        $dynamicRecord.StopMessage = "单次动态展开预算已耗尽（Elapsed=${0}ms, Budget=${1}ms），停止继续深入，直接回写当前脚本内容。" -f $dynamicBudgetStatus.ElapsedMs, $dynamicBudgetStatus.BudgetMs
         $dynamicRecord.DynamicElapsedMs = $dynamicBudgetStatus.ElapsedMs
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
 
@@ -5524,7 +6616,7 @@ function Handle-DynamicInvoke {
         }
     }
 
-    $payloadStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $argumentValue
+    $payloadStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $argumentValue -SafeMode:([bool]$Context.SafeMode)
     if ($payloadStop.ShouldStop) {
         $dynamicRecord.RecursionStopped = $true
         $dynamicRecord.StopReason = $payloadStop.StopReason
@@ -5535,6 +6627,25 @@ function Handle-DynamicInvoke {
         if ($payloadStop.FeatureSummary) {
             Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Features: $($payloadStop.FeatureSummary)"
         }
+
+        return @{
+            Success       = $true
+            Executed      = $true
+            Result        = $argumentValue
+            Error         = $null
+            Action        = "DynamicInvoke"
+            DynamicRecord = $dynamicRecord
+            StopReason    = $dynamicRecord.StopReason
+        }
+    }
+
+    $dynamicBudgetStatus = Get-StopwatchBudgetStatus -BudgetMs $Context.DynamicTimeBudgetMs -Stopwatch $dynamicInvocationStopwatch -StopReason 'DynamicInvocationBudgetExceeded'
+    if ($dynamicBudgetStatus.Exceeded) {
+        $dynamicRecord.RecursionStopped = $true
+        $dynamicRecord.StopReason = $dynamicBudgetStatus.StopReason
+        $dynamicRecord.StopMessage = "单次动态展开预算已耗尽（Elapsed=${0}ms, Budget=${1}ms），停止继续深入，直接回写当前脚本内容。" -f $dynamicBudgetStatus.ElapsedMs, $dynamicBudgetStatus.BudgetMs
+        $dynamicRecord.DynamicElapsedMs = $dynamicBudgetStatus.ElapsedMs
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
 
         return @{
             Success       = $true
@@ -5895,6 +7006,25 @@ function Invoke-NodeTraverse {
         # 先输出节点头（在执行之前）
         Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
         Write-ExecutionLog -Context $Context -Message "  Code: $($currentNode.Text)"
+
+        $processMacroResult = Invoke-ForEachProcessMacroFastPath -Node $currentNode -Context $Context
+        if ($processMacroResult.Applied) {
+            Write-ExecutionLog -Context $Context -Message "  Status: OK"
+            Write-ExecutionLog -Context $Context -Message "  Action: $($processMacroResult.Action)"
+            if ($processMacroResult.Reason) {
+                Write-ExecutionLog -Context $Context -Message "  Reason: $($processMacroResult.Reason)"
+            }
+            Write-ExecutionLog -Context $Context -Message "  MacroInputCount: $($processMacroResult.InputCount)"
+            Write-ExecutionLog -Context $Context -Message "  MacroOutputCount: $($processMacroResult.OutputCount)"
+            if ($processMacroResult.Expanded) {
+                Write-ExecutionLog -Context $Context -Message "  MacroExpandedNumericInput: True"
+            }
+            if ($processMacroResult.NextNode) {
+                Write-ExecutionLog -Context $Context -Message "  [JUMP] Jumping to Node $($processMacroResult.NextNode.Id)"
+                $currentNode = $processMacroResult.NextNode
+                continue
+            }
+        }
 
         # 特殊处理 FuncParams / BlockParams 节点：绑定实参到形参
         if ($currentNode.Type -in @('FuncParams', 'BlockParams') -and $Context.ScopeStack.Count -gt 0) {
@@ -7503,6 +8633,18 @@ function Test-CommandSafety {
         }
     }
 
+    if ($CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $wrappedDynamic = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $CommandInfo.Ast -Context $Context
+        if ($wrappedDynamic.Success) {
+            return @{
+                Action      = "DynamicInvoke"
+                IsForbidden = $false
+                Target      = $wrappedDynamic.EffectiveCommand
+                DynamicType = $wrappedDynamic.DynamicType
+            }
+        }
+    }
+
     # 2.5. [ScriptBlock]::Create / [System.Management.Automation.ScriptBlock]::Create 作为命令名
     # PowerShell 解析 "& [ScriptBlock]::Create($b)" 时把 [ScriptBlock]::Create 当作命令名
     if ($cmdName -match '^\[(?:System\.Management\.Automation\.)?ScriptBlock\]::Create$') {
@@ -8300,7 +9442,8 @@ function Invoke-CFGTraversal {
         [int]$MaxIterations = 1000,
         [int]$MaxTotalNodes = 50000,
         [int]$GlobalTimeBudgetMs = 0,
-        [int]$DynamicTimeBudgetMs = 60000
+        [int]$DynamicTimeBudgetMs = 60000,
+        [bool]$SafeMode = $true
     )
 
     # 创建/清空日志文件（允许 LogPath=$null 以禁用日志）
@@ -8321,6 +9464,7 @@ function Invoke-CFGTraversal {
         MaxTotalNodes       = $MaxTotalNodes
         GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs = $DynamicTimeBudgetMs
+        SafeMode            = $SafeMode
         TotalVisits         = 0
         StopReason          = $null
         LastConditionResult = $true
@@ -8436,6 +9580,7 @@ function Invoke-CFGTraversal {
     if ($GlobalTimeBudgetMs -gt 0 -or $DynamicTimeBudgetMs -gt 0) {
         Write-ExecutionLog -Context $context -Message "TimeBudget: Global=${GlobalTimeBudgetMs}ms, Dynamic=${DynamicTimeBudgetMs}ms"
     }
+    Write-ExecutionLog -Context $context -Message "SafeMode: $SafeMode"
     Write-ExecutionLog -Context $context -Message ""
 
     # 初始化子图映射
@@ -8483,7 +9628,8 @@ function New-CFGExecutionSession {
         [int]$MaxIterations = 1000,
         [int]$MaxTotalNodes = 50000,
         [int]$GlobalTimeBudgetMs = 0,
-        [int]$DynamicTimeBudgetMs = 60000
+        [int]$DynamicTimeBudgetMs = 60000,
+        [bool]$SafeMode = $true
     )
 
     if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
@@ -8501,6 +9647,7 @@ function New-CFGExecutionSession {
         MaxTotalNodes       = $MaxTotalNodes
         GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs = $DynamicTimeBudgetMs
+        SafeMode            = $SafeMode
         TotalVisits         = 0
         StopReason          = $null
         LastConditionResult = $true
@@ -8615,6 +9762,7 @@ function New-CFGExecutionSession {
     if ($GlobalTimeBudgetMs -gt 0 -or $DynamicTimeBudgetMs -gt 0) {
         Write-ExecutionLog -Context $context -Message "TimeBudget: Global=${GlobalTimeBudgetMs}ms, Dynamic=${DynamicTimeBudgetMs}ms"
     }
+    Write-ExecutionLog -Context $context -Message "SafeMode: $SafeMode"
     Write-ExecutionLog -Context $context -Message ""
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
     Initialize-SubgraphMappings -CFG $CFG -Context $context

@@ -122,6 +122,289 @@ function Get-PowerShellHostPayloadEvaluationCode {
     return [string]$PayloadAst.Extent.Text
 }
 
+function Convert-DynamicCommandCandidateToName {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($Value -is [string]) {
+        $name = $Value.Trim()
+    } elseif ($Value -is [char[]]) {
+        $name = (-join $Value).Trim()
+    } elseif ($Value -is [array]) {
+        if (@($Value).Count -eq 1) {
+            return Convert-DynamicCommandCandidateToName -Value $Value[0]
+        }
+        return $null
+    } else {
+        $name = [string]$Value
+        if (-not [string]::IsNullOrWhiteSpace($name)) {
+            $name = $name.Trim()
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($name)) { return $null }
+    if ($name -match '^[&\.]\s*(.+)$') {
+        $name = [string]$Matches[1].Trim()
+    }
+
+    return $name
+}
+
+function Resolve-SafeDynamicCommandNameExpressionValue {
+    param(
+        $Ast,
+        [int]$Depth = 0
+    )
+
+    if ($null -eq $Ast -or $Depth -gt 24) {
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return Resolve-SafeDynamicCommandNameExpressionValue -Ast $Ast.Expression -Depth ($Depth + 1)
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        if ($Ast.Pipeline -and $Ast.Pipeline.PipelineElements -and $Ast.Pipeline.PipelineElements.Count -eq 1) {
+            $elem = $Ast.Pipeline.PipelineElements[0]
+            if ($elem -is [System.Management.Automation.Language.CommandAst]) {
+                return Resolve-SafeDynamicCommandNameExpressionValue -Ast $elem -Depth ($Depth + 1)
+            }
+            if ($elem -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                return Resolve-SafeDynamicCommandNameExpressionValue -Ast $elem.Expression -Depth ($Depth + 1)
+            }
+            if ($elem.PSObject.Properties['Expression']) {
+                return Resolve-SafeDynamicCommandNameExpressionValue -Ast $elem.Expression -Depth ($Depth + 1)
+            }
+        }
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return [PSCustomObject]@{ Success = $true; Value = [string]$Ast.Value }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
+        return [PSCustomObject]@{ Success = $true; Value = $Ast.Value }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        $items = @()
+        foreach ($elem in $Ast.Elements) {
+            $itemResult = Resolve-SafeDynamicCommandNameExpressionValue -Ast $elem -Depth ($Depth + 1)
+            if (-not $itemResult.Success) {
+                return [PSCustomObject]@{ Success = $false; Value = $null }
+            }
+            $items += $itemResult.Value
+        }
+        return [PSCustomObject]@{ Success = $true; Value = @($items) }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $varName = [string]$Ast.VariablePath.UserPath
+        if ([string]::IsNullOrWhiteSpace($varName)) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+        try {
+            $value = Get-Variable -Name $varName -ValueOnly -ErrorAction Stop
+            return [PSCustomObject]@{ Success = $true; Value = $value }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.IndexExpressionAst]) {
+        $targetResult = Resolve-SafeDynamicCommandNameExpressionValue -Ast $Ast.Target -Depth ($Depth + 1)
+        if (-not $targetResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $indexAst = if ($Ast.Index -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $Ast.Index.Expression
+        } else {
+            $Ast.Index
+        }
+        $indexResult = Resolve-SafeDynamicCommandNameExpressionValue -Ast $indexAst -Depth ($Depth + 1)
+        if (-not $indexResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        $targetValue = $targetResult.Value
+        $indexes = if ($indexResult.Value -is [array]) { @($indexResult.Value) } else { @($indexResult.Value) }
+        $resolved = @()
+
+        if ($targetValue -is [string]) {
+            foreach ($idx in $indexes) {
+                try {
+                    $resolved += $targetValue[[int]$idx]
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; Value = $null }
+                }
+            }
+        } else {
+            $targetItems = if (($targetValue -is [System.Collections.IEnumerable]) -and -not ($targetValue -is [string])) {
+                @($targetValue)
+            } else {
+                @($targetValue)
+            }
+            foreach ($idx in $indexes) {
+                try {
+                    $resolved += $targetItems[[int]$idx]
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; Value = $null }
+                }
+            }
+        }
+
+        if ($resolved.Count -eq 1) {
+            return [PSCustomObject]@{ Success = $true; Value = $resolved[0] }
+        }
+        return [PSCustomObject]@{ Success = $true; Value = @($resolved) }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.BinaryExpressionAst]) {
+        $leftResult = Resolve-SafeDynamicCommandNameExpressionValue -Ast $Ast.Left -Depth ($Depth + 1)
+        $rightResult = Resolve-SafeDynamicCommandNameExpressionValue -Ast $Ast.Right -Depth ($Depth + 1)
+        if (-not $leftResult.Success -or -not $rightResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        switch ([string]$Ast.Operator) {
+            'Plus' {
+                if ($leftResult.Value -is [array] -or $rightResult.Value -is [array]) {
+                    return [PSCustomObject]@{ Success = $true; Value = @(@($leftResult.Value) + @($rightResult.Value)) }
+                }
+                return [PSCustomObject]@{ Success = $true; Value = ([string]$leftResult.Value + [string]$rightResult.Value) }
+            }
+            'Join' {
+                $separator = [string]$rightResult.Value
+                $items = @($leftResult.Value)
+                return [PSCustomObject]@{ Success = $true; Value = (($items | ForEach-Object { [string]$_ }) -join $separator) }
+            }
+        }
+
+        return [PSCustomObject]@{ Success = $false; Value = $null }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+        $childResult = Resolve-SafeDynamicCommandNameExpressionValue -Ast $Ast.Child -Depth ($Depth + 1)
+        if (-not $childResult.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+
+        try {
+            switch ([string]$Ast.Type.TypeName.FullName) {
+                'string' { return [PSCustomObject]@{ Success = $true; Value = [string]$childResult.Value } }
+                'char'   { return [PSCustomObject]@{ Success = $true; Value = [char]$childResult.Value } }
+                'int'    { return [PSCustomObject]@{ Success = $true; Value = [int]$childResult.Value } }
+            }
+        } catch {
+            return [PSCustomObject]@{ Success = $false; Value = $null }
+        }
+    }
+
+    return [PSCustomObject]@{ Success = $false; Value = $null }
+}
+
+function Get-WrappedDynamicInvocationInfo {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    $elements = @($CommandAst.CommandElements)
+    if ($elements.Count -lt 1) { return $null }
+
+    $wrapperOperator = $null
+    $targetAst = $null
+    $argumentStartIndex = $null
+
+    switch ([string]$CommandAst.InvocationOperator) {
+        'Ampersand' {
+            $wrapperOperator = '&'
+            $targetAst = $elements[0]
+            $argumentStartIndex = 1
+        }
+        'Dot' {
+            $wrapperOperator = '.'
+            $targetAst = $elements[0]
+            $argumentStartIndex = 1
+        }
+    }
+
+    if (-not $wrapperOperator) {
+        $headText = if ($elements[0] -and $elements[0].Extent) { [string]$elements[0].Extent.Text } else { $null }
+        if ($headText -in @('&', '.')) {
+            if ($elements.Count -lt 2) { return $null }
+            $wrapperOperator = $headText
+            $targetAst = $elements[1]
+            $argumentStartIndex = 2
+        }
+    }
+
+    if (-not $wrapperOperator -or $null -eq $targetAst) {
+        return $null
+    }
+
+    $candidateName = $null
+    if ($targetAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $candidateName = Convert-DynamicCommandCandidateToName -Value $targetAst.Value
+    }
+    if (-not $candidateName) {
+        $safeEval = Resolve-SafeDynamicCommandNameExpressionValue -Ast $targetAst
+        if ($safeEval.Success) {
+            $candidateName = Convert-DynamicCommandCandidateToName -Value $safeEval.Value
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($candidateName)) {
+        return $null
+    }
+
+    if ($candidateName -in @('Invoke-Expression', 'iex')) {
+        $argAst = if ($elements.Count -gt $argumentStartIndex) { $elements[$argumentStartIndex] } else { $null }
+        return [PSCustomObject]@{
+            DynamicType     = 'IEX'
+            ArgumentAst     = $argAst
+            WrapperOperator = $wrapperOperator
+        }
+    }
+
+    if (Test-PowerShellHostCommandName -CommandName $candidateName) {
+        for ($i = $argumentStartIndex; $i -lt $elements.Count; $i++) {
+            $elem = $elements[$i]
+            if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+
+            $paramName = [string]$elem.ParameterName
+            $dynamicType = $null
+            if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'encodedcommand') {
+                $dynamicType = 'EncodedCommand'
+            } elseif (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'command') {
+                $dynamicType = 'PowerShellCommand'
+            }
+            if (-not $dynamicType) { continue }
+
+            $argAst = $null
+            if ($elem.Argument) {
+                $argAst = $elem.Argument
+            } elseif ($i + 1 -lt $elements.Count) {
+                $argAst = $elements[$i + 1]
+            }
+
+            return [PSCustomObject]@{
+                DynamicType     = $dynamicType
+                ArgumentAst     = $argAst
+                WrapperOperator = $wrapperOperator
+            }
+        }
+    }
+
+    return $null
+}
+
 function Get-PowerShellHostDynamicInvocationInfo {
     param(
         [Parameter(Mandatory = $true)]
@@ -241,6 +524,14 @@ function Get-DynamicInvokeInfo {
             $results += @{
                 Type   = 'PowerShellCommand'
                 ArgAst = $hostDynamicInfo.ArgumentAst
+            }
+        }
+
+        $wrappedDynamicInfo = Get-WrappedDynamicInvocationInfo -CommandAst $cmdAst
+        if ($wrappedDynamicInfo) {
+            $results += @{
+                Type   = $wrappedDynamicInfo.DynamicType
+                ArgAst = $wrappedDynamicInfo.ArgumentAst
             }
         }
     }
