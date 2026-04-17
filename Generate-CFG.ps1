@@ -5451,6 +5451,18 @@ function Get-ScriptControlFlow {
         DefinedFunctions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)  # 已定义的函数名集合
         ProcessedScriptBlocks = @{}  # 已处理的 ScriptBlock AST -> 变量名 的映射，防止重复处理并支持查找
         DefinedAliases = @{}  # 已定义的别名映射 @{ "别名" = "目标命令" }
+        SourcePath = $ScriptPath
+        SourceText = if (Test-Path -LiteralPath $ScriptPath) { Get-Content -LiteralPath $ScriptPath -Raw } else { $null }
+        FunctionTexts = @{}
+    }
+
+    $functionAsts = @($ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.FunctionDefinitionAst]
+            }, $true))
+    foreach ($funcAst in $functionAsts) {
+        if ($null -eq $funcAst -or [string]::IsNullOrWhiteSpace([string]$funcAst.Name)) { continue }
+        $mycfg.FunctionTexts[[string]$funcAst.Name] = [string]$funcAst.Extent.Text
     }
 
     # 处理AST节点

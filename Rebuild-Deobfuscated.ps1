@@ -683,7 +683,8 @@ function Test-EffectiveDynamicReplacementCandidate {
     param($Candidate)
 
     if (-not $Candidate) { return $false }
-    if (-not $Candidate.PSObject.Properties['SourceKind'] -or [string]$Candidate.SourceKind -ne 'DynamicInvoke') { return $false }
+    if (-not $Candidate.PSObject.Properties['SourceKind']) { return $false }
+    if ([string]$Candidate.SourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult')) { return $false }
 
     $replacement = if ($Candidate.PSObject.Properties['Replacement']) { [string]$Candidate.Replacement } else { $null }
     $original = if ($Candidate.PSObject.Properties['Original']) { [string]$Candidate.Original } else { $null }
@@ -780,35 +781,35 @@ function Filter-ReplacementCandidatesByContext {
         $withinDynamicPayload = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.DynamicPayloadRanges)
         $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
 
-        if ($sourceKind -ne 'DynamicInvoke' -and $withinDynamicPayload -and $withinDynamicRange) {
+        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and $withinDynamicPayload -and $withinDynamicRange) {
             $skipped += New-SkipRecord -Reason 'dynamic_payload_protected' -Message '外层 DynamicInvoke 候选有效，动态 payload 内部局部候选跳过' -Item $cand
             continue
         }
 
-        if ($sourceKind -ne 'DynamicInvoke' -and $withinDynamicRange) {
+        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and $withinDynamicRange) {
             $skipped += New-SkipRecord -Reason 'dynamic_wrapper_protected' -Message '外层 DynamicInvoke 候选有效，动态调用节点内部局部候选跳过' -Item $cand
             continue
         }
 
         $allowInExpandable = $false
         if ($withinExpandable) {
-            if ($sourceKind -in @('DynamicInvoke', 'LiteralizedCommand', 'Resolvable')) {
+            if ($sourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'LiteralizedCommand', 'Resolvable')) {
                 $allowInExpandable = $true
             } elseif ($sourceKind -eq 'Static' -and $cand.PSObject.Properties['Confidence'] -and [string]$cand.Confidence -eq 'High') {
                 $allowInExpandable = $true
             }
         }
-        if ($sourceKind -ne 'DynamicInvoke' -and $withinExpandable -and -not $allowInExpandable) {
+        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and $withinExpandable -and -not $allowInExpandable) {
             $skipped += New-SkipRecord -Reason 'expandable_context_protected' -Message 'ExpandableString 内仅放行高价值高置信候选，当前候选跳过' -Item $cand
             continue
         }
 
-        if ($sourceKind -ne 'DynamicInvoke' -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.MemberNameRanges)) {
+        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.MemberNameRanges)) {
             $skipped += New-SkipRecord -Reason 'member_name_protected' -Message '成员名位点默认不做局部替换，避免破坏反射/方法调用语义' -Item $cand
             continue
         }
 
-        if ($sourceKind -ne 'DynamicInvoke' -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandTargetAssignmentRanges)) {
+        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandTargetAssignmentRanges)) {
             $skipped += New-SkipRecord -Reason 'command_target_assignment_protected' -Message '命令目标变量的赋值表达式只允许整段还原，局部候选跳过' -Item $cand
             continue
         }
@@ -3011,6 +3012,10 @@ function Get-ReplacementCandidatePriority {
         return 400
     }
     if ($sourceKind -eq 'LoaderMaterialized') { return 430 }
+    if ($sourceKind -eq 'FunctionResult') {
+        if ($protectsInner) { return 420 }
+        return 390
+    }
     if ($sourceKind -eq 'LiteralizedCommand') { return 380 }
     if ($sourceKind -eq 'VariableRead') { return 350 }
     if ($sourceKind -eq 'Static') {
@@ -3255,6 +3260,82 @@ function Get-DynamicInvokeReplacementCandidates {
     }
 
     $merged = Merge-DynamicInvokeReplacementCandidates -Candidates $candidates -ScriptText $ScriptText
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-FunctionInvokeReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.FunctionInvokeResults -or $Context.FunctionInvokeResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in @($Context.FunctionInvokeResults)) {
+        if (-not $rec) { continue }
+
+        $start = if ($rec -is [hashtable]) { $rec['StartOffset'] } else { $rec.StartOffset }
+        $end = if ($rec -is [hashtable]) { $rec['EndOffset'] } else { $rec.EndOffset }
+        $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
+        $funcName = if ($rec -is [hashtable]) { [string]$rec['FunctionName'] } else { [string]$rec.FunctionName }
+        $replacement = if ($rec -is [hashtable]) { [string]$rec['ReplacementText'] } else { [string]$rec.ReplacementText }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'FunctionInvoke'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'function_result_no_offset' -Message "函数返回值无 offset，跳过: $funcName" -Item $baseItem
+            continue
+        }
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'function_result_out_of_range' -Message "函数返回值 offset 越界: [$start-$end]" -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement) -or $replacement -eq '__BLOCKED_PLACEHOLDER__') {
+            $skipped += New-SkipRecord -Reason 'function_result_empty' -Message "函数返回值为空或被阻断，跳过: $funcName" -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'function_result_no_change' -Message "函数返回值 replacement 与原片段一致，跳过: $funcName" -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = [int]$start
+            EndOffset   = [int]$end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'FunctionInvoke'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'FunctionResult'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'FunctionResult'
+            Executed    = $true
+            ProtectsInnerCandidates = $true
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
@@ -3579,7 +3660,7 @@ function Filter-CandidatesPreferDynamicInvoke {
         }
     }
 
-    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized') })
+    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') })
     if ($dynamicCandidates.Count -eq 0) {
         return [PSCustomObject]@{
             Candidates = @($Candidates)
@@ -3592,7 +3673,7 @@ function Filter-CandidatesPreferDynamicInvoke {
 
     foreach ($cand in $Candidates) {
         if (-not $cand) { continue }
-        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized')) {
+        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult')) {
             $kept += $cand
             continue
         }
@@ -5199,6 +5280,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
     $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
+    $functionResults = Get-FunctionInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
     $wholeScriptDynamic = Get-WholeScriptDynamicLoaderReplacementCandidates -Context $ctx -ScriptText $scriptText
     $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
     $remainingStaticBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
@@ -5210,12 +5292,12 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     } else {
         $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs
     }
-    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($wholeScriptDynamic.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
+    $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($functionResults.Candidates) + @($wholeScriptDynamic.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
     $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($merged.Candidates) -Context $ctx -ScriptText $scriptText
     $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
     $candidates = @($preferred.Candidates)
-    $skipped = @($dynamic.Skipped) + @($wholeScriptDynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+    $skipped = @($dynamic.Skipped) + @($functionResults.Skipped) + @($wholeScriptDynamic.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
     $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
     $autoCandidates = @()

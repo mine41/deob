@@ -1860,6 +1860,94 @@ function Get-PrimaryCommandAstFromScriptAst {
     return Find-FirstCommandAst -AstRoot $statement
 }
 
+function Get-TopLevelCommandAstFromExpressionAst {
+    param($ExpressionAst)
+
+    if ($null -eq $ExpressionAst) { return $null }
+
+    if ($ExpressionAst -is [System.Management.Automation.Language.CommandAst]) {
+        return $ExpressionAst
+    }
+
+    if ($ExpressionAst -is [System.Management.Automation.Language.PipelineAst]) {
+        if (-not $ExpressionAst.PipelineElements -or $ExpressionAst.PipelineElements.Count -ne 1) {
+            return $null
+        }
+
+        $element = $ExpressionAst.PipelineElements[0]
+        if ($element -is [System.Management.Automation.Language.CommandAst]) {
+            return $element
+        }
+        if ($element -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            return Get-TopLevelCommandAstFromExpressionAst -ExpressionAst $element.Expression
+        }
+
+        return $null
+    }
+
+    if ($ExpressionAst -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return Get-TopLevelCommandAstFromExpressionAst -ExpressionAst $ExpressionAst.Expression
+    }
+
+    if ($ExpressionAst -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        return Get-TopLevelCommandAstFromExpressionAst -ExpressionAst $ExpressionAst.Pipeline
+    }
+
+    if ($ExpressionAst -is [System.Management.Automation.Language.SubExpressionAst]) {
+        $statements = @()
+        if ($ExpressionAst.SubExpression -and $ExpressionAst.SubExpression.Statements) {
+            $statements = @($ExpressionAst.SubExpression.Statements)
+        }
+        if ($statements.Count -ne 1) {
+            return $null
+        }
+
+        return Get-TopLevelCommandAstFromStatementAst -StatementAst $statements[0]
+    }
+
+    return $null
+}
+
+function Get-TopLevelCommandAstFromStatementAst {
+    param($StatementAst)
+
+    if ($null -eq $StatementAst) { return $null }
+
+    if ($StatementAst -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return Get-TopLevelCommandAstFromExpressionAst -ExpressionAst $StatementAst.Right
+    }
+
+    if ($StatementAst -is [System.Management.Automation.Language.PipelineAst]) {
+        return Get-TopLevelCommandAstFromExpressionAst -ExpressionAst $StatementAst
+    }
+
+    if ($StatementAst -is [System.Management.Automation.Language.CommandAst]) {
+        return $StatementAst
+    }
+
+    if ($StatementAst -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return Get-TopLevelCommandAstFromExpressionAst -ExpressionAst $StatementAst.Expression
+    }
+
+    return $null
+}
+
+function Test-AstExtentEquals {
+    param(
+        $LeftAst,
+        $RightAst
+    )
+
+    if ($null -eq $LeftAst -or $null -eq $RightAst) { return $false }
+    if (-not $LeftAst.Extent -or -not $RightAst.Extent) { return $false }
+
+    return (
+        $LeftAst.Extent.StartOffset -eq $RightAst.Extent.StartOffset -and
+        $LeftAst.Extent.EndOffset -eq $RightAst.Extent.EndOffset -and
+        [string]$LeftAst.Extent.Text -ceq [string]$RightAst.Extent.Text
+    )
+}
+
 function Get-AstSourceTextRange {
     param(
         $ParseInfo,
@@ -2264,13 +2352,118 @@ function Get-NodeTextExecutionInfo {
         }
     }
 
+    $primaryCommandAst = Get-PrimaryCommandAstFromScriptAst -ScriptAst $parseInfo.Ast
+    $topLevelCommandAst = Get-TopLevelCommandAstFromStatementAst -StatementAst $statement
+
     return [PSCustomObject]@{
         Success       = $true
         Error         = $null
         ParseInfo     = $parseInfo
         Statement     = $statement
-        CommandAst    = Get-PrimaryCommandAstFromScriptAst -ScriptAst $parseInfo.Ast
+        CommandAst    = $primaryCommandAst
+        TopLevelCommandAst = $topLevelCommandAst
+        IsTopLevelCommandInvocation = (Test-AstExtentEquals `
+            -LeftAst $primaryCommandAst `
+            -RightAst $topLevelCommandAst)
         TargetVarName = $targetVarName
+    }
+}
+
+function Resolve-InvocationArgumentValue {
+    param(
+        $ArgumentAst,
+        [hashtable]$Context,
+        [int]$CallerNodeId = -1
+    )
+
+    if (-not $ArgumentAst) {
+        return [PSCustomObject]@{
+            Success = $true
+            Value   = $true
+        }
+    }
+
+    $argCode = $ArgumentAst.Extent.Text
+    if ($ArgumentAst -and $Context.FunctionSubgraphs.Count -gt 0) {
+        $argCode = Resolve-EmbeddedFunctionCalls -Code $argCode -Ast $ArgumentAst -Context $Context -NodeId $CallerNodeId
+    }
+
+    $argCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
+    $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+    if ($argResult.Success) {
+        return [PSCustomObject]@{
+            Success = $true
+            Value   = (Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence)
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success = $false
+        Value   = $null
+    }
+}
+
+function Get-CommandInvocationBindings {
+    param(
+        $CommandAst,
+        [hashtable]$Context,
+        [int]$StartIndex = 1,
+        [int]$CallerNodeId = -1
+    )
+
+    $positionalArguments = @()
+    $namedArguments = [ordered]@{}
+    $logEntries = @()
+
+    if (-not $CommandAst -or -not $CommandAst.CommandElements) {
+        return [PSCustomObject]@{
+            PositionalArguments = @()
+            NamedArguments      = [ordered]@{}
+            LogEntries          = @()
+        }
+    }
+
+    for ($i = $StartIndex; $i -lt $CommandAst.CommandElements.Count; $i++) {
+        $elem = $CommandAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramName = [string]$elem.ParameterName
+            $argAst = $null
+            if ($elem.Argument) {
+                $argAst = $elem.Argument
+            } elseif (($i + 1) -lt $CommandAst.CommandElements.Count -and
+                $CommandAst.CommandElements[$i + 1] -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                $i++
+                $argAst = $CommandAst.CommandElements[$i]
+            }
+
+            $resolved = Resolve-InvocationArgumentValue -ArgumentAst $argAst -Context $Context -CallerNodeId $CallerNodeId
+            $namedArguments[$paramName] = $resolved.Value
+            $logEntries += [PSCustomObject]@{
+                Kind    = 'Named'
+                Name    = $paramName
+                Display = "-$paramName"
+                Success = [bool]$resolved.Success
+                Value   = $resolved.Value
+            }
+            continue
+        }
+
+        $resolved = Resolve-InvocationArgumentValue -ArgumentAst $elem -Context $Context -CallerNodeId $CallerNodeId
+        $positionalArguments += $resolved.Value
+        $logEntries += [PSCustomObject]@{
+            Kind    = 'Positional'
+            Name    = $null
+            Display = if ($elem.Extent) { [string]$elem.Extent.Text } else { $null }
+            Success = [bool]$resolved.Success
+            Value   = $resolved.Value
+        }
+    }
+
+    return [PSCustomObject]@{
+        PositionalArguments = @($positionalArguments)
+        NamedArguments      = $namedArguments
+        LogEntries          = @($logEntries)
     }
 }
 
@@ -2315,6 +2508,8 @@ function Get-NodeTextExecutionInfoWithFallback {
             ParseInfo     = $null
             Statement     = $null
             CommandAst    = $null
+            TopLevelCommandAst = $null
+            IsTopLevelCommandInvocation = $false
             TargetVarName = $null
             SourceTextUsed = $null
         }
@@ -2344,6 +2539,8 @@ function Get-NodeTextExecutionInfoWithFallback {
         ParseInfo      = $null
         Statement      = $null
         CommandAst     = $null
+        TopLevelCommandAst = $null
+        IsTopLevelCommandInvocation = $false
         TargetVarName  = $null
         SourceTextUsed = $null
     }
@@ -3059,6 +3256,20 @@ function Get-NodeById {
     return $node
 }
 
+# 统一 CFG 节点集合返回，避免 PS5.1 下单个 PSCustomObject 的 .Count 为空
+function ConvertTo-CFGNodeArray {
+    param($Value)
+
+    $items = @()
+    foreach ($item in @($Value)) {
+        if ($null -ne $item) {
+            $items += $item
+        }
+    }
+
+    return ,$items
+}
+
 # 获取后继节点
 function Get-NextNodes {
     param(
@@ -3067,14 +3278,18 @@ function Get-NextNodes {
         [hashtable]$Context
     )
 
+    if ($null -eq $Node) {
+        return ,@()
+    }
+
     $edges = Get-CFGOutgoingEdges -CFG $CFG -FromNodeId $Node.Id
 
     switch ($Node.Type) {
         # If Condition 入口 - 跟随 Condition 边
         "If Condition" {
             $edge = $edges | Where-Object { $_.Label -eq "Condition" } | Select-Object -First 1
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
 
         # 条件节点 - 根据求值结果选择边
@@ -3084,8 +3299,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "False" } | Select-Object -First 1
             }
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
 
         # ForEach/Process 条件节点
@@ -3095,8 +3310,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "No more items" } | Select-Object -First 1
             }
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
         "ProcessCondition" {
             if ($Context.LastConditionResult) {
@@ -3104,8 +3319,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "No more items" } | Select-Object -First 1
             }
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
 
         # Switch 条件节点
@@ -3115,8 +3330,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "False" } | Select-Object -First 1
             }
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
 
         # Case 条件节点
@@ -3126,34 +3341,34 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "False" } | Select-Object -First 1
             }
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
 
         # 控制流跳转节点
         "Return" {
             $edge = $edges | Where-Object { $_.Label -eq "Return" } | Select-Object -First 1
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
         "Exit" {
             $edge = $edges | Where-Object { $_.Label -eq "Exit" } | Select-Object -First 1
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
         "Break" {
             $edge = $edges | Where-Object { $_.Label -eq "Break" } | Select-Object -First 1
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
         "Continue" {
             $edge = $edges | Where-Object { $_.Label -eq "Continue" } | Select-Object -First 1
-            if ($edge) { return @(Get-NodeById -CFG $CFG -Id $edge.To) }
-            return @()
+            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return ,@()
         }
         "Throw" {
             # 暂不处理异常，直接终止
-            return @()
+            return ,@()
         }
 
         # 其他节点 - 跟随顺序边
@@ -3167,7 +3382,7 @@ function Get-NextNodes {
                 $nextNode = Get-NodeById -CFG $CFG -Id $edge.To
                 if ($nextNode) { $nextNodes += $nextNode }
             }
-            return ,$nextNodes  # 使用逗号操作符强制返回数组
+            return ,(ConvertTo-CFGNodeArray -Value $nextNodes)
         }
     }
 }
@@ -5809,11 +6024,12 @@ function Invoke-FunctionCall {
     }
 
     # 5. 计算返回节点（调用者的下一个节点）
-    $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context
+    $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context)
     $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
 
     # 6. 提取调用者的实参并求值（执行期从 Node.Text 解析）
     $arguments = @()
+    $namedArguments = [ordered]@{}
     $callerInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
     if (-not $callerInfo.Success) {
         return @{
@@ -5844,27 +6060,26 @@ function Invoke-FunctionCall {
 
     $cmdAst = $callerInfo.CommandAst
     if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
-        for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
-            $argAst = $cmdAst.CommandElements[$i]
-            $argCode = $argAst.Extent.Text
+        $bindingInfo = Get-CommandInvocationBindings -CommandAst $cmdAst -Context $Context -StartIndex 1 -CallerNodeId $CallerNode.Id
+        $arguments = @($bindingInfo.PositionalArguments)
+        $namedArguments = $bindingInfo.NamedArguments
 
-            if ($argAst -and $Context.FunctionSubgraphs.Count -gt 0) {
-                $argCode = Resolve-EmbeddedFunctionCalls -Code $argCode -Ast $argAst -Context $Context -NodeId $CallerNode.Id
-            }
-
-            $argCode = Convert-CodeForCurrentScope -Code $argCode -Context $Context
-
-            $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-            if ($argResult.Success) {
-                $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
-                $arguments += $argValue
-                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
-                    Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = $(Format-VariableValue $argValue)" }).GetNewClosure()
-                }
-            } else {
-                $arguments += $null
-                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
-                    Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$i]: $($argAst.Extent.Text) = (eval failed)"
+        if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
+            $posIndex = 0
+            foreach ($entry in @($bindingInfo.LogEntries)) {
+                if ([string]$entry.Kind -eq 'Named') {
+                    if ($entry.Success) {
+                        Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Named -$($entry.Name) = $(Format-VariableValue $entry.Value)" }).GetNewClosure()
+                    } else {
+                        Write-ExecutionLog -Context $Context -Message "  [ARGS] Named -$($entry.Name) = (eval failed)"
+                    }
+                } else {
+                    if ($entry.Success) {
+                        Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$posIndex]: $($entry.Display) = $(Format-VariableValue $entry.Value)" }).GetNewClosure()
+                    } else {
+                        Write-ExecutionLog -Context $Context -Message "  [ARGS] Arg[$posIndex]: $($entry.Display) = (eval failed)"
+                    }
+                    $posIndex++
                 }
             }
         }
@@ -5878,7 +6093,14 @@ function Invoke-FunctionCall {
     if ($Context.ScopeStack.Count -gt 0) {
         $Context.ScopeStack[-1].LocalVars = $localVars
         $Context.ScopeStack[-1].Arguments = $arguments
+        $Context.ScopeStack[-1].NamedArguments = $namedArguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
+        $Context.ScopeStack[-1].CallerNodeId = $CallerNode.Id
+        if ($cmdAst -and $cmdAst.Extent) {
+            $Context.ScopeStack[-1].InvocationStartOffset = [int]$cmdAst.Extent.StartOffset
+            $Context.ScopeStack[-1].InvocationEndOffset = [int]$cmdAst.Extent.EndOffset
+            $Context.ScopeStack[-1].InvocationText = [string]$cmdAst.Extent.Text
+        }
 
         if ($hasProcessBlock) {
             $pipelineInput = Get-CallerPipelineInput -CallerNode $CallerNode -Context $Context
@@ -5907,6 +6129,7 @@ function Invoke-FunctionInline {
     param(
         [string]$FuncName,
         [array]$Arguments,      # 已求值的参数
+        [hashtable]$NamedArguments = $null,
         [hashtable]$Context
     )
 
@@ -5943,12 +6166,25 @@ function Invoke-FunctionInline {
         $localVars = Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $funcStartId -EndNodeId $funcEndId
     }
 
+    $preferDirectFallback = Test-FunctionInlinePreferDirectFallback -FuncName $FuncName -Context $Context
+    if ($preferDirectFallback) {
+        $directResult = Invoke-FunctionInlineDirectFallback -FuncName $FuncName -Arguments $Arguments -NamedArguments $NamedArguments -Context $Context
+        if ($null -ne $directResult) {
+            Write-ExecutionLog -Context $Context -Message "  [INLINE] Using direct helper fallback for complex function '$FuncName'"
+            return $directResult
+        }
+        Write-ExecutionLog -Context $Context -Message "  [INLINE] Direct helper fallback returned null for '$FuncName'; falling back to CFG traversal"
+    }
+
+    $baselineScopeDepth = $Context.ScopeStack.Count
+
     # 4. Push 作用域（ReturnNodeId=0 表示内联调用，不跳转）
     Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName `
         -ReturnNodeId 0 -EndNodeId $funcEndId
     $scope = $Context.ScopeStack[-1]
     $scope.LocalVars = $localVars
     $scope.Arguments = $Arguments
+    $scope.NamedArguments = if ($NamedArguments) { $NamedArguments } else { @{} }
     $scope.TargetVarName = $null    # 内联调用无目标变量
     if ($hasProcessBlock) {
         # 内联调用没有独立调用节点，默认注入空输入
@@ -5959,11 +6195,82 @@ function Invoke-FunctionInline {
     Write-ExecutionLog -Context $Context -Message "  [INLINE] Entering function '$FuncName'"
     Invoke-NodeTraverse -Node $funcStartNode -Context $Context
 
+    $scopeLeakDetected = ($Context.ScopeStack.Count -gt $baselineScopeDepth)
+    if ($scopeLeakDetected) {
+        Write-ExecutionLog -Context $Context -Message "  [INLINE] Scope leak detected after CFG inline traversal; unwinding leaked scopes and using direct helper fallback"
+        while ($Context.ScopeStack.Count -gt $baselineScopeDepth) {
+            $null = Pop-ExecutionScope -Context $Context
+        }
+    }
+
     # 6. 获取返回值（FuncEnd 处理中会保留 LastSubgraphResult）
     $result = $Context.LastSubgraphResult
     $Context.LastSubgraphResult = $null
+
+    if ($scopeLeakDetected) {
+        $fallbackResult = Invoke-FunctionInlineDirectFallback -FuncName $FuncName -Arguments $Arguments -NamedArguments $NamedArguments -Context $Context
+        if ($null -ne $fallbackResult) {
+            $result = $fallbackResult
+        }
+    }
+
     Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Exited function '$FuncName' with result: $(Format-VariableValue $result)" }).GetNewClosure()
     return $result
+}
+
+function Invoke-FunctionInlineDirectFallback {
+    param(
+        [string]$FuncName,
+        [array]$Arguments,
+        [hashtable]$NamedArguments,
+        [hashtable]$Context
+    )
+
+    if (-not $Context -or -not $Context.CFG -or -not $Context.CFG.ContainsKey('FunctionTexts')) {
+        return $null
+    }
+
+    $functionTexts = $Context.CFG.FunctionTexts
+    if (-not $functionTexts -or -not $functionTexts.ContainsKey($FuncName)) {
+        return $null
+    }
+
+    $functionDefinitions = @($functionTexts.GetEnumerator() | Sort-Object Name | ForEach-Object { [string]$_.Value })
+    if ($functionDefinitions.Count -eq 0) {
+        return $null
+    }
+
+    $guidSuffix = [guid]::NewGuid().ToString('N').Substring(0, 8)
+    $argVarName = "__inline_args_$guidSuffix"
+    $namedVarName = "__inline_named_$guidSuffix"
+
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($argVarName, @($Arguments))
+    $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($namedVarName, $(if ($NamedArguments) { $NamedArguments } else { @{} }))
+
+    try {
+        $wrapperCode = @"
+& {
+$(($functionDefinitions -join "`r`n`r`n"))
+& $FuncName @$namedVarName @$argVarName
+}
+"@
+        $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $wrapperCode
+        if (-not $evalResult.Success) {
+            Write-ExecutionLog -Context $Context -Message "  [INLINE-FALLBACK] Direct helper execution failed for '$FuncName': $($evalResult.Error)"
+            return $null
+        }
+
+        $normalized = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
+        Write-ExecutionLog -Context $Context -Message ({ "  [INLINE-FALLBACK] Direct helper result for '$FuncName': $(Format-VariableValue $normalized)" }).GetNewClosure()
+        return $normalized
+    } finally {
+        foreach ($tempVarName in @($argVarName, $namedVarName)) {
+            try {
+                $Context.ExecContext.Runspace.SessionStateProxy.PSVariable.Remove($tempVarName)
+            } catch {
+            }
+        }
+    }
 }
 
 # 检测代码中嵌入的用户函数调用并替换为执行结果
@@ -5988,57 +6295,62 @@ function Resolve-EmbeddedFunctionCalls {
     foreach ($cmd in $allCommands) {
         $cmdName = $cmd.GetCommandName()
         if ($cmdName -and $Context.FunctionSubgraphs.ContainsKey($cmdName)) {
-            $funcCalls += @{
-                Ast      = $cmd
-                FuncName = $cmdName
-                Start    = $cmd.Extent.StartOffset
-                End      = $cmd.Extent.EndOffset
-                Text     = $cmd.Extent.Text
+            $hasUserFunctionAncestor = $false
+            $ancestor = $cmd.Parent
+            while ($null -ne $ancestor -and $ancestor -ne $Ast) {
+                if ($ancestor -is [System.Management.Automation.Language.CommandAst]) {
+                    $ancestorName = $ancestor.GetCommandName()
+                    if ($ancestorName -and $Context.FunctionSubgraphs.ContainsKey($ancestorName)) {
+                        $hasUserFunctionAncestor = $true
+                        break
+                    }
+                }
+                $ancestor = $ancestor.Parent
+            }
+
+            if (-not $hasUserFunctionAncestor) {
+                $funcCalls += [PSCustomObject]@{
+                    Ast      = $cmd
+                    FuncName = $cmdName
+                    Start    = [int]$cmd.Extent.StartOffset
+                    End      = [int]$cmd.Extent.EndOffset
+                    Text     = [string]$cmd.Extent.Text
+                }
             }
         }
     }
 
     if ($funcCalls.Count -eq 0) { return $Code }
 
-    # 2. 按位置从后往前排序（避免替换时偏移错乱）
-    $funcCalls = $funcCalls | Sort-Object -Property Start -Descending
+    # 2. 按源码位置排序；替换阶段统一基于原始文本一次性重建，避免旧 offset 被中途修改破坏
+    $funcCalls = @($funcCalls | Sort-Object -Property Start)
 
     # 3. 计算 AST 的 StartOffset 作为基准（代码字符串的起始位置）
     $baseOffset = $Ast.Extent.StartOffset
 
-    # 4. 对每个函数调用：求值参数 → 内联执行 → 替换文本
-    $result = $Code
+    # 4. 对每个函数调用：求值参数 → 内联执行 → 记录替换
+    $replacements = New-Object System.Collections.Generic.List[object]
     foreach ($call in $funcCalls) {
-        # 提取并求值参数
         $args = @()
-        if ($call.Ast.CommandElements.Count -gt 1) {
-            for ($i = 1; $i -lt $call.Ast.CommandElements.Count; $i++) {
-                $argAst = $call.Ast.CommandElements[$i]
-                $argCode = $argAst.Extent.Text
-
-                # 应用当前作用域的变量前缀
-                if ($Context.ScopeStack.Count -gt 0) {
-                    $scope = $Context.ScopeStack[-1]
-                    if ($scope.LocalVars -and $scope.LocalVars.Count -gt 0) {
-                        $argCode = Convert-VariableNames -Code $argCode `
-                            -ScopePrefix $scope.ScopePrefix -LocalVarNames $scope.LocalVars
-                    }
-                }
-
-                $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-                if ($evalResult.Success) {
-                    $argValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
-                    $args += $argValue
-                } else {
-                    $args += $null
-                }
-            }
+        $namedArgs = @{}
+        $bindingInfo = Get-CommandInvocationBindings -CommandAst $call.Ast -Context $Context -StartIndex 1 -CallerNodeId $NodeId
+        if ($bindingInfo) {
+            $args = @($bindingInfo.PositionalArguments)
+            $namedArgs = if ($bindingInfo.NamedArguments) { $bindingInfo.NamedArguments } else { @{} }
         }
 
-        Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Resolving: $($call.Text) with args: $(($args | ForEach-Object { Format-VariableValue $_ }) -join ', ')" }).GetNewClosure()
+        $logParts = New-Object System.Collections.Generic.List[string]
+        foreach ($value in @($args)) {
+            $logParts.Add((Format-VariableValue $value)) | Out-Null
+        }
+        foreach ($entry in @($namedArgs.GetEnumerator() | Sort-Object Name)) {
+            $logParts.Add(("-{0} {1}" -f [string]$entry.Key, (Format-VariableValue $entry.Value))) | Out-Null
+        }
+
+        Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Resolving: $($call.Text) with args: $($logParts -join ', ')" }).GetNewClosure()
 
         # 内联执行函数
-        $funcResult = Invoke-FunctionInline -FuncName $call.FuncName -Arguments $args -Context $Context
+        $funcResult = Invoke-FunctionInline -FuncName $call.FuncName -Arguments $args -NamedArguments $namedArgs -Context $Context
 
         # 生成唯一的中间变量名
         $tempVar = "_inline_" + [guid]::NewGuid().ToString("N").Substring(0,8)
@@ -6066,16 +6378,39 @@ function Resolve-EmbeddedFunctionCalls {
         }
 
         Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Created temp var `$$tempVar = $(Format-VariableValue $funcResult)" }).GetNewClosure()
+        $relStart = [int]($call.Start - $baseOffset)
+        $relEnd = [int]($call.End - $baseOffset)
+        if ($relStart -lt 0 -or $relEnd -lt $relStart -or $relEnd -gt $Code.Length) {
+            throw "Inline replacement range out of bounds: start=$relStart end=$relEnd codeLength=$($Code.Length) text=$($call.Text)"
+        }
 
-        # 用变量名替换代码
-        $relStart = $call.Start - $baseOffset
-        $relEnd = $call.End - $baseOffset
-        $result = $result.Substring(0, $relStart) + "`$$tempVar" + $result.Substring($relEnd)
+        $replacements.Add([PSCustomObject]@{
+            Start = $relStart
+            End   = $relEnd
+            Text  = "`$$tempVar"
+        }) | Out-Null
 
         Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Result: $($call.FuncName) => $(Format-VariableValue $funcResult)" }).GetNewClosure()
     }
 
-    return $result
+    # 5. 基于原始文本一次性重建，避免中途替换导致后续 offset 漂移
+    $builder = New-Object System.Text.StringBuilder
+    $cursor = 0
+    foreach ($replacement in @($replacements | Sort-Object Start)) {
+        if ($replacement.Start -lt $cursor) {
+            continue
+        }
+
+        [void]$builder.Append($Code.Substring($cursor, $replacement.Start - $cursor))
+        [void]$builder.Append([string]$replacement.Text)
+        $cursor = [int]$replacement.End
+    }
+
+    if ($cursor -lt $Code.Length) {
+        [void]$builder.Append($Code.Substring($cursor))
+    }
+
+    return $builder.ToString()
 }
 
 # 执行脚本块调用
@@ -6126,7 +6461,7 @@ function Invoke-ScriptBlockCall {
     }
 
     # 5. 计算返回节点
-    $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context
+    $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context)
     $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
 
     # 6. 提取调用者的实参并求值
@@ -6902,6 +7237,7 @@ function Invoke-NodeTraverse {
             if ($scope) {
                 # 根据调用方式处理返回值
                 if ($scope.ReturnNodeId) {
+                    Add-FunctionInvokeResultRecord -Context $Context -Scope $scope -ReturnValue $returnValue
                     # 正常调用（通过 Invoke-FunctionCall 跳转）：清空 LastSubgraphResult
                     $Context.LastSubgraphResult = $null
 
@@ -6979,7 +7315,7 @@ function Invoke-NodeTraverse {
                 }
             } else {
                 # 不在函数/脚本块中的 return，跟随正常边
-                $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context
+                $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context)
                 $currentNode = if ($nextNodes.Count -gt 0) { $nextNodes[0] } else { $null }
             }
             continue  # Return 处理完毕，不继续遍历
@@ -7029,7 +7365,8 @@ function Invoke-NodeTraverse {
         # 特殊处理 FuncParams / BlockParams 节点：绑定实参到形参
         if ($currentNode.Type -in @('FuncParams', 'BlockParams') -and $Context.ScopeStack.Count -gt 0) {
             $currentScope = $Context.ScopeStack[-1]
-            if ($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) {
+            if (($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) -or
+                ($currentScope.NamedArguments -and $currentScope.NamedArguments.Count -gt 0)) {
                 # 从 Node.Ast (ParamBlockAst) 获取形参名
                 if ($currentNode.Ast -and $currentNode.Ast.Parameters) {
                     $paramNames = @()
@@ -7037,19 +7374,41 @@ function Invoke-NodeTraverse {
                         $paramNames += $param.Name.VariablePath.UserPath
                     }
 
-                    # 绑定实参到带前缀的形参
-                    for ($i = 0; $i -lt [Math]::Min($paramNames.Count, $currentScope.Arguments.Count); $i++) {
-                        $paramName = $paramNames[$i]
-                        $argValue = $currentScope.Arguments[$i]
-                        $prefixedName = $currentScope.ScopePrefix + $paramName
-                        $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
-                        if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogBindingDetailsEnabled') {
-                            Write-ExecutionLog -Context $Context -Message ({ "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                    $namedLookup = @{}
+                    foreach ($key in @($currentScope.NamedArguments.Keys)) {
+                        $namedLookup[[string]$key] = $currentScope.NamedArguments[$key]
+                    }
+
+                    $posIndex = 0
+                    foreach ($paramName in $paramNames) {
+                        $hasValue = $false
+                        $argValue = $null
+
+                        foreach ($lookupKey in @($namedLookup.Keys)) {
+                            if ($lookupKey -ieq $paramName) {
+                                $argValue = $namedLookup[$lookupKey]
+                                $hasValue = $true
+                                break
+                            }
                         }
 
-                        # 把参数也加入 LocalVars 以便变量转换
-                        if ($paramName -notin $currentScope.LocalVars) {
-                            $currentScope.LocalVars += $paramName
+                        if (-not $hasValue -and $posIndex -lt @($currentScope.Arguments).Count) {
+                            $argValue = $currentScope.Arguments[$posIndex]
+                            $posIndex++
+                            $hasValue = $true
+                        }
+
+                        if ($hasValue) {
+                            $prefixedName = $currentScope.ScopePrefix + $paramName
+                            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
+                            if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogBindingDetailsEnabled') {
+                                Write-ExecutionLog -Context $Context -Message ({ "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                            }
+
+                            # 把参数也加入 LocalVars 以便变量转换
+                            if ($paramName -notin $currentScope.LocalVars) {
+                                $currentScope.LocalVars += $paramName
+                            }
                         }
                     }
                 }
@@ -7223,7 +7582,7 @@ function Invoke-NodeTraverse {
         }
 
         # 获取后继节点并继续遍历
-        $nextNodes = Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context
+        $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context)
         $currentNode = if ($nextNodes.Count -gt 0) { $nextNodes[0] } else { $null }
     }
 }
@@ -7265,6 +7624,13 @@ function Push-ExecutionScope {
         ReturnNodeId = $ReturnNodeId
         EndNodeId    = $EndNodeId    # FuncEnd/BlockEnd 节点，用于 return 跳转
         LocalVars    = @()           # 该作用域内定义的局部变量名（不含前缀）
+        Arguments    = @()
+        NamedArguments = [ordered]@{}
+        TargetVarName = $null
+        CallerNodeId = $null
+        InvocationStartOffset = $null
+        InvocationEndOffset = $null
+        InvocationText = $null
     }
 
     $Context.ScopeStack += $scope
@@ -7278,6 +7644,38 @@ function Push-ExecutionScope {
     }
 
     Write-ExecutionLog -Context $Context -Message "  [SCOPE] Push: $ScopeType '$ScopeName' (prefix=$prefix, returnTo=$ReturnNodeId, endNode=$EndNodeId)"
+}
+
+function Add-FunctionInvokeResultRecord {
+    param(
+        [hashtable]$Context,
+        $Scope,
+        $ReturnValue
+    )
+
+    if (-not $Context -or -not $Scope) { return }
+    if ([string]$Scope.ScopeType -ne 'Function') { return }
+    if (-not $Scope.ReturnNodeId) { return }
+    if ($null -eq $ReturnValue) { return }
+    if (-not (Test-ResolvableValue $ReturnValue)) { return }
+    if ($ReturnValue -isnot [string] -and
+        $ReturnValue -isnot [char[]] -and
+        $ReturnValue -isnot [System.Management.Automation.ScriptBlock]) { return }
+    if ($null -eq $Scope.InvocationStartOffset -or $null -eq $Scope.InvocationEndOffset) { return }
+
+    $replacement = Format-ResolvableValue $ReturnValue
+    if ([string]::IsNullOrWhiteSpace([string]$replacement)) { return }
+
+    $Context.FunctionInvokeResults += @{
+        NodeId          = $Scope.CallerNodeId
+        FunctionName    = $Scope.ScopeName
+        StartOffset     = [int]$Scope.InvocationStartOffset
+        EndOffset       = [int]$Scope.InvocationEndOffset
+        OriginalText    = [string]$Scope.InvocationText
+        ReplacementText = [string]$replacement
+        ReturnValue     = $ReturnValue
+        Timestamp       = Get-Date
+    }
 }
 
 # Pop 作用域
@@ -7371,6 +7769,59 @@ function Get-SubgraphLocalVars {
     }
 
     return @($localVars.Keys)
+}
+
+function Test-FunctionInlinePreferDirectFallback {
+    param(
+        [string]$FuncName,
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FuncName) -or -not $Context -or -not $Context.CFG -or -not $Context.FunctionSubgraphs) {
+        return $false
+    }
+    if (-not $Context.FunctionSubgraphs.ContainsKey($FuncName)) {
+        return $false
+    }
+
+    $funcStartId = [int]$Context.FunctionSubgraphs[$FuncName]
+    $funcEndNode = Get-SubgraphEndNode -CFG $Context.CFG -StartType 'FuncStart' -Name $FuncName
+    if (-not $funcEndNode) {
+        return $false
+    }
+
+    $complexNodeTypes = @(
+        'Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition',
+        'LoopStart', 'LoopEnd', 'ForInit', 'ForIter', 'Break', 'Continue',
+        'Try', 'Catch', 'Finally'
+    )
+
+    $visited = @{}
+    $queue = [System.Collections.Generic.Queue[int]]::new()
+    $queue.Enqueue($funcStartId)
+
+    while ($queue.Count -gt 0) {
+        $nodeId = $queue.Dequeue()
+        if ($visited.ContainsKey($nodeId)) { continue }
+        $visited[$nodeId] = $true
+
+        $node = Get-NodeById -CFG $Context.CFG -Id $nodeId
+        if (-not $node) { continue }
+        if ($node.Type -in $complexNodeTypes) {
+            return $true
+        }
+        if ($node.Id -eq $funcEndNode.Id) {
+            continue
+        }
+
+        foreach ($edge in @(Get-CFGOutgoingEdges -CFG $Context.CFG -FromNodeId $nodeId)) {
+            if (-not $visited.ContainsKey([int]$edge.To)) {
+                $queue.Enqueue([int]$edge.To)
+            }
+        }
+    }
+
+    return $false
 }
 
 # 转换代码中的变量名（添加作用域前缀）
@@ -8393,6 +8844,11 @@ function Get-ResolvedCommandInfo {
         return [PSCustomObject]@{ HasCommand = $false }
     }
 
+    $isTopLevelInvocation = $false
+    if ($execInfo.PSObject.Properties['IsTopLevelCommandInvocation']) {
+        $isTopLevelInvocation = [bool]$execInfo.IsTopLevelCommandInvocation
+    }
+
     $cmdName = $null
     $originalName = $null
     $commandElementAst = if ($cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 0) {
@@ -8506,6 +8962,7 @@ function Get-ResolvedCommandInfo {
             ResolvedName = $realName
             IsAlias      = $true
             Ast          = $cmdAst
+            IsTopLevelInvocation = $isTopLevelInvocation
             Resolvable   = $matchedResolvable
             ResolutionKind = 'Alias'
             ResolutionConfidence = 'High'
@@ -8524,6 +8981,7 @@ function Get-ResolvedCommandInfo {
             ResolvedName = $realName
             IsAlias      = $true
             Ast          = $cmdAst
+            IsTopLevelInvocation = $isTopLevelInvocation
             Resolvable   = $matchedResolvable
             ResolutionKind = 'BuiltinAlias'
             ResolutionConfidence = 'High'
@@ -8540,6 +8998,7 @@ function Get-ResolvedCommandInfo {
             ResolvedName = $compatAlias
             IsAlias      = $true
             Ast          = $cmdAst
+            IsTopLevelInvocation = $isTopLevelInvocation
             Resolvable   = $matchedResolvable
             ResolutionKind = 'CompatibilityAlias'
             ResolutionConfidence = 'High'
@@ -8554,6 +9013,7 @@ function Get-ResolvedCommandInfo {
         ResolvedName = $cmdName
         IsAlias      = $false
         Ast          = $cmdAst
+        IsTopLevelInvocation = $isTopLevelInvocation
         Resolvable   = $matchedResolvable
         ResolutionKind = $resolutionKind
         ResolutionConfidence = $resolutionConfidence
@@ -8575,6 +9035,10 @@ function Test-CommandSafety {
     }
 
     $cmdName = $CommandInfo.ResolvedName
+    $isTopLevelInvocation = $true
+    if ($CommandInfo.PSObject.Properties['IsTopLevelInvocation']) {
+        $isTopLevelInvocation = [bool]$CommandInfo.IsTopLevelInvocation
+    }
 
     # 1. 违禁命令检查
     if ($cmdName -in $Context.ForbiddenCommands) {
@@ -8658,6 +9122,9 @@ function Test-CommandSafety {
 
     # 3. 用户定义函数检查
     if ($Context.FunctionSubgraphs.ContainsKey($cmdName)) {
+        if (-not $isTopLevelInvocation) {
+            return @{ Action = "Execute"; IsForbidden = $false }
+        }
         return @{
             Action      = "CallFunction"
             IsForbidden = $false
@@ -9550,6 +10017,7 @@ function Invoke-CFGTraversal {
         CallStack             = @()          # 调用栈 [{ Type; Name; ReturnNodeId }]
         MaxCallDepth          = 100          # 最大调用深度
         DynamicInvokeResults  = @()          # 动态执行记录 [{ NodeId; Command; ArgumentValue }]
+        FunctionInvokeResults = @()          # 用户函数调用结果 [{ NodeId; FunctionName; StartOffset; EndOffset; ReplacementText }]
         LastSubgraphResult    = $null        # 子图（函数/脚本块）的最后执行结果，用于返回值传递
         PipelineCurrentStack  = @()          # $_ / $PSItem 绑定栈（用于 ForEach-Object 等嵌套管道上下文）
         OutputCaptureStack    = @()          # 输出捕获栈（用于 ForEach-Object 等逐项执行）
@@ -9732,6 +10200,7 @@ function New-CFGExecutionSession {
         CallStack              = @()
         MaxCallDepth           = 100
         DynamicInvokeResults   = @()
+        FunctionInvokeResults  = @()
         LastSubgraphResult     = $null
         PipelineCurrentStack   = @()
         OutputCaptureStack     = @()
@@ -10054,6 +10523,7 @@ function Invoke-CFGStep {
             $scope = Pop-ExecutionScope -Context $context
             if ($scope) {
                 if ($scope.ReturnNodeId) {
+                    Add-FunctionInvokeResultRecord -Context $context -Scope $scope -ReturnValue $returnValue
                     $context.LastSubgraphResult = $null
 
                     if ($scope.TargetVarName -and $null -ne $returnValue) {
@@ -10141,7 +10611,7 @@ function Invoke-CFGStep {
                     $nextNode = Get-NodeById -CFG $context.CFG -Id $currentScope.EndNodeId
                 }
             } else {
-                $nextNodes = Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context
+                $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context)
                 if ($nextNodes.Count -gt 0) { $nextNode = $nextNodes[0] }
             }
 
@@ -10202,23 +10672,47 @@ function Invoke-CFGStep {
 
         if ($currentNode.Type -in @('FuncParams', 'BlockParams') -and $context.ScopeStack.Count -gt 0) {
             $currentScope = $context.ScopeStack[-1]
-            if ($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) {
+            if (($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) -or
+                ($currentScope.NamedArguments -and $currentScope.NamedArguments.Count -gt 0)) {
                 if ($currentNode.Ast -and $currentNode.Ast.Parameters) {
                     $paramNames = @()
                     foreach ($param in $currentNode.Ast.Parameters) {
                         $paramNames += $param.Name.VariablePath.UserPath
                     }
 
-                    for ($i = 0; $i -lt [Math]::Min($paramNames.Count, $currentScope.Arguments.Count); $i++) {
-                        $paramName = $paramNames[$i]
-                        $argValue = $currentScope.Arguments[$i]
-                        $prefixedName = $currentScope.ScopePrefix + $paramName
-                        $context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
-                        if (Test-ExecutionLogDetailEnabled -Context $context -FlagName 'LogBindingDetailsEnabled') {
-                            Write-ExecutionLog -Context $context -Message ({ "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                    $namedLookup = @{}
+                    foreach ($key in @($currentScope.NamedArguments.Keys)) {
+                        $namedLookup[[string]$key] = $currentScope.NamedArguments[$key]
+                    }
+
+                    $posIndex = 0
+                    foreach ($paramName in $paramNames) {
+                        $hasValue = $false
+                        $argValue = $null
+
+                        foreach ($lookupKey in @($namedLookup.Keys)) {
+                            if ($lookupKey -ieq $paramName) {
+                                $argValue = $namedLookup[$lookupKey]
+                                $hasValue = $true
+                                break
+                            }
                         }
-                        if ($paramName -notin $currentScope.LocalVars) {
-                            $currentScope.LocalVars += $paramName
+
+                        if (-not $hasValue -and $posIndex -lt @($currentScope.Arguments).Count) {
+                            $argValue = $currentScope.Arguments[$posIndex]
+                            $posIndex++
+                            $hasValue = $true
+                        }
+
+                        if ($hasValue) {
+                            $prefixedName = $currentScope.ScopePrefix + $paramName
+                            $context.ExecContext.Runspace.SessionStateProxy.SetVariable($prefixedName, $argValue)
+                            if (Test-ExecutionLogDetailEnabled -Context $context -FlagName 'LogBindingDetailsEnabled') {
+                                Write-ExecutionLog -Context $context -Message ({ "  [BIND] `$$prefixedName = $(Format-VariableValue $argValue)" }).GetNewClosure()
+                            }
+                            if ($paramName -notin $currentScope.LocalVars) {
+                                $currentScope.LocalVars += $paramName
+                            }
                         }
                     }
                 }
@@ -10354,7 +10848,7 @@ function Invoke-CFGStep {
                 Write-ExecutionLog -Context $context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
                 $nextNode = $execResult.JumpToNode
             } else {
-                $nextNodes = Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context
+                $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context)
                 if ($nextNodes.Count -gt 0) {
                     $nextNode = $nextNodes[0]
                 }
@@ -10379,7 +10873,7 @@ function Invoke-CFGStep {
             Write-ExecutionLog -Context $context -Message "  Reason: $($execResult.Reason)"
             Write-ExecutionLog -Context $context -Message "  Error: $($execResult.Error)"
             try {
-                $nextNodes = Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context
+                $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context)
                 if ($nextNodes.Count -gt 0) {
                     $nextNode = $nextNodes[0]
                 }
@@ -11101,7 +11595,7 @@ function Get-CFGNextEdgePreview {
         }
     }
 
-    $nextNodes = Get-NextNodes -CFG $context.CFG -Node $node -Context $context
+    $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $node -Context $context)
     if ($nextNodes.Count -eq 0) {
         return [PSCustomObject]@{
             HasPreview         = $false
