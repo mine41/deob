@@ -107,6 +107,125 @@ function Test-PowerShellHostParameterPrefix {
     return $canonical.StartsWith($actual)
 }
 
+function Resolve-PowerShellHostParameterInfo {
+    param([string]$ParameterName)
+
+    if ([string]::IsNullOrWhiteSpace($ParameterName)) { return $null }
+
+    $normalized = ([string]$ParameterName).Trim()
+    if ($normalized.StartsWith('-')) {
+        $normalized = $normalized.TrimStart('-')
+    }
+    $normalized = $normalized.ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($normalized)) { return $null }
+
+    $definitions = @(
+        @{ CanonicalName = 'encodedcommand'; DynamicType = 'EncodedCommand';   ExpectsValue = $true;  Aliases = @('encodedcommand', 'encoded', 'enc', 'ec', 'e') },
+        @{ CanonicalName = 'command';        DynamicType = 'PowerShellCommand'; ExpectsValue = $true;  Aliases = @('command', 'c') },
+        @{ CanonicalName = 'executionpolicy'; DynamicType = $null;             ExpectsValue = $true;  Aliases = @('executionpolicy', 'exec', 'ex', 'ep') },
+        @{ CanonicalName = 'windowstyle';    DynamicType = $null;              ExpectsValue = $true;  Aliases = @('windowstyle', 'windowstyl', 'windowsty', 'windowst', 'windows', 'window', 'windo', 'wind', 'win', 'wi', 'w') },
+        @{ CanonicalName = 'noprofile';      DynamicType = $null;              ExpectsValue = $false; Aliases = @('noprofile', 'nop') },
+        @{ CanonicalName = 'noninteractive'; DynamicType = $null;              ExpectsValue = $false; Aliases = @('noninteractive', 'noni') },
+        @{ CanonicalName = 'nologo';         DynamicType = $null;              ExpectsValue = $false; Aliases = @('nologo', 'nol') },
+        @{ CanonicalName = 'noexit';         DynamicType = $null;              ExpectsValue = $false; Aliases = @('noexit') },
+        @{ CanonicalName = 'sta';            DynamicType = $null;              ExpectsValue = $false; Aliases = @('sta') },
+        @{ CanonicalName = 'mta';            DynamicType = $null;              ExpectsValue = $false; Aliases = @('mta') },
+        @{ CanonicalName = 'inputformat';    DynamicType = $null;              ExpectsValue = $true;  Aliases = @('inputformat') },
+        @{ CanonicalName = 'outputformat';   DynamicType = $null;              ExpectsValue = $true;  Aliases = @('outputformat') },
+        @{ CanonicalName = 'version';        DynamicType = $null;              ExpectsValue = $true;  Aliases = @('version') },
+        @{ CanonicalName = 'file';           DynamicType = $null;              ExpectsValue = $true;  Aliases = @('file', 'f') }
+    )
+
+    foreach ($definition in $definitions) {
+        foreach ($alias in @($definition.Aliases)) {
+            if ($normalized -eq $alias) {
+                return [PSCustomObject]@{
+                    CanonicalName = [string]$definition.CanonicalName
+                    DynamicType   = if ($definition.DynamicType) { [string]$definition.DynamicType } else { $null }
+                    ExpectsValue  = [bool]$definition.ExpectsValue
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+function Get-PowerShellHostBarePayloadInfo {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.CommandAst]$CommandAst
+    )
+
+    $cmdName = $CommandAst.GetCommandName()
+    if (-not (Test-PowerShellHostCommandName -CommandName $cmdName)) {
+        return $null
+    }
+
+    $elements = @($CommandAst.CommandElements)
+    if ($elements.Count -lt 2) { return $null }
+
+    $sourceText = $CommandAst.Extent.StartScriptPosition.GetFullScript()
+    $payloadIndex = $null
+
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $paramInfo = Resolve-PowerShellHostParameterInfo -ParameterName ([string]$elem.ParameterName)
+            if (-not $paramInfo) {
+                $payloadIndex = $i
+                break
+            }
+
+            if ($paramInfo.CanonicalName -eq 'file') {
+                return $null
+            }
+
+            if ($paramInfo.DynamicType) {
+                return $null
+            }
+
+            if ($paramInfo.ExpectsValue) {
+                if ($elem.Argument) {
+                    continue
+                }
+
+                if ($i + 1 -lt $elements.Count -and $elements[$i + 1] -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                    $i++
+                    continue
+                }
+
+                return $null
+            }
+
+            continue
+        }
+
+        $payloadIndex = $i
+        break
+    }
+
+    if ($null -eq $payloadIndex) { return $null }
+
+    $payloadStart = $elements[$payloadIndex].Extent.StartOffset
+    $payloadEnd = $elements[$elements.Count - 1].Extent.EndOffset
+    if ($payloadEnd -le $payloadStart) { return $null }
+
+    $payloadText = $sourceText.Substring($payloadStart, $payloadEnd - $payloadStart).Trim()
+    if ([string]::IsNullOrWhiteSpace($payloadText)) { return $null }
+
+    return [PSCustomObject]@{
+        HostCommandName = $cmdName
+        DynamicType     = 'PowerShellCommand'
+        ParameterName   = $null
+        ParameterAst    = $null
+        ArgumentAst     = $null
+        PayloadText     = $payloadText
+        EvaluationCode  = ConvertTo-SingleQuotedStringLiteral -Text $payloadText
+        PayloadSource   = 'BareTail'
+    }
+}
+
 function Get-PowerShellHostPayloadEvaluationCode {
     param($PayloadAst)
 
@@ -427,13 +546,9 @@ function Get-PowerShellHostDynamicInvocationInfo {
             continue
         }
 
-        $paramName = [string]$elem.ParameterName
-        $dynamicType = $null
-        if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'encodedcommand') {
-            $dynamicType = 'EncodedCommand'
-        } elseif (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'command') {
-            $dynamicType = 'PowerShellCommand'
-        }
+        $paramInfo = Resolve-PowerShellHostParameterInfo -ParameterName ([string]$elem.ParameterName)
+        $paramName = if ($paramInfo) { [string]$paramInfo.CanonicalName } else { [string]$elem.ParameterName }
+        $dynamicType = if ($paramInfo) { $paramInfo.DynamicType } else { $null }
 
         if (-not $dynamicType) {
             continue
@@ -479,10 +594,11 @@ function Get-PowerShellHostDynamicInvocationInfo {
             ArgumentAst     = $payloadAst
             PayloadText     = $payloadText
             EvaluationCode  = $evaluationCode
+            PayloadSource   = if ($dynamicType -eq 'EncodedCommand') { 'EncodedCommand' } else { 'CommandParameter' }
         }
     }
 
-    return $null
+    return Get-PowerShellHostBarePayloadInfo -CommandAst $CommandAst
 }
 
 # 辅助函数：检测动态执行结构（iex / powershell -command / [ScriptBlock]::Create / NewScriptBlock）

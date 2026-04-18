@@ -1715,6 +1715,56 @@ function Try-DecodeEncodedCommandValue {
     }
 }
 
+function Get-SafeNonEmptyString {
+    param($Value)
+
+    try {
+        $text = [string]$Value
+    } catch {
+        return $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    return $text
+}
+
+function Resolve-PowerShellHostLooseParameterInfo {
+    param([string]$ParameterName)
+
+    if (Get-Command Resolve-PowerShellHostParameterInfo -ErrorAction SilentlyContinue) {
+        return Resolve-PowerShellHostParameterInfo -ParameterName $ParameterName
+    }
+
+    if (Test-PowerShellHostParameterPrefix -ParameterName $ParameterName -CanonicalName 'encodedcommand') {
+        return [PSCustomObject]@{ CanonicalName = 'encodedcommand'; DynamicType = 'EncodedCommand'; ExpectsValue = $true }
+    }
+    if (Test-PowerShellHostParameterPrefix -ParameterName $ParameterName -CanonicalName 'command') {
+        return [PSCustomObject]@{ CanonicalName = 'command'; DynamicType = 'PowerShellCommand'; ExpectsValue = $true }
+    }
+
+    return $null
+}
+
+function Get-PowerShellHostLooseTokenMatches {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return @() }
+    return @([regex]::Matches($Text, '(?s)"(?:[^"]|"")*"|''(?:[^'']|'''')*''|\S+'))
+}
+
+function Unwrap-PowerShellHostLooseToken {
+    param([string]$TokenText)
+
+    if ([string]::IsNullOrWhiteSpace($TokenText)) { return $TokenText }
+    if (($TokenText.StartsWith('"') -and $TokenText.EndsWith('"')) -or ($TokenText.StartsWith("'") -and $TokenText.EndsWith("'"))) {
+        if ($TokenText.Length -ge 2) {
+            return $TokenText.Substring(1, $TokenText.Length - 2)
+        }
+    }
+
+    return $TokenText
+}
+
 function Try-GetWholeScriptHostPayloadInfoLoose {
     param([Parameter(Mandatory)][string]$ScriptText)
 
@@ -1727,61 +1777,97 @@ function Try-GetWholeScriptHostPayloadInfoLoose {
     $tail = $text.Substring($hostMatch.Index + $hostMatch.Length)
     if ([string]::IsNullOrWhiteSpace($tail)) { return $null }
 
-    $tokenMatches = [regex]::Matches($tail, '(?is)-(?<name>[a-z]+)\b')
-    foreach ($tokenMatch in $tokenMatches) {
-        $paramName = [string]$tokenMatch.Groups['name'].Value
-        $valueStart = $tokenMatch.Index + $tokenMatch.Length
-        $remaining = $tail.Substring($valueStart).TrimStart()
-        if ([string]::IsNullOrWhiteSpace($remaining)) { continue }
+    $tokenMatches = @(Get-PowerShellHostLooseTokenMatches -Text $tail)
+    for ($i = 0; $i -lt $tokenMatches.Count; $i++) {
+        $tokenMatch = $tokenMatches[$i]
+        $tokenText = [string]$tokenMatch.Value
+        if ([string]::IsNullOrWhiteSpace($tokenText)) { continue }
 
-        if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'encodedcommand') {
-            $valueMatch = [regex]::Match($remaining, '^(?<value>["'']?[^"''\s]+["'']?)')
-            if (-not $valueMatch.Success) { continue }
-
-            $encodedValue = [string]$valueMatch.Groups['value'].Value
-            if (($encodedValue.StartsWith('"') -and $encodedValue.EndsWith('"')) -or ($encodedValue.StartsWith("'") -and $encodedValue.EndsWith("'"))) {
-                $encodedValue = $encodedValue.Substring(1, $encodedValue.Length - 2)
-            }
-
-            $decoded = Try-DecodeEncodedCommandValue -Base64String $encodedValue
-            if (-not [string]::IsNullOrWhiteSpace($decoded)) {
-                return [PSCustomObject]@{
-                    CommandName = $hostMatch.Groups['cmd'].Value
-                    DynamicType = 'EncodedCommand'
-                    PayloadText = $decoded
-                }
-            }
-        }
-
-        if (Test-PowerShellHostParameterPrefix -ParameterName $paramName -CanonicalName 'command') {
-            $payloadText = $remaining.Trim()
-            if ([string]::IsNullOrWhiteSpace($payloadText)) { continue }
-
-            if ($payloadText.StartsWith('"')) {
-                if ($payloadText.Length -ge 2 -and $payloadText.EndsWith('"')) {
-                    $payloadText = $payloadText.Substring(1, $payloadText.Length - 2)
-                } else {
-                    $payloadText = $payloadText.Substring(1)
-                }
-            } elseif ($payloadText.StartsWith("'")) {
-                if ($payloadText.Length -ge 2 -and $payloadText.EndsWith("'")) {
-                    $payloadText = $payloadText.Substring(1, $payloadText.Length - 2)
-                } else {
-                    $payloadText = $payloadText.Substring(1)
-                }
-            }
-
+        if (-not $tokenText.StartsWith('-')) {
+            $payloadText = $tail.Substring($tokenMatch.Index).Trim()
             if (-not [string]::IsNullOrWhiteSpace($payloadText)) {
                 return [PSCustomObject]@{
-                    CommandName = $hostMatch.Groups['cmd'].Value
-                    DynamicType = 'PowerShellCommand'
-                    PayloadText = $payloadText
+                    CommandName  = $hostMatch.Groups['cmd'].Value
+                    DynamicType  = 'PowerShellCommand'
+                    PayloadText  = $payloadText
+                    DecodeSource = 'host_wrapper_decode_bare_tail'
                 }
             }
+            continue
+        }
+
+        $paramInfo = Resolve-PowerShellHostLooseParameterInfo -ParameterName $tokenText.TrimStart('-')
+        if (-not $paramInfo) {
+            $payloadText = $tail.Substring($tokenMatch.Index).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($payloadText)) {
+                return [PSCustomObject]@{
+                    CommandName  = $hostMatch.Groups['cmd'].Value
+                    DynamicType  = 'PowerShellCommand'
+                    PayloadText  = $payloadText
+                    DecodeSource = 'host_wrapper_decode_bare_tail'
+                }
+            }
+            continue
+        }
+
+        if ($paramInfo.CanonicalName -eq 'file') {
+            return $null
+        }
+
+        if ($paramInfo.DynamicType -eq 'EncodedCommand') {
+            if ($i + 1 -ge $tokenMatches.Count) { return $null }
+
+            $encodedValue = Unwrap-PowerShellHostLooseToken -TokenText ([string]$tokenMatches[$i + 1].Value)
+            $decoded = Get-SafeNonEmptyString -Value (Try-DecodeEncodedCommandValue -Base64String $encodedValue)
+            if ($decoded) {
+                return [PSCustomObject]@{
+                    CommandName  = $hostMatch.Groups['cmd'].Value
+                    DynamicType  = 'EncodedCommand'
+                    PayloadText  = $decoded
+                    DecodeSource = 'host_wrapper_decode_encoded'
+                }
+            }
+
+            return $null
+        }
+
+        if ($paramInfo.DynamicType -eq 'PowerShellCommand') {
+            if ($i + 1 -ge $tokenMatches.Count) { return $null }
+
+            $payloadText = $tail.Substring($tokenMatches[$i + 1].Index).Trim()
+            if ($tokenMatches.Count -eq ($i + 2)) {
+                $payloadText = Unwrap-PowerShellHostLooseToken -TokenText $payloadText
+            }
+
+            $payloadText = Get-SafeNonEmptyString -Value $payloadText
+            if ($payloadText) {
+                return [PSCustomObject]@{
+                    CommandName  = $hostMatch.Groups['cmd'].Value
+                    DynamicType  = 'PowerShellCommand'
+                    PayloadText  = $payloadText
+                    DecodeSource = 'host_wrapper_decode_command'
+                }
+            }
+
+            return $null
+        }
+
+        if ($paramInfo.ExpectsValue) {
+            if ($i + 1 -ge $tokenMatches.Count) { return $null }
+            $i++
         }
     }
 
     return $null
+}
+
+function Resolve-WholeScriptHostPayloadInfo {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $ScriptText
+    if ($payloadInfo) { return $payloadInfo }
+
+    return Try-GetWholeScriptHostPayloadInfoLoose -ScriptText $ScriptText
 }
 
 function Get-BestEffortParseFallbackScriptText {
@@ -1790,13 +1876,11 @@ function Get-BestEffortParseFallbackScriptText {
         [string]$ParseError
     )
 
-    $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $ScriptText
-    if (-not $payloadInfo) {
-        $payloadInfo = Try-GetWholeScriptHostPayloadInfoLoose -ScriptText $ScriptText
-    }
+    $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $ScriptText
 
-    $body = if ($payloadInfo -and -not [string]::IsNullOrWhiteSpace([string]$payloadInfo.PayloadText)) {
-        [string]$payloadInfo.PayloadText
+    $resolvedPayloadText = if ($payloadInfo) { Get-SafeNonEmptyString -Value $payloadInfo.PayloadText } else { $null }
+    $body = if ($resolvedPayloadText) {
+        $resolvedPayloadText
     } else {
         $ScriptText
     }
@@ -1891,9 +1975,10 @@ function Get-NextRoundMaterializedPayloadInfo {
     $hasDynamicInvokeSelection = @($Selected | Where-Object { $_ -and $_.PSObject.Properties['SourceKind'] -and [string]$_.SourceKind -eq 'DynamicInvoke' }).Count -gt 0
     $cameFromHostWrapperDecode = $false
 
-    $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $PrePostProcessText
-    if ($payloadInfo -and -not [string]::IsNullOrWhiteSpace([string]$payloadInfo.PayloadText)) {
-        $payloadParse = Get-ScriptParseInfo -ScriptText ([string]$payloadInfo.PayloadText)
+    $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $PrePostProcessText
+    $resolvedPayloadText = if ($payloadInfo) { Get-SafeNonEmptyString -Value $payloadInfo.PayloadText } else { $null }
+    if ($resolvedPayloadText) {
+        $payloadParse = Get-ScriptParseInfo -ScriptText $resolvedPayloadText
         if ($payloadParse.IsValid) {
             $cameFromHostWrapperDecode = $true
         }
@@ -1904,7 +1989,11 @@ function Get-NextRoundMaterializedPayloadInfo {
     if ($hasDynamicInvokeSelection) {
         $reason = 'dynamic_invoke_selection'
     } elseif ($cameFromHostWrapperDecode) {
-        $reason = 'host_wrapper_decode'
+        $reason = if ($payloadInfo -and $payloadInfo.PSObject.Properties['DecodeSource'] -and -not [string]::IsNullOrWhiteSpace([string]$payloadInfo.DecodeSource)) {
+            [string]$payloadInfo.DecodeSource
+        } else {
+            'host_wrapper_decode'
+        }
     }
 
     return [PSCustomObject]@{
@@ -2578,14 +2667,19 @@ function Try-DecodeEncodedCommand {
     for ($i = 1; $i -lt $elements.Count; $i++) {
         $elem = $elements[$i]
 
-        # 检查是否是 -EncodedCommand 或 -enc 参数
         if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
-            $paramName = $elem.ParameterName.ToLower()
+            $paramInfo = Resolve-PowerShellHostLooseParameterInfo -ParameterName ([string]$elem.ParameterName)
 
-            if ($paramName -match '^(encodedcommand|enc|e)$') {
+            if ($paramInfo -and $paramInfo.DynamicType -eq 'EncodedCommand') {
                 # 获取下一个元素（Base64 字符串）
-                if ($i + 1 -lt $elements.Count) {
+                $valueElem = $null
+                if ($elem.Argument) {
+                    $valueElem = $elem.Argument
+                } elseif ($i + 1 -lt $elements.Count) {
                     $valueElem = $elements[$i + 1]
+                }
+
+                if ($null -ne $valueElem) {
                     $base64String = $null
 
                     # 提取 Base64 字符串
@@ -4480,11 +4574,13 @@ function Try-GetWholeScriptHostPayloadInfo {
         $decodedInfo = $null
     }
 
-    if ($decodedInfo -and -not [string]::IsNullOrWhiteSpace([string]$decodedInfo.DecodedContent)) {
+    $decodedText = if ($decodedInfo) { Get-SafeNonEmptyString -Value $decodedInfo.DecodedContent } else { $null }
+    if ($decodedText) {
         return [PSCustomObject]@{
-            CommandAst  = $cmdAst
-            DynamicType = 'EncodedCommand'
-            PayloadText = [string]$decodedInfo.DecodedContent
+            CommandAst    = $cmdAst
+            DynamicType   = 'EncodedCommand'
+            PayloadText   = $decodedText
+            DecodeSource  = 'host_wrapper_decode_encoded'
         }
     }
 
@@ -4499,19 +4595,25 @@ function Try-GetWholeScriptHostPayloadInfo {
 
     $payloadText = $null
     if ($hostInfo.ArgumentAst -and $hostInfo.ArgumentAst.PSObject.Properties['Value']) {
-        $payloadText = [string]$hostInfo.ArgumentAst.Value
-    } elseif (-not [string]::IsNullOrWhiteSpace([string]$hostInfo.PayloadText)) {
-        $payloadText = [string]$hostInfo.PayloadText
+        $payloadText = Get-SafeNonEmptyString -Value $hostInfo.ArgumentAst.Value
+    } elseif ($hostInfo.PSObject.Properties['PayloadText']) {
+        $payloadText = Get-SafeNonEmptyString -Value $hostInfo.PayloadText
     }
 
-    if ([string]::IsNullOrWhiteSpace($payloadText)) {
+    if (-not $payloadText) {
         return $null
     }
 
+    $decodeSource = 'host_wrapper_decode_command'
+    if ($hostInfo.PSObject.Properties['PayloadSource'] -and [string]$hostInfo.PayloadSource -eq 'BareTail') {
+        $decodeSource = 'host_wrapper_decode_bare_tail'
+    }
+
     return [PSCustomObject]@{
-        CommandAst  = $cmdAst
-        DynamicType = 'PowerShellCommand'
-        PayloadText = $payloadText
+        CommandAst    = $cmdAst
+        DynamicType   = 'PowerShellCommand'
+        PayloadText   = $payloadText
+        DecodeSource  = $decodeSource
     }
 }
 
@@ -4968,11 +5070,11 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     $working = $ScriptText
 
     while ($true) {
-        $payloadInfo = Try-GetWholeScriptHostPayloadInfo -ScriptText $working
+        $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $working
         if (-not $payloadInfo) { break }
 
-        $payloadText = [string]$payloadInfo.PayloadText
-        if ([string]::IsNullOrWhiteSpace($payloadText)) { break }
+        $payloadText = Get-SafeNonEmptyString -Value $payloadInfo.PayloadText
+        if (-not $payloadText) { break }
 
         $payloadParse = Get-ScriptParseInfo -ScriptText $payloadText
         if (-not $payloadParse.IsValid) { break }
