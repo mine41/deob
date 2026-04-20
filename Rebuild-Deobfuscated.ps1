@@ -679,6 +679,188 @@ function Resolve-DynamicInvokeOriginInfo {
     }
 }
 
+function Get-DynamicInvokeAnchorTexts {
+    param(
+        $Record,
+        $Node
+    )
+
+    $anchors = [System.Collections.Generic.List[string]]::new()
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+
+    function Add-DynamicInvokeAnchor {
+        param([string]$Text)
+
+        if ([string]::IsNullOrWhiteSpace($Text)) { return }
+        if ($seen.Add($Text)) {
+            $anchors.Add($Text) | Out-Null
+        }
+    }
+
+    if ($Node -and $Node.PSObject.Properties['Text']) {
+        Add-DynamicInvokeAnchor -Text ([string]$Node.Text)
+    }
+
+    $preservedCommandText = Get-DynamicRecordValue -Record $Record -Name 'PreservedCommandText'
+    if ($null -ne $preservedCommandText) {
+        Add-DynamicInvokeAnchor -Text ([string]$preservedCommandText)
+    }
+
+    return @($anchors)
+}
+
+function Find-BestExactTextRangeInScriptText {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [AllowEmptyCollection()][string[]]$CandidateTexts,
+        [Nullable[int]]$PreferredStartOffset = $null
+    )
+
+    if ([string]::IsNullOrEmpty($ScriptText)) { return $null }
+    if (-not $CandidateTexts -or $CandidateTexts.Count -eq 0) { return $null }
+
+    $best = $null
+    foreach ($candidateText in @($CandidateTexts | Sort-Object Length -Descending)) {
+        if ([string]::IsNullOrWhiteSpace($candidateText)) { continue }
+
+        $searchIndex = 0
+        while ($searchIndex -lt $ScriptText.Length) {
+            $pos = $ScriptText.IndexOf($candidateText, $searchIndex, [System.StringComparison]::Ordinal)
+            if ($pos -lt 0) { break }
+
+            $distance = if ($null -ne $PreferredStartOffset) {
+                [Math]::Abs([int]$pos - [int]$PreferredStartOffset)
+            } else {
+                0
+            }
+
+            $isBetter = $false
+            if (-not $best) {
+                $isBetter = $true
+            } elseif ($candidateText.Length -gt $best.AnchorLength) {
+                $isBetter = $true
+            } elseif ($candidateText.Length -eq $best.AnchorLength -and $distance -lt $best.Distance) {
+                $isBetter = $true
+            } elseif ($candidateText.Length -eq $best.AnchorLength -and $distance -eq $best.Distance -and $pos -lt $best.StartOffset) {
+                $isBetter = $true
+            }
+
+            if ($isBetter) {
+                $best = [PSCustomObject]@{
+                    StartOffset  = [int]$pos
+                    EndOffset    = [int]($pos + $candidateText.Length)
+                    AnchorText   = [string]$candidateText
+                    AnchorLength = [int]$candidateText.Length
+                    Distance     = [int]$distance
+                }
+            }
+
+            $searchIndex = $pos + 1
+        }
+    }
+
+    return $best
+}
+
+function Resolve-DynamicInvokeRangeAgainstCurrentScript {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Nullable[int]]$StartOffset,
+        [Nullable[int]]$EndOffset,
+        $Node,
+        $Record
+    )
+
+    $anchors = @(Get-DynamicInvokeAnchorTexts -Record $Record -Node $Node)
+
+    function Test-AnchorRange {
+        param(
+            [Nullable[int]]$CandidateStart,
+            [Nullable[int]]$CandidateEnd
+        )
+
+        if ($null -eq $CandidateStart -or $null -eq $CandidateEnd) { return $false }
+        $start = [int]$CandidateStart
+        $end = [int]$CandidateEnd
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) { return $false }
+        if ($anchors.Count -eq 0) { return $true }
+
+        $fragment = $ScriptText.Substring($start, $end - $start)
+        foreach ($anchor in $anchors) {
+            if ($fragment -eq [string]$anchor) {
+                return $true
+            }
+        }
+
+        return $false
+    }
+
+    if (Test-AnchorRange -CandidateStart $StartOffset -CandidateEnd $EndOffset) {
+        return [PSCustomObject]@{
+            Success        = $true
+            StartOffset    = [int]$StartOffset
+            EndOffset      = [int]$EndOffset
+            ResolutionMode = 'direct'
+        }
+    }
+
+    $nodeStart = if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) { [int]$Node.TextStartOffset } else { $null }
+    $nodeEnd = if ($Node -and $Node.PSObject.Properties['TextEndOffset'] -and $null -ne $Node.TextEndOffset) { [int]$Node.TextEndOffset } else { $null }
+    if (Test-AnchorRange -CandidateStart $nodeStart -CandidateEnd $nodeEnd) {
+        return [PSCustomObject]@{
+            Success        = $true
+            StartOffset    = [int]$nodeStart
+            EndOffset      = [int]$nodeEnd
+            ResolutionMode = 'node'
+        }
+    }
+
+    $preferredStart = if ($null -ne $StartOffset) {
+        [int]$StartOffset
+    } elseif ($null -ne $nodeStart) {
+        [int]$nodeStart
+    } else {
+        $null
+    }
+
+    $anchorMatch = Find-BestExactTextRangeInScriptText -ScriptText $ScriptText -CandidateTexts $anchors -PreferredStartOffset $preferredStart
+    if ($anchorMatch) {
+        return [PSCustomObject]@{
+            Success        = $true
+            StartOffset    = [int]$anchorMatch.StartOffset
+            EndOffset      = [int]$anchorMatch.EndOffset
+            ResolutionMode = 'anchor_search'
+        }
+    }
+
+    $directRangeUsable = ($null -ne $StartOffset -and $null -ne $EndOffset -and [int]$StartOffset -ge 0 -and [int]$EndOffset -gt [int]$StartOffset -and [int]$EndOffset -le $ScriptText.Length)
+    if ($directRangeUsable) {
+        return [PSCustomObject]@{
+            Success        = $true
+            StartOffset    = [int]$StartOffset
+            EndOffset      = [int]$EndOffset
+            ResolutionMode = 'direct_unvalidated'
+        }
+    }
+
+    $nodeRangeUsable = ($null -ne $nodeStart -and $null -ne $nodeEnd -and $nodeStart -ge 0 -and $nodeEnd -gt $nodeStart -and $nodeEnd -le $ScriptText.Length)
+    if ($nodeRangeUsable) {
+        return [PSCustomObject]@{
+            Success        = $true
+            StartOffset    = [int]$nodeStart
+            EndOffset      = [int]$nodeEnd
+            ResolutionMode = 'node_unvalidated'
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success        = $false
+        StartOffset    = $null
+        EndOffset      = $null
+        ResolutionMode = 'unresolved'
+    }
+}
+
 function Test-EffectiveDynamicReplacementCandidate {
     param($Candidate)
 
@@ -819,7 +1001,7 @@ function Filter-ReplacementCandidatesByContext {
             continue
         }
 
-        if ($isExactCommandNameRange -and -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
+        if ($isExactCommandNameRange -and $sourceKind -ne 'FunctionResult' -and -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
             $skipped += New-SkipRecord -Reason 'invalid_command_name_replacement' -Message '命令位点替换结果不是高置信合法命令名，跳过' -Item $cand
             continue
         }
@@ -3299,6 +3481,14 @@ function Get-DynamicInvokeReplacementCandidates {
 
         $start = [int]$originInfo.StartOffset
         $end = [int]$originInfo.EndOffset
+        $resolvedRange = Resolve-DynamicInvokeRangeAgainstCurrentScript -ScriptText $ScriptText -StartOffset $start -EndOffset $end -Node $node -Record $rec
+        if (-not $resolvedRange.Success) {
+            $skipped += New-SkipRecord -Reason 'dynamic_out_of_range' -Message "DynamicInvoke offset 无法映射到当前脚本文本: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+
+        $start = [int]$resolvedRange.StartOffset
+        $end = [int]$resolvedRange.EndOffset
         if ($null -eq $start -or $null -eq $end) {
             $skipped += New-SkipRecord -Reason 'dynamic_no_offset' -Message 'DynamicInvoke 无原始 offset，跳过' -Item $baseItem
             continue
@@ -3345,6 +3535,7 @@ function Get-DynamicInvokeReplacementCandidates {
             OriginNodeId = [int]$originInfo.NodeId
             OriginRuntimeDepth = [int]$originInfo.RuntimeDepth
             IsOriginMappedFromRuntime = [bool]$originInfo.ViaRuntime
+            OriginResolutionMode = [string]$resolvedRange.ResolutionMode
             DynamicRecordIndex = $recordIndex
             ProtectsInnerCandidates = $true
             MaterializationKind = $materializationKind
@@ -3647,6 +3838,76 @@ function Test-ReplacementCandidateSyntaxValidity {
 
     $candidateText = $ScriptText.Substring(0, $start) + [string]$Candidate.Replacement + $ScriptText.Substring($end)
     return (Test-PowerShellSyntax -ScriptText $candidateText).IsValid
+}
+
+function Copy-ReplacementCandidate {
+    param($Candidate)
+
+    if (-not $Candidate) { return $null }
+
+    $copy = [PSCustomObject]@{}
+    foreach ($prop in $Candidate.PSObject.Properties) {
+        $copy | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force
+    }
+    return $copy
+}
+
+function Convert-ReplacementTextToExpressionLiteral {
+    param([string]$Text)
+
+    if ($null -eq $Text) { return "''" }
+    if ($Text -match "[`r`n]") {
+        return ConvertTo-SingleQuotedHereStringLiteral -Text $Text
+    }
+    return ConvertTo-SingleQuotedStringLiteral -Text $Text
+}
+
+function Get-SyntaxAdaptedReplacementCandidate {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][array]$CurrentSelected,
+        [Parameter(Mandatory)]$Candidate
+    )
+
+    if (-not $Candidate) { return $null }
+    if ($Candidate.PSObject.Properties['WholeScriptMaterialized'] -and [bool]$Candidate.WholeScriptMaterialized) { return $null }
+
+    $candidateType = if ($Candidate.PSObject.Properties['Type']) { [string]$Candidate.Type } else { '' }
+    if ($candidateType -in @('CommandName', 'LiteralizedCommand', 'VarRead', 'Inline')) { return $null }
+
+    $replacementText = if ($Candidate.PSObject.Properties['Replacement']) { [string]$Candidate.Replacement } else { $null }
+    if ([string]::IsNullOrWhiteSpace($replacementText)) { return $null }
+    if ($replacementText -match "^\s*'(.|'')*'\s*$") { return $null }
+    if ($replacementText -match "^\s*@'") { return $null }
+
+    if (Test-ReplacementCandidateSyntaxValidity -ScriptText $ScriptText -Candidate $Candidate) {
+        return $null
+    }
+
+    $adapted = Copy-ReplacementCandidate -Candidate $Candidate
+    $adapted.Replacement = Convert-ReplacementTextToExpressionLiteral -Text $replacementText
+    if ([string]$adapted.Replacement -eq $replacementText) { return $null }
+    if (-not (Test-ReplacementCandidateSyntaxValidity -ScriptText $ScriptText -Candidate $adapted)) {
+        return $null
+    }
+
+    $candidateId = Get-ReplacementIdentity -Replacement $Candidate
+    $adaptedSet = @()
+    foreach ($item in $CurrentSelected) {
+        if ((Get-ReplacementIdentity -Replacement $item) -eq $candidateId) {
+            $adaptedSet += $adapted
+        } else {
+            $adaptedSet += $item
+        }
+    }
+
+    $fullText = Apply-ReplacementsToText -Text $ScriptText -Replacements $adaptedSet
+    $fullCheck = Test-PowerShellSyntax -ScriptText $fullText
+    if (-not $fullCheck.IsValid) {
+        return $null
+    }
+
+    return $adapted
 }
 
 function Merge-DynamicInvokeReplacementCandidates {
@@ -4419,6 +4680,39 @@ function Ensure-SyntaxSafeReplacements {
             BaselineIsValid  = $baselineCheck.IsValid
             FinalIsValid     = $true
             FinalError       = $null
+        }
+    }
+
+    if (-not $check.IsValid -and $effective.Count -gt 0) {
+        $orderedForAdaptation = @($effective | Sort-Object @{ Expression = { Get-ReplacementCandidatePriority -Candidate $_ }; Descending = $true }, @{ Expression = { [int]($_.EndOffset - $_.StartOffset) }; Descending = $true }, StartOffset)
+        foreach ($cand in $orderedForAdaptation) {
+            $adapted = Get-SyntaxAdaptedReplacementCandidate -ScriptText $ScriptText -CurrentSelected $effective -Candidate $cand
+            if (-not $adapted) { continue }
+
+            $candId = Get-ReplacementIdentity -Replacement $cand
+            $next = @()
+            foreach ($item in $effective) {
+                if ((Get-ReplacementIdentity -Replacement $item) -eq $candId) {
+                    $next += $adapted
+                } else {
+                    $next += $item
+                }
+            }
+
+            $effective = @($next)
+            $skipped += New-SkipRecord -Reason 'syntax_guard_literalized' -Message '将表达式上下文中的候选回写为字符串字面量，避免生成裸命令文本导致语法错误' -Item $cand
+            $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
+            if ($check.IsValid) { break }
+        }
+
+        if ($check.IsValid) {
+            return [PSCustomObject]@{
+                Selected         = @($effective)
+                Skipped          = @($skipped)
+                BaselineIsValid  = $baselineCheck.IsValid
+                FinalIsValid     = $true
+                FinalError       = $null
+            }
         }
     }
 

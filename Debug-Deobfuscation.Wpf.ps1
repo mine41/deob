@@ -2027,6 +2027,7 @@ $cfgPngPath = [System.IO.Path]::ChangeExtension($cfgDotPath, '.png')
 $logPath = Join-Path $WorkDir 'debug.execution.log'
 $outPath = Join-Path $WorkDir 'debug.out.ps1'
 $reportPath = Join-Path $WorkDir 'debug.report.json'
+$uiErrorLogPath = Join-Path $WorkDir 'debug.ui-error.log'
 
 $cfg = Get-ScriptControlFlow -ScriptPath $scriptPathFull
 if (-not $cfg) { throw "CFG 生成失败: $scriptPathFull" }
@@ -3122,6 +3123,46 @@ function Export-DebugResult {
         "Information"
     ) | Out-Null
 }
+
+function Write-DebugUiException {
+    param(
+        [Parameter(Mandatory)]$Exception,
+        [string]$ActionName = 'UI'
+    )
+
+    $detail = New-Object System.Collections.Generic.List[string]
+    $detail.Add("Time    : $((Get-Date).ToString('o'))") | Out-Null
+    $detail.Add("Action  : $ActionName") | Out-Null
+    $detail.Add("Message : $($Exception.Exception.Message)") | Out-Null
+    if ($Exception.InvocationInfo) {
+        $detail.Add("Script  : $($Exception.InvocationInfo.ScriptName)") | Out-Null
+        $detail.Add("Line    : $($Exception.InvocationInfo.ScriptLineNumber)") | Out-Null
+        $detail.Add("Offset  : $($Exception.InvocationInfo.OffsetInLine)") | Out-Null
+        $detail.Add("Command : $($Exception.InvocationInfo.Line.Trim())") | Out-Null
+    }
+    if ($Exception.ScriptStackTrace) {
+        $detail.Add("Stack   :") | Out-Null
+        $detail.Add($Exception.ScriptStackTrace) | Out-Null
+    }
+    $detail.Add((''.PadLeft(72, '-'))) | Out-Null
+    Add-Content -LiteralPath $uiErrorLogPath -Value ($detail -join [Environment]::NewLine) -Encoding UTF8
+
+    $message = "操作失败: $ActionName`n$($Exception.Exception.Message)`n`n详细堆栈已写入:`n$uiErrorLogPath"
+    [System.Windows.MessageBox]::Show($message, 'PSDissect 调试错误', 'OK', 'Error') | Out-Null
+}
+
+function Invoke-DebugUiAction {
+    param(
+        [Parameter(Mandatory)][string]$ActionName,
+        [Parameter(Mandatory)][scriptblock]$Action
+    )
+
+    try {
+        & $Action
+    } catch {
+        Write-DebugUiException -Exception $_ -ActionName $ActionName
+    }
+}
 Refresh-LiveGraphArtifacts -Force -Reason 'InitialLoad' | Out-Null
 Set-GraphZoom -Zoom 1.0
 Refresh-VarGrid
@@ -3140,19 +3181,21 @@ $dynamicGrid.Add_SelectionChanged({
 })
 
 $btnNext.Add_Click({
-    if (Try-AdvanceFromHold) {
-        Update-CurrentNodeUi
-        return
-    }
+    Invoke-DebugUiAction -ActionName 'BtnNext' -Action {
+        if (Try-AdvanceFromHold) {
+            Update-CurrentNodeUi
+            return
+        }
 
-    $res = Invoke-CFGStep -Session $script:DebugState.Session
-    Append-StepRecords -Records $res.Records
-    Refresh-VarGrid
-    Update-PreviewUi
-    $held = Try-EnterHoldAfterStep -Records $res.Records
-    Update-CurrentNodeUi
-    if ($held) {
-        Update-StatusBar -Suffix "节点已执行，等待选择替换片段后再前进"
+        $res = Invoke-CFGStep -Session $script:DebugState.Session
+        Append-StepRecords -Records $res.Records
+        Refresh-VarGrid
+        Update-PreviewUi
+        $held = Try-EnterHoldAfterStep -Records $res.Records
+        Update-CurrentNodeUi
+        if ($held) {
+            Update-StatusBar -Suffix "节点已执行，等待选择替换片段后再前进"
+        }
     }
 })
 
@@ -3272,7 +3315,12 @@ $window.Add_Closed({
 })
 
 $window.Title = "解混淆调试模式 - $([System.IO.Path]::GetFileName($scriptPathFull)) [$currentHostDisplay]"
-$null = $window.ShowDialog()
+try {
+    $null = $window.ShowDialog()
+} catch {
+    Write-DebugUiException -Exception $_ -ActionName 'ShowDialog'
+    throw
+}
 
 
 

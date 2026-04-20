@@ -3677,6 +3677,20 @@ function Convert-FunctionDefinitionAst {
     $prev = [ref]$prevNode
     $endRef = [ref]$funcEnd
 
+    # 兼容函数头参数语法：function a($x, $y) { ... }
+    # 这类参数不会出现在 Body.ParamBlock 中，需要手动补一个 FuncParams 节点，
+    # 以便执行期完成实参与形参的绑定。
+    if ($null -ne $funcAst.Parameters -and @($funcAst.Parameters).Count -gt 0 -and
+        ($null -eq $funcAst.Body -or $null -eq $funcAst.Body.ParamBlock)) {
+        $paramText = 'param(' + ((@($funcAst.Parameters) | ForEach-Object {
+                    if ($_.Extent) { [string]$_.Extent.Text } else { '$null' }
+                }) -join ', ') + ')'
+        $paramNode = Add-Node -cfg $cfg -type "FuncParams" -text $paramText -line $funcAst.Extent.StartLineNumber -ast $null
+        $paramNode | Add-Member -NotePropertyName "ParameterAsts" -NotePropertyValue @($funcAst.Parameters) -Force
+        Add-Edge -cfg $cfg -from $funcStart.Id -to $paramNode.Id
+        $prev.Value = $paramNode
+    }
+
     # 使用通用函数处理函数体的 ScriptBlock
     if ($null -ne $funcAst.Body) {
         $null = Convert-ScriptBlockBody -cfg $cfg -scriptBlockAst $funcAst.Body -prevNodeRef $prev -endNodeRef $endRef -paramNodeType "FuncParams"

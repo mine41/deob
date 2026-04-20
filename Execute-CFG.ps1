@@ -2369,6 +2369,30 @@ function Get-NodeTextExecutionInfo {
     }
 }
 
+function Get-NodeAstGlobalExtent {
+    param(
+        $Node,
+        $Ast
+    )
+
+    if ($null -eq $Ast -or -not $Ast.Extent) { return $null }
+
+    $startOffset = [int]$Ast.Extent.StartOffset
+    $endOffset = [int]$Ast.Extent.EndOffset
+
+    if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) {
+        $baseOffset = [int]$Node.TextStartOffset
+        $startOffset = $baseOffset + $startOffset
+        $endOffset = $baseOffset + $endOffset
+    }
+
+    return [PSCustomObject]@{
+        StartOffset = $startOffset
+        EndOffset   = $endOffset
+        Text        = [string]$Ast.Extent.Text
+    }
+}
+
 function Resolve-InvocationArgumentValue {
     param(
         $ArgumentAst,
@@ -2450,7 +2474,8 @@ function Get-CommandInvocationBindings {
         }
 
         $resolved = Resolve-InvocationArgumentValue -ArgumentAst $elem -Context $Context -CallerNodeId $CallerNodeId
-        $positionalArguments += $resolved.Value
+        # Preserve array-valued arguments as a single positional argument.
+        $positionalArguments += ,$resolved.Value
         $logEntries += [PSCustomObject]@{
             Kind    = 'Positional'
             Name    = $null
@@ -2579,9 +2604,9 @@ function Get-NodeTextScriptBlockArguments {
             $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
             if ($argResult.Success) {
                 $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
-                $arguments += $argValue
+                $arguments += ,$argValue
             } else {
-                $arguments += $null
+                $arguments += ,$null
             }
         }
 
@@ -2654,9 +2679,9 @@ function Get-NodeTextScriptBlockArguments {
         $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
         if ($argResult.Success) {
             $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
-            $arguments += $argValue
+            $arguments += ,$argValue
         } else {
-            $arguments += $null
+            $arguments += ,$null
         }
     }
 
@@ -2731,6 +2756,7 @@ function Get-DynamicArgumentCodeFromNodeText {
     $replacementStartOffset = $null
     $replacementEndOffset = $null
     $statement = Get-FirstStatementFromScriptAst -ScriptAst $scriptAst
+    $topLevelCommandAst = Get-TopLevelCommandAstFromStatementAst -StatementAst $statement
     if ($statement -and $statement.Extent) {
         $replacementStartOffset = [int]$statement.Extent.StartOffset
         $replacementEndOffset = [int]$statement.Extent.EndOffset
@@ -2784,6 +2810,11 @@ function Get-DynamicArgumentCodeFromNodeText {
     if (-not $argCode) {
         $cmdAst = Get-PrimaryCommandAstFromScriptAst -ScriptAst $scriptAst
         if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
+            if ($DynamicType -in @("IEX", "PowerShellCommand") -and $cmdAst.Extent) {
+                $replacementStartOffset = [int]$cmdAst.Extent.StartOffset
+                $replacementEndOffset = [int]$cmdAst.Extent.EndOffset
+            }
+
             $cmdName = $cmdAst.GetCommandName()
             if (($null -eq $cmdName -or [string]::IsNullOrWhiteSpace([string]$cmdName) -or [string]$cmdName -match '^[&\.]') -and
                 $CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName']) {
@@ -2828,6 +2859,11 @@ function Get-DynamicArgumentCodeFromNodeText {
                 $fromPipelineInput = $true
             }
         }
+    }
+
+    if ($DynamicType -in @("IEX", "PowerShellCommand") -and $topLevelCommandAst -and $topLevelCommandAst.Extent) {
+        $replacementStartOffset = [int]$topLevelCommandAst.Extent.StartOffset
+        $replacementEndOffset = [int]$topLevelCommandAst.Extent.EndOffset
     }
 
     return [PSCustomObject]@{
@@ -5985,6 +6021,17 @@ function Invoke-FunctionCall {
         [hashtable]$Context
     )
 
+    if ([string]::IsNullOrWhiteSpace($FuncName)) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] Function name is null or empty"
+        return @{
+            Success  = $false
+            Executed = $true
+            Error    = "Function name is null or empty"
+            Action   = "CallFunction"
+            Target   = $FuncName
+        }
+    }
+
     # 1. 检查调用深度
     if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
         Write-ExecutionLog -Context $Context -Message "  [ERROR] Max call depth ($($Context.MaxCallDepth)) exceeded"
@@ -6058,7 +6105,7 @@ function Invoke-FunctionCall {
         "__proc_input"
     }
 
-    $cmdAst = $callerInfo.CommandAst
+    $cmdAst = if ($callerInfo.TopLevelCommandAst) { $callerInfo.TopLevelCommandAst } else { $callerInfo.CommandAst }
     if ($cmdAst -and $cmdAst.CommandElements -and $cmdAst.CommandElements.Count -gt 1) {
         $bindingInfo = Get-CommandInvocationBindings -CommandAst $cmdAst -Context $Context -StartIndex 1 -CallerNodeId $CallerNode.Id
         $arguments = @($bindingInfo.PositionalArguments)
@@ -6096,10 +6143,11 @@ function Invoke-FunctionCall {
         $Context.ScopeStack[-1].NamedArguments = $namedArguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
         $Context.ScopeStack[-1].CallerNodeId = $CallerNode.Id
-        if ($cmdAst -and $cmdAst.Extent) {
-            $Context.ScopeStack[-1].InvocationStartOffset = [int]$cmdAst.Extent.StartOffset
-            $Context.ScopeStack[-1].InvocationEndOffset = [int]$cmdAst.Extent.EndOffset
-            $Context.ScopeStack[-1].InvocationText = [string]$cmdAst.Extent.Text
+        $cmdExtent = Get-NodeAstGlobalExtent -Node $CallerNode -Ast $cmdAst
+        if ($cmdExtent) {
+            $Context.ScopeStack[-1].InvocationStartOffset = [int]$cmdExtent.StartOffset
+            $Context.ScopeStack[-1].InvocationEndOffset = [int]$cmdExtent.EndOffset
+            $Context.ScopeStack[-1].InvocationText = [string]$cmdExtent.Text
         }
 
         if ($hasProcessBlock) {
@@ -6421,6 +6469,17 @@ function Invoke-ScriptBlockCall {
         [hashtable]$Context,
         [array]$PreParsedArguments = $null  # 预解析的参数（来自 Get-ScriptBlockCallInfo）
     )
+
+    if ([string]::IsNullOrWhiteSpace($BlockName)) {
+        Write-ExecutionLog -Context $Context -Message "  [ERROR] ScriptBlock name is null or empty"
+        return @{
+            Success  = $false
+            Executed = $true
+            Error    = "ScriptBlock name is null or empty"
+            Action   = "CallScriptBlock"
+            Target   = $BlockName
+        }
+    }
 
     # 1. 检查调用深度
     if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
@@ -6852,7 +6911,13 @@ function Handle-DynamicInvoke {
     if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) {
         $nodeBaseStartOffset = [int]$Node.TextStartOffset
     }
-    if ($null -ne $nodeBaseStartOffset -and
+    if ($dynType -in @('IEX', 'PowerShellCommand') -and
+        $Node -and
+        $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset -and
+        $Node.PSObject.Properties['TextEndOffset'] -and $null -ne $Node.TextEndOffset) {
+        $dynamicRecord.ReplacementStartOffset = [int]$Node.TextStartOffset
+        $dynamicRecord.ReplacementEndOffset = [int]$Node.TextEndOffset
+    } elseif ($null -ne $nodeBaseStartOffset -and
         $argCodeInfo.PSObject.Properties['ReplacementStartOffset'] -and $null -ne $argCodeInfo.ReplacementStartOffset -and
         $argCodeInfo.PSObject.Properties['ReplacementEndOffset'] -and $null -ne $argCodeInfo.ReplacementEndOffset) {
         $dynamicRecord.ReplacementStartOffset = $nodeBaseStartOffset + [int]$argCodeInfo.ReplacementStartOffset
@@ -7367,11 +7432,19 @@ function Invoke-NodeTraverse {
             $currentScope = $Context.ScopeStack[-1]
             if (($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) -or
                 ($currentScope.NamedArguments -and $currentScope.NamedArguments.Count -gt 0)) {
-                # 从 Node.Ast (ParamBlockAst) 获取形参名
+                # 从 ParamBlockAst 或函数头参数节点获取形参名
+                $parameterAsts = @()
                 if ($currentNode.Ast -and $currentNode.Ast.Parameters) {
+                    $parameterAsts = @($currentNode.Ast.Parameters)
+                } elseif ($currentNode.PSObject.Properties['ParameterAsts'] -and $currentNode.ParameterAsts) {
+                    $parameterAsts = @($currentNode.ParameterAsts)
+                }
+                if ($parameterAsts.Count -gt 0) {
                     $paramNames = @()
-                    foreach ($param in $currentNode.Ast.Parameters) {
-                        $paramNames += $param.Name.VariablePath.UserPath
+                    foreach ($param in $parameterAsts) {
+                        if ($param -and $param.Name -and $param.Name.VariablePath) {
+                            $paramNames += $param.Name.VariablePath.UserPath
+                        }
                     }
 
                     $namedLookup = @{}
@@ -7418,6 +7491,10 @@ function Invoke-NodeTraverse {
         # 记录执行前的变量值（读取的变量）
         $varsBefore = @{}
         foreach ($varInfo in $currentNode.VarsRead) {
+            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
+                Write-ExecutionLog -Context $Context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
+                continue
+            }
             # 获取实际变量名（考虑作用域前缀）
             $actualVarName = $varInfo.Name
             if ($Context.ScopeStack.Count -gt 0) {
@@ -7488,6 +7565,10 @@ function Invoke-NodeTraverse {
         # 记录执行后的变量值（写入的变量）
         $varsAfter = @{}
         foreach ($varInfo in $currentNode.VarsWritten) {
+            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
+                Write-ExecutionLog -Context $Context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
+                continue
+            }
             # 获取实际变量名（考虑作用域前缀）
             $actualVarName = $varInfo.Name
             if ($Context.ScopeStack.Count -gt 0) {
@@ -10674,10 +10755,18 @@ function Invoke-CFGStep {
             $currentScope = $context.ScopeStack[-1]
             if (($currentScope.Arguments -and $currentScope.Arguments.Count -gt 0) -or
                 ($currentScope.NamedArguments -and $currentScope.NamedArguments.Count -gt 0)) {
+                $parameterAsts = @()
                 if ($currentNode.Ast -and $currentNode.Ast.Parameters) {
+                    $parameterAsts = @($currentNode.Ast.Parameters)
+                } elseif ($currentNode.PSObject.Properties['ParameterAsts'] -and $currentNode.ParameterAsts) {
+                    $parameterAsts = @($currentNode.ParameterAsts)
+                }
+                if ($parameterAsts.Count -gt 0) {
                     $paramNames = @()
-                    foreach ($param in $currentNode.Ast.Parameters) {
-                        $paramNames += $param.Name.VariablePath.UserPath
+                    foreach ($param in $parameterAsts) {
+                        if ($param -and $param.Name -and $param.Name.VariablePath) {
+                            $paramNames += $param.Name.VariablePath.UserPath
+                        }
                     }
 
                     $namedLookup = @{}
@@ -10721,6 +10810,10 @@ function Invoke-CFGStep {
 
         $varsBefore = @{}
         foreach ($varInfo in @($currentNode.VarsRead)) {
+            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
+                Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
+                continue
+            }
             $actualVarName = $varInfo.Name
             if ($context.ScopeStack.Count -gt 0) {
                 $currentScope = $context.ScopeStack[-1]
@@ -10784,6 +10877,10 @@ function Invoke-CFGStep {
             }
 
             foreach ($varInfo in @($currentNode.VarsWritten)) {
+                if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
+                    Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
+                    continue
+                }
                 $actualVarName = $varInfo.Name
                 if ($context.ScopeStack.Count -gt 0) {
                     $currentScope = $context.ScopeStack[-1]
