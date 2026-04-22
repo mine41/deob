@@ -261,4 +261,3 @@ Common functions:
 - `Generate-CFG.ps1`: CFG generation and DOT export
 - `Execute-CFG.ps1`: execution engine and debug session API
 - `Ui-Localization.ps1`: bilingual UI text for debug and replay
-- `in/`: sample input directory
