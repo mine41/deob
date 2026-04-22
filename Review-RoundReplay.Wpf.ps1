@@ -134,9 +134,32 @@ function Import-UiAssemblies {
 
 Import-UiAssemblies
 
+$uiLocPath = Join-Path $PSScriptRoot 'Ui-Localization.ps1'
+if (-not (Test-Path -LiteralPath $uiLocPath)) {
+    throw "缺少文件: $uiLocPath"
+}
+. $uiLocPath
+
+$script:UiLanguage = 'zh-CN'
+if (-not $NoUI) {
+    $selectedLanguage = Show-LanguageSelectionDialog
+    if ([string]::IsNullOrWhiteSpace([string]$selectedLanguage)) { return }
+    $script:UiLanguage = [string]$selectedLanguage
+}
+$script:UiText = Get-UiTextPack -Scope 'Replay' -Language $script:UiLanguage
+
+function L {
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [object[]]$FormatArgs = @()
+    )
+
+    return Get-UiText -Pack $script:UiText -Key $Key -Args $FormatArgs
+}
+
 function Select-WorkDirDialog {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = "选择 *.work 工作目录（例如: xxx.rebuilt.ps1.work）"
+    $dlg.Description = L 'folder.description'
     $dlg.ShowNewFolderButton = $false
     $result = $dlg.ShowDialog()
     if ($result -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
@@ -186,7 +209,7 @@ function Select-RoundDialog {
 
     $rounds = @(Get-RoundList -Dir $Dir)
     if ($rounds.Count -eq 0) {
-        [System.Windows.MessageBox]::Show("目录中未找到 round*.execution.log: `n$Dir", "未找到 Round", "OK", "Warning") | Out-Null
+        [System.Windows.MessageBox]::Show((L 'message.no_round_found' @("`n", $Dir)), (L 'title.no_round_found'), "OK", "Warning") | Out-Null
         return $null
     }
 
@@ -202,14 +225,19 @@ function Select-RoundDialog {
         [PSCustomObject]@{
             Round  = $n
             Label  = "Round $label"
-            Report = if ($sum) { "candidates=$($sum.CandidateCount) applied=$($sum.AppliedCount) skipped=$($sum.SkippedCount)" + $(if (-not [string]::IsNullOrWhiteSpace($sumHostDisplay)) { " host=$sumHostDisplay" } else { "" }) } else { "(no report)" }
+            Report = if ($sum) {
+                $hostSuffix = if (-not [string]::IsNullOrWhiteSpace($sumHostDisplay)) { L 'round.report_host_suffix' @($sumHostDisplay) } else { '' }
+                L 'round.report_summary' @($sum.CandidateCount, $sum.AppliedCount, $sum.SkippedCount, $hostSuffix)
+            } else {
+                L 'report.none_short'
+            }
         }
     }
 
-    [xml]$xaml = @'
+    $xamlText = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="选择 Round" Height="360" Width="520"
+        Title="__LOC_XAML_ROUND_PICKER_WINDOW_TITLE__" Height="360" Width="520"
         WindowStartupLocation="CenterScreen" ResizeMode="CanResize">
   <Grid Margin="10">
     <Grid.RowDefinitions>
@@ -218,24 +246,25 @@ function Select-RoundDialog {
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
-    <TextBlock Grid.Row="0" Text="请选择要复盘的 round：" Margin="0,0,0,8"/>
+    <TextBlock Grid.Row="0" Text="__LOC_XAML_ROUND_PICKER_PROMPT__" Margin="0,0,0,8"/>
 
     <DataGrid Grid.Row="1" Name="RoundGrid" AutoGenerateColumns="False" IsReadOnly="True"
               SelectionMode="Single" SelectionUnit="FullRow" HeadersVisibility="Column">
       <DataGrid.Columns>
-        <DataGridTextColumn Header="Round" Binding="{Binding Label}" Width="120"/>
-        <DataGridTextColumn Header="Report" Binding="{Binding Report}" Width="*"/>
+        <DataGridTextColumn Header="__LOC_XAML_ROUND_PICKER_ROUND_HEADER__" Binding="{Binding Label}" Width="120"/>
+        <DataGridTextColumn Header="__LOC_XAML_ROUND_PICKER_REPORT_HEADER__" Binding="{Binding Report}" Width="*"/>
       </DataGrid.Columns>
     </DataGrid>
 
     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-      <Button Name="BtnOk" Content="OK" Width="90" Margin="0,0,8,0"/>
-      <Button Name="BtnCancel" Content="Cancel" Width="90" IsCancel="True"/>
+      <Button Name="BtnOk" Content="__LOC_XAML_ROUND_PICKER_BTN_OK__" Width="90" Margin="0,0,8,0"/>
+      <Button Name="BtnCancel" Content="__LOC_XAML_ROUND_PICKER_BTN_CANCEL__" Width="90" IsCancel="True"/>
     </StackPanel>
   </Grid>
 </Window>
 '@
 
+    [xml]$xaml = Resolve-LocalizedTemplate -Template $xamlText -Pack $script:UiText
     $reader = New-Object System.Xml.XmlNodeReader $xaml
     $win = [System.Windows.Markup.XamlReader]::Load($reader)
 
@@ -482,7 +511,40 @@ function Load-Report {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     try {
-        return (Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json)
+        $report = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($null -eq $report) { return $null }
+
+        $localizeItems = {
+            param($Items)
+
+            if (-not $Items) { return @() }
+
+            return @($Items | ForEach-Object {
+                    if ($null -eq $_) { return }
+
+                    $reason = if ($_.PSObject.Properties['Reason']) { [string]$_.Reason } else { $null }
+                    $row = [ordered]@{}
+                    foreach ($prop in @($_.PSObject.Properties)) {
+                        $value = $prop.Value
+                        if ($prop.Name -eq 'Message') {
+                            $value = Resolve-LocalizedDiagnosticMessage -Language $script:UiLanguage -Reason $reason -Message ([string]$prop.Value)
+                        }
+                        $row[$prop.Name] = $value
+                    }
+                    [PSCustomObject]$row
+                })
+        }
+
+        $copy = [ordered]@{}
+        foreach ($prop in @($report.PSObject.Properties)) {
+            switch ($prop.Name) {
+                'Applied' { $copy[$prop.Name] = & $localizeItems $prop.Value }
+                'Skipped' { $copy[$prop.Name] = & $localizeItems $prop.Value }
+                default { $copy[$prop.Name] = $prop.Value }
+            }
+        }
+
+        return [PSCustomObject]$copy
     } catch {
         return $null
     }
@@ -791,7 +853,7 @@ while ($true) {
         break
     } catch {
         if ($NoUI) { throw }
-        [System.Windows.MessageBox]::Show($_.Exception.Message, "无效 WorkDir", "OK", "Warning") | Out-Null
+        [System.Windows.MessageBox]::Show($_.Exception.Message, (L 'message.invalid_workdir'), "OK", "Warning") | Out-Null
         $WorkDir = $null
         while ([string]::IsNullOrWhiteSpace($WorkDir)) {
             $WorkDir = Select-WorkDirDialog
@@ -838,10 +900,10 @@ if ($NoUI) {
 
 # ========== WPF 主界面 ==========
 
-[xml]$mainXaml = @'
+$mainXamlText = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="CFG 执行复盘器" Height="920" Width="1500"
+        Title="__LOC_XAML_WINDOW_TITLE__" Height="920" Width="1500"
         WindowStartupLocation="CenterScreen">
   <DockPanel>
     <Border DockPanel.Dock="Top" Background="#F3F3F3" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1">
@@ -852,13 +914,13 @@ if ($NoUI) {
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Grid.Column="0">
-          <Button Name="BtnOpenWorkDir" Content="打开文件" Width="90" Margin="0,0,8,0"/>
-          <Button Name="BtnChangeRound" Content="更换 Round" Width="100" Margin="0,0,12,0"/>
-          <Button Name="BtnPrev" Content="上一步" Width="90" Margin="0,0,8,0"/>
-          <Button Name="BtnNext" Content="下一步" Width="90" Margin="0,0,8,0"/>
-          <Button Name="BtnReset" Content="重置" Width="90" Margin="0,0,8,0"/>
-          <Button Name="BtnLast" Content="执行到最后" Width="110" Margin="0,0,12,0"/>
-          <TextBlock Text="CFG缩放" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#444"/>
+          <Button Name="BtnOpenWorkDir" Content="__LOC_XAML_BTN_OPEN_WORKDIR__" Width="90" Margin="0,0,8,0"/>
+          <Button Name="BtnChangeRound" Content="__LOC_XAML_BTN_CHANGE_ROUND__" Width="100" Margin="0,0,12,0"/>
+          <Button Name="BtnPrev" Content="__LOC_XAML_BTN_PREV__" Width="90" Margin="0,0,8,0"/>
+          <Button Name="BtnNext" Content="__LOC_XAML_BTN_NEXT__" Width="90" Margin="0,0,8,0"/>
+          <Button Name="BtnReset" Content="__LOC_XAML_BTN_RESET__" Width="90" Margin="0,0,8,0"/>
+          <Button Name="BtnLast" Content="__LOC_XAML_BTN_LAST__" Width="110" Margin="0,0,12,0"/>
+          <TextBlock Text="__LOC_XAML_ZOOM_LABEL__" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#444"/>
           <Button Name="BtnZoomOut" Content="-" Width="28" Margin="0,0,6,0"/>
           <Slider Name="SldZoom" Width="140" Minimum="20" Maximum="300" Value="100" TickFrequency="10"
                   IsSnapToTickEnabled="False" SmallChange="5" LargeChange="20" VerticalAlignment="Center"
@@ -916,7 +978,7 @@ if ($NoUI) {
                       Background="#E0E0E0"/>
 
         <TabControl Grid.Row="2" Margin="6,6,10,10">
-          <TabItem Header="当前节点">
+          <TabItem Header="__LOC_XAML_TAB_CURRENT_NODE__">
             <Grid Margin="10">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -932,7 +994,7 @@ if ($NoUI) {
               <GridSplitter Grid.Row="3" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                             ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
                             ShowsPreview="True" Background="#E0E0E0"/>
-              <GroupBox Grid.Row="4" Header="当前节点还原片段">
+              <GroupBox Grid.Row="4" Header="__LOC_XAML_GROUP_CURRENT_RECOVERY__">
                 <Grid Margin="6">
                   <Grid.RowDefinitions>
                     <RowDefinition Height="*" MinHeight="50"/>
@@ -945,7 +1007,7 @@ if ($NoUI) {
                       <DataGridTextColumn Header="Original" Binding="{Binding Original}" Width="*"/>
                       <DataGridTextColumn Header="Replacement/Message" Binding="{Binding Replacement}" Width="*"/>
                       <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="130"/>
-                      <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="90"/>
+                      <DataGridTextColumn Header="__LOC_XAML_COLUMN_STATUS__" Binding="{Binding Status}" Width="90"/>
                       <DataGridTextColumn Header="Depth" Binding="{Binding Depth}" Width="70"/>
                       <DataGridTextColumn Header="Start" Binding="{Binding Start}" Width="70"/>
                       <DataGridTextColumn Header="End" Binding="{Binding End}" Width="70"/>
@@ -960,7 +1022,7 @@ if ($NoUI) {
                       <ColumnDefinition Width="6"/>
                       <ColumnDefinition Width="*" MinWidth="120"/>
                     </Grid.ColumnDefinitions>
-                    <GroupBox Grid.Column="0" Header="Original 全文">
+                    <GroupBox Grid.Column="0" Header="__LOC_XAML_GROUP_ORIGINAL_FULL__">
                       <TextBox Name="TxtRecoveryOriginalFull" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
                                VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="Wrap"
                                AcceptsReturn="True"/>
@@ -968,7 +1030,7 @@ if ($NoUI) {
                     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                   ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
                                   ShowsPreview="True" Background="#E0E0E0"/>
-                    <GroupBox Grid.Column="2" Header="Replacement/Message 全文">
+                    <GroupBox Grid.Column="2" Header="__LOC_XAML_GROUP_REPLACEMENT_FULL__">
                       <TextBox Name="TxtRecoveryReplacementFull" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
                                VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="Wrap"
                                AcceptsReturn="True"/>
@@ -979,7 +1041,7 @@ if ($NoUI) {
             </Grid>
           </TabItem>
 
-          <TabItem Header="变量">
+          <TabItem Header="__LOC_XAML_TAB_VARIABLES__">
             <Grid Margin="10">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="220"/>
@@ -994,12 +1056,12 @@ if ($NoUI) {
                 <RowDefinition Height="*" MinHeight="120"/>
               </Grid.RowDefinitions>
 
-              <GroupBox Header="累计变量状态" Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Margin="0,0,8,0">
+              <GroupBox Header="__LOC_XAML_GROUP_VARIABLE_STATE__" Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Margin="0,0,8,0">
                 <DataGrid Name="VarsStateGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                           EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12">
                   <DataGrid.Columns>
-                    <DataGridTextColumn Header="变量" Binding="{Binding Name}" Width="150"/>
-                    <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="*"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VARIABLE__" Binding="{Binding Name}" Width="150"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VALUE__" Binding="{Binding Value}" Width="*"/>
                   </DataGrid.Columns>
                 </DataGrid>
               </GroupBox>
@@ -1009,12 +1071,12 @@ if ($NoUI) {
                             ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
                             ShowsPreview="True" Background="#E0E0E0"/>
 
-              <GroupBox Header="本节点 VarsRead" Grid.Column="2" Grid.Row="0" Margin="0,0,8,8">
+              <GroupBox Header="__LOC_XAML_GROUP_VARS_READ__" Grid.Column="2" Grid.Row="0" Margin="0,0,8,8">
                 <DataGrid Name="VarsReadGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                           EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12">
                   <DataGrid.Columns>
-                    <DataGridTextColumn Header="变量" Binding="{Binding Name}" Width="130"/>
-                    <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="*"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VARIABLE__" Binding="{Binding Name}" Width="130"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VALUE__" Binding="{Binding Value}" Width="*"/>
                   </DataGrid.Columns>
                 </DataGrid>
               </GroupBox>
@@ -1023,12 +1085,12 @@ if ($NoUI) {
                             ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"
                             ShowsPreview="True" Background="#E0E0E0"/>
 
-              <GroupBox Header="本节点 VarsWritten" Grid.Column="2" Grid.Row="2" Margin="0,0,8,0">
+              <GroupBox Header="__LOC_XAML_GROUP_VARS_WRITTEN__" Grid.Column="2" Grid.Row="2" Margin="0,0,8,0">
                 <DataGrid Name="VarsWrittenGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                           EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12">
                   <DataGrid.Columns>
-                    <DataGridTextColumn Header="变量" Binding="{Binding Name}" Width="130"/>
-                    <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="*"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VARIABLE__" Binding="{Binding Name}" Width="130"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VALUE__" Binding="{Binding Value}" Width="*"/>
                   </DataGrid.Columns>
                 </DataGrid>
               </GroupBox>
@@ -1038,13 +1100,13 @@ if ($NoUI) {
                             ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
                             ShowsPreview="True" Background="#E0E0E0"/>
 
-              <GroupBox Header="ScopeStack" Grid.Column="4" Grid.Row="0" Grid.RowSpan="3">
+              <GroupBox Header="__LOC_XAML_GROUP_SCOPE_STACK__" Grid.Column="4" Grid.Row="0" Grid.RowSpan="3">
                 <ListBox Name="ScopeList" FontFamily="Consolas" FontSize="12"/>
               </GroupBox>
             </Grid>
           </TabItem>
 
-          <TabItem Header="Report">
+          <TabItem Header="__LOC_XAML_TAB_REPORT__">
             <Grid Margin="10">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -1052,11 +1114,11 @@ if ($NoUI) {
               </Grid.RowDefinitions>
               <TextBlock Name="TxtReportSummary" Foreground="#555" TextWrapping="Wrap"/>
               <TabControl Grid.Row="1" Margin="0,8,0,0">
-                <TabItem Header="Applied">
+                <TabItem Header="__LOC_XAML_TAB_APPLIED__">
                   <DataGrid Name="AppliedGrid" IsReadOnly="True" CanUserAddRows="False" AutoGenerateColumns="True"
                             EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12"/>
                 </TabItem>
-                <TabItem Header="Skipped">
+                <TabItem Header="__LOC_XAML_TAB_SKIPPED__">
                   <DataGrid Name="SkippedGrid" IsReadOnly="True" CanUserAddRows="False" AutoGenerateColumns="True"
                             EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12"/>
                 </TabItem>
@@ -1070,6 +1132,7 @@ if ($NoUI) {
 </Window>
 '@
 
+[xml]$mainXaml = Resolve-LocalizedTemplate -Template $mainXamlText -Pack $script:UiText
 $reader = New-Object System.Xml.XmlNodeReader $mainXaml
 $window = [System.Windows.Markup.XamlReader]::Load($reader)
 
@@ -1110,7 +1173,8 @@ function Update-ReportUi {
 
     if ($ReportData) {
         $hostText = Get-ReportHostDisplay -ReportData $ReportData
-        $txtReportSummary.Text = "candidates=$($ReportData.CandidateCount) applied=$($ReportData.AppliedCount) skipped=$($ReportData.SkippedCount)  (Strategy=$($ReportData.OverlapStrategy))" + $(if ($hostText) { "  host=$hostText" } else { "" })
+        $hostSuffix = if ($hostText) { L 'report.summary_host_suffix' @($hostText) } else { '' }
+        $txtReportSummary.Text = L 'report.summary' @($ReportData.CandidateCount, $ReportData.AppliedCount, $ReportData.SkippedCount, $ReportData.OverlapStrategy, $hostSuffix)
 
         [object[]]$appliedRows = @()
         [object[]]$skippedRows = @()
@@ -1124,7 +1188,7 @@ function Update-ReportUi {
         $appliedGrid.ItemsSource = $appliedRows
         $skippedGrid.ItemsSource = $skippedRows
     } else {
-        $txtReportSummary.Text = "(no report.json)"
+        $txtReportSummary.Text = L 'report.none'
         $appliedGrid.ItemsSource = @()
         $skippedGrid.ItemsSource = @()
     }
@@ -1142,7 +1206,8 @@ function Build-ReportNodeIndex {
         if (-not $idx.ContainsKey($nid)) { $idx[$nid] = New-Object System.Collections.ArrayList }
         $typeText = if ($a.Type -is [System.Array]) { (@($a.Type) -join '/') } else { [string]$a.Type }
         $null = $idx[$nid].Add([PSCustomObject]@{
-            Status      = 'Applied'
+            Status      = L 'recovery.status.applied'
+            StatusOrder = 0
             Type        = $typeText
             Depth       = [string]$a.Depth
             Start       = [string]$a.Start
@@ -1159,7 +1224,8 @@ function Build-ReportNodeIndex {
         $typeText = if ($s.Type -is [System.Array]) { (@($s.Type) -join '/') } else { [string]$s.Type }
         $msg = if ([string]::IsNullOrWhiteSpace([string]$s.Message)) { [string]$s.Reason } else { ([string]$s.Reason + ': ' + [string]$s.Message) }
         $null = $idx[$nid].Add([PSCustomObject]@{
-            Status      = 'Skipped'
+            Status      = L 'recovery.status.skipped'
+            StatusOrder = 1
             Type        = $typeText
             Depth       = [string]$s.Depth
             Start       = [string]$s.Start
@@ -1182,7 +1248,7 @@ function Get-NodeRecoveryRows {
     if (-not $Index) { return @() }
     if (-not $Index.ContainsKey($NodeId)) { return @() }
 
-    return @($Index[$NodeId] | Sort-Object @{ Expression = { $_.Status }; Descending = $false }, @{ Expression = { [int]($_.Start) }; Descending = $false }, @{ Expression = { [int]($_.Depth) }; Descending = $false })
+    return @($Index[$NodeId] | Sort-Object StatusOrder, @{ Expression = { [int]($_.Start) }; Descending = $false }, @{ Expression = { [int]($_.Depth) }; Descending = $false })
 }
 
 function Set-RecoveryDetailText {
@@ -1375,7 +1441,7 @@ function Ensure-GraphLoaded {
     Reset-GraphOverlayState
 
     if (-not (Test-Path -LiteralPath $files.PngPath)) {
-        Set-GraphPlaceholder -Message "(未找到 round$($files.Label).cfg.png)" -ClearImage
+        Set-GraphPlaceholder -Message (L 'graph.placeholder.missing_png' @($files.Label)) -ClearImage
         return $false
     }
 
@@ -1391,12 +1457,12 @@ function Ensure-GraphLoaded {
         $bmp.Freeze()
         $graphImage.Source = $bmp
     } catch {
-        Set-GraphPlaceholder -Message "(加载 cfg.png 失败: $_)" -ClearImage
+        Set-GraphPlaceholder -Message (L 'graph.placeholder.load_png_failed' @($_.Exception.Message)) -ClearImage
         return $false
     }
 
     if (-not $layout) {
-        Set-GraphPlaceholder -Message "(未找到 cfg.dot 或无法运行 dot -Tplain，节点图不可交互)"
+        Set-GraphPlaceholder -Message (L 'graph.placeholder.no_layout')
         return $true
     }
 
@@ -1451,7 +1517,7 @@ function Rebuild-GraphHotspots {
         $rect.Tag = $id
         $label = $n.Label
         $visits = if ($nodeToFrames.ContainsKey($id)) { $nodeToFrames[$id].Count } else { 0 }
-        $rect.ToolTip = "Node $id`nVisits: $visits`n---`n$label"
+        $rect.ToolTip = "Node $id`n$(L 'tooltip.visits'): $visits`n---`n$label"
         $rect.Add_MouseEnter({ $this.StrokeThickness = 1; $this.Stroke = [System.Windows.Media.Brushes]::DodgerBlue })
         $rect.Add_MouseLeave({ $this.StrokeThickness = 0 })
         $rect.Add_MouseLeftButtonUp({
@@ -1564,7 +1630,7 @@ function Set-CurrentIndex {
     )
 
     if ($frames.Count -le 0) {
-        $txtStatus.Text = "WorkDir=$WorkDir | Round=$($files.Label) | (无可用帧)"
+        $txtStatus.Text = L 'status.empty' @($WorkDir, $files.Label)
         $txtNodeHeader.Text = ""
         $txtNodeMeta.Text = ""
         $txtNodeRaw.Text = ""
@@ -1586,10 +1652,10 @@ function Set-CurrentIndex {
     $frame = $frames[$Index]
     $nid = [string]$frame.NodeId
 
-    $txtStatus.Text = "WorkDir=$WorkDir | Round=$($files.Label) | Frame=$Index/$($frames.Count-1) | Node=$nid [$($frame.NodeType)] | Status=$($frame.Status)"
+    $txtStatus.Text = L 'status.main' @($WorkDir, $files.Label, $Index, ($frames.Count - 1), $nid, $frame.NodeType, $frame.Status)
 
-    $txtNodeHeader.Text = "Node $nid [$($frame.NodeType)]"
-    $txtNodeMeta.Text = "Time=$($frame.Time)  Status=$($frame.Status)  Action=$($frame.Action)  Target=$($frame.Target)  Reason=$($frame.Reason)  Result=$($frame.Result)  Condition=$($frame.ConditionResult)"
+    $txtNodeHeader.Text = L 'node.header' @($nid, $frame.NodeType)
+    $txtNodeMeta.Text = L 'node.meta' @($frame.Time, $frame.Status, $frame.Action, $frame.Target, $frame.Reason, $frame.Result, $frame.ConditionResult)
     # 当前节点页编辑框仅展示代码本体，不重复展示状态/变量等信息
     $txtNodeRaw.Text = [string]$frame.Code
     Set-NodeRecoveryRows -Rows @(Get-NodeRecoveryRows -Index $reportNodeIndex -NodeId $nid)
@@ -1599,7 +1665,7 @@ function Set-CurrentIndex {
 
     $state = Get-StateAtIndex -Frames $frames -Checkpoints $checkpoints -Index $Index
     $varsStateGrid.ItemsSource = @(Convert-VarTableForGrid -Vars $state.Vars)
-    $scopeList.ItemsSource = @($state.ScopeStack | ForEach-Object { "$($_.ScopeType) $($_.ScopeName) (prefix=$($_.Prefix))" })
+    $scopeList.ItemsSource = @($state.ScopeStack | ForEach-Object { L 'scope.item' @($_.ScopeType, $_.ScopeName, $_.Prefix) })
 
     Update-Highlight -NodeId $nid
 
@@ -1638,9 +1704,9 @@ function Load-SessionIntoUi {
 
         $reportHostDisplay = Get-ReportHostDisplay -ReportData $script:report
     if ($reportHostDisplay) {
-        $window.Title = "CFG 执行复盘器 - Round $($files.Label) [$reportHostDisplay]"
+        $window.Title = L 'window.title.with_host' @($files.Label, $reportHostDisplay)
     } else {
-        $window.Title = "CFG 执行复盘器 - Round $($files.Label)"
+        $window.Title = L 'window.title.no_host' @($files.Label)
     }
 
     $script:SuppressGrid = $true
@@ -1677,14 +1743,14 @@ $nodeRecoveryGrid.Add_SelectionChanged({
 # 当前节点还原片段：右键复制完整值
 $nodeRecoveryContextMenu = New-Object System.Windows.Controls.ContextMenu
 $miCopyRecoveryOriginal = New-Object System.Windows.Controls.MenuItem
-$miCopyRecoveryOriginal.Header = '复制 Original'
+$miCopyRecoveryOriginal.Header = L 'menu.copy_original'
 $miCopyRecoveryOriginal.Add_Click({
     $row = $nodeRecoveryGrid.SelectedItem
     $text = if ($row) { [string]$row.Original } else { [string]$txtRecoveryOriginalFull.Text }
     try { [System.Windows.Clipboard]::SetText($text) } catch {}
 })
 $miCopyRecoveryReplacement = New-Object System.Windows.Controls.MenuItem
-$miCopyRecoveryReplacement.Header = '复制 Replacement/Message'
+$miCopyRecoveryReplacement.Header = L 'menu.copy_replacement'
 $miCopyRecoveryReplacement.Add_Click({
     $row = $nodeRecoveryGrid.SelectedItem
     $text = if ($row) { [string]$row.Replacement } else { [string]$txtRecoveryReplacementFull.Text }
@@ -1702,7 +1768,7 @@ $btnOpenWorkDir.Add_Click({
     try {
         $newDir = Resolve-WorkDirPath -Path $newDir
     } catch {
-        [System.Windows.MessageBox]::Show($_.Exception.Message, "打开文件失败", "OK", "Warning") | Out-Null
+        [System.Windows.MessageBox]::Show($_.Exception.Message, (L 'message.open_failed_title'), "OK", "Warning") | Out-Null
         return
     }
 
@@ -1712,7 +1778,7 @@ $btnOpenWorkDir.Add_Click({
     try {
         Load-SessionIntoUi -TargetWorkDir $newDir -TargetRound $newRound
     } catch {
-        [System.Windows.MessageBox]::Show("加载失败: $($_.Exception.Message)", "打开文件失败", "OK", "Error") | Out-Null
+        [System.Windows.MessageBox]::Show((L 'message.open_failed_load' @($_.Exception.Message)), (L 'message.open_failed_title'), "OK", "Error") | Out-Null
     }
 })
 
@@ -1723,7 +1789,7 @@ $btnChangeRound.Add_Click({
     try {
         Load-SessionIntoUi -TargetWorkDir $WorkDir -TargetRound $newRound
     } catch {
-        [System.Windows.MessageBox]::Show("切换 round 失败: $($_.Exception.Message)", "更换 Round 失败", "OK", "Error") | Out-Null
+        [System.Windows.MessageBox]::Show((L 'message.change_round_failed' @($_.Exception.Message)), (L 'message.change_round_failed_title'), "OK", "Error") | Out-Null
     }
 })
 
@@ -1746,9 +1812,9 @@ $btnZoomReset.Add_Click({ Set-GraphZoom -Zoom 1.0 })
 # 初始化
     $reportHostDisplay = Get-ReportHostDisplay -ReportData $script:report
     if ($reportHostDisplay) {
-        $window.Title = "CFG 执行复盘器 - Round $($files.Label) [$reportHostDisplay]"
+        $window.Title = L 'window.title.with_host' @($files.Label, $reportHostDisplay)
     } else {
-        $window.Title = "CFG 执行复盘器 - Round $($files.Label)"
+        $window.Title = L 'window.title.no_host' @($files.Label)
     }
 Set-GraphZoom -Zoom ($sldZoom.Value / 100.0)
 $framesGrid.SelectedIndex = 0

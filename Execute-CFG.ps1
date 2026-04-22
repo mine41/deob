@@ -288,6 +288,39 @@ function Invoke-InContext {
     }
 }
 
+function Get-SafePSBaseObject {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    try {
+        $psObject = $Value.PSObject
+    } catch {
+        return $null
+    }
+
+    if ($null -eq $psObject) { return $null }
+
+    try {
+        return $psObject.BaseObject
+    } catch {
+        return $null
+    }
+}
+
+function Unwrap-SafePSBaseObject {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    $baseObject = Get-SafePSBaseObject -Value $Value
+    if ($null -ne $baseObject -and $baseObject -ne $Value) {
+        return $baseObject
+    }
+
+    return $Value
+}
+
 function Test-ExecutionResultSequenceContainer {
     param($Value)
 
@@ -402,14 +435,14 @@ function Get-NodeVariableValues {
     }
 
     # 读取的变量
-    foreach ($varInfo in $Node.VarsRead) {
+    foreach ($varInfo in (Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsRead')) {
         $varName = $varInfo.Name
         $value = Get-VariableFromContext -ExecContext $ExecContext -Name $varName
         $result.Read[$varName] = $value
     }
 
     # 写入的变量
-    foreach ($varInfo in $Node.VarsWritten) {
+    foreach ($varInfo in (Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')) {
         $varName = $varInfo.Name
         $value = Get-VariableFromContext -ExecContext $ExecContext -Name $varName
         $result.Written[$varName] = $value
@@ -720,6 +753,21 @@ function Write-ExecutionLog {
     # Write-Host $logLine
 }
 
+function Initialize-ExecutionLogFile {
+    param([string]$LogPath)
+
+    if ([string]::IsNullOrWhiteSpace($LogPath)) {
+        return
+    }
+
+    $parent = Split-Path -Path $LogPath -Parent
+    if (-not [string]::IsNullOrWhiteSpace($parent) -and -not (Test-Path -LiteralPath $parent)) {
+        $null = New-Item -ItemType Directory -Path $parent -Force
+    }
+
+    [System.IO.File]::WriteAllText($LogPath, '', [System.Text.UTF8Encoding]::new($false))
+}
+
 function Test-ExecutionLogDetailEnabled {
     param(
         [hashtable]$Context,
@@ -884,8 +932,8 @@ function Get-BlockedPlaceholderPreservedText {
         return [string]$Value.PreservedText
     }
 
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -is [BlockedCommandPlaceholder]) {
-        $base = $Value.BaseObject
+    $base = Get-SafePSBaseObject -Value $Value
+    if ($null -ne $base -and $base -is [BlockedCommandPlaceholder]) {
         if ([string]::IsNullOrWhiteSpace([string]$base.PreservedText)) { return $null }
         return [string]$base.PreservedText
     }
@@ -1225,7 +1273,8 @@ function Test-ValueContainsBlockedPlaceholder {
     }
 
     if ($Value -is [BlockedCommandPlaceholder]) { return $true }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -is [BlockedCommandPlaceholder]) {
+    $baseObject = Get-SafePSBaseObject -Value $Value
+    if ($null -ne $baseObject -and $baseObject -is [BlockedCommandPlaceholder]) {
         return $true
     }
 
@@ -1993,9 +2042,7 @@ function Convert-DynamicCommandCandidateToName {
     param($Value)
 
     if ($null -eq $Value) { return $null }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
 
     if ($Value -is [string]) {
         $name = $Value.Trim()
@@ -2218,8 +2265,9 @@ function Convert-DynamicInvocationValueToScriptText {
         return [PSCustomObject]@{ Success = $false; Text = $null; Kind = $null }
     }
 
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        return Convert-DynamicInvocationValueToScriptText -Value $Value.BaseObject
+    $baseObject = Get-SafePSBaseObject -Value $Value
+    if ($null -ne $baseObject -and $baseObject -ne $Value) {
+        return Convert-DynamicInvocationValueToScriptText -Value $baseObject
     }
 
     if ($Value -is [string]) {
@@ -2831,8 +2879,10 @@ function Get-DynamicArgumentCodeFromNodeText {
                 $isScriptBlockCreateCommand = $true
             }
             $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
-            if (($DynamicType -eq "IEX" -and $wrappedDynamic.Success -and $wrappedDynamic.DynamicType -eq 'IEX') -or
-                ($DynamicType -eq 'ScriptBlockCreate' -and $wrappedDynamic.Success -and $wrappedDynamic.DynamicType -eq 'ScriptBlockCreate')) {
+            $wrappedDynamicType = [string](Get-CFGObjectPropertyValue -Object $wrappedDynamic -Name 'DynamicType' -Default $null)
+            $hostDynamicType = [string](Get-CFGObjectPropertyValue -Object $hostDynamicInfo -Name 'DynamicType' -Default $null)
+            if (($DynamicType -eq "IEX" -and $wrappedDynamic.Success -and $wrappedDynamicType -eq 'IEX') -or
+                ($DynamicType -eq 'ScriptBlockCreate' -and $wrappedDynamic.Success -and $wrappedDynamicType -eq 'ScriptBlockCreate')) {
                 $argCode = Get-CommandArgumentText -CommandAst $cmdAst -ParseInfo $parseInfo -FirstArgumentIndex $wrappedDynamic.ArgumentStartIndex
                 if ([string]::IsNullOrWhiteSpace($argCode) -and $cmdAst.CommandElements.Count -gt $wrappedDynamic.ArgumentStartIndex) {
                     $argCode = $cmdAst.CommandElements[$wrappedDynamic.ArgumentStartIndex].Extent.Text
@@ -2845,7 +2895,7 @@ function Get-DynamicArgumentCodeFromNodeText {
                     $argCode = $cmdAst.CommandElements[1].Extent.Text
                 }
                 $displayCode = $argCode
-            } elseif ($DynamicType -eq 'PowerShellCommand' -and $hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
+            } elseif ($DynamicType -eq 'PowerShellCommand' -and $hostDynamicType -eq 'PowerShellCommand') {
                 $argCode = $hostDynamicInfo.EvaluationCode
                 $displayCode = $hostDynamicInfo.PayloadText
             }
@@ -3292,18 +3342,130 @@ function Get-NodeById {
     return $node
 }
 
-# 统一 CFG 节点集合返回，避免 PS5.1 下单个 PSCustomObject 的 .Count 为空
-function ConvertTo-CFGNodeArray {
-    param($Value)
+function Resolve-CFGNodeValue {
+    param(
+        [hashtable]$CFG,
+        $Value
+    )
 
-    $items = @()
-    foreach ($item in @($Value)) {
-        if ($null -ne $item) {
-            $items += $item
+    if ($null -eq $Value) { return $null }
+
+    if ($Value -is [hashtable]) {
+        if ($Value.ContainsKey('Id') -and $null -ne $Value['Id']) {
+            Ensure-CFGNodeExecutionShape -Node $Value
+            return $Value
+        }
+        if ($Value.ContainsKey('NodeId') -and $null -ne $Value['NodeId'] -and $CFG) {
+            try {
+                $node = Get-NodeById -CFG $CFG -Id ([int]$Value['NodeId'])
+                if ($node) {
+                    Ensure-CFGNodeExecutionShape -Node $node
+                    return $node
+                }
+            } catch {
+            }
+        }
+    } else {
+        $idProp = $Value.PSObject.Properties['Id']
+        if ($null -ne $idProp -and $null -ne $idProp.Value) {
+            Ensure-CFGNodeExecutionShape -Node $Value
+            return $Value
+        }
+
+        $nodeIdProp = $Value.PSObject.Properties['NodeId']
+        if ($null -ne $nodeIdProp -and $null -ne $nodeIdProp.Value -and $CFG) {
+            try {
+                $node = Get-NodeById -CFG $CFG -Id ([int]$nodeIdProp.Value)
+                if ($node) {
+                    Ensure-CFGNodeExecutionShape -Node $node
+                    return $node
+                }
+            } catch {
+            }
         }
     }
 
-    return ,$items
+    if ($CFG) {
+        $candidateId = 0
+        $hasCandidateId = $false
+
+        if ($Value -is [int] -or $Value -is [long] -or $Value -is [short] -or $Value -is [byte]) {
+            $candidateId = [int]$Value
+            $hasCandidateId = $true
+        } elseif ($Value -is [string]) {
+            $parsedId = 0
+            if ([int]::TryParse([string]$Value, [ref]$parsedId)) {
+                $candidateId = $parsedId
+                $hasCandidateId = $true
+            }
+        }
+
+        if ($hasCandidateId) {
+            $node = Get-NodeById -CFG $CFG -Id $candidateId
+            if ($node) {
+                Ensure-CFGNodeExecutionShape -Node $node
+                return $node
+            }
+        }
+    }
+
+    $shouldEnumerate = ($Value -is [System.Array]) -or
+        ($Value -is [System.Collections.IEnumerable] -and
+         -not ($Value -is [string]) -and
+         -not ($Value -is [hashtable]) -and
+         $null -eq $Value.PSObject.Properties['Id'] -and
+         $null -eq $Value.PSObject.Properties['NodeId'])
+
+    if ($shouldEnumerate) {
+        foreach ($item in @($Value)) {
+            $resolvedItem = Resolve-CFGNodeValue -CFG $CFG -Value $item
+            if ($null -ne $resolvedItem) {
+                return $resolvedItem
+            }
+        }
+    }
+
+    return $null
+}
+
+# 统一 CFG 节点集合返回，避免 PS5.1 下单个 PSCustomObject 的 .Count 为空
+function ConvertTo-CFGNodeArray {
+    param(
+        [hashtable]$CFG,
+        $Value
+    )
+
+    $items = @()
+    $pending = New-Object System.Collections.Generic.Queue[object]
+    $pending.Enqueue($Value)
+
+    while ($pending.Count -gt 0) {
+        $item = $pending.Dequeue()
+        if ($null -eq $item) { continue }
+
+        $shouldEnumerate = ($item -is [System.Array]) -or
+            ($item -is [System.Collections.IEnumerable] -and
+             -not ($item -is [string]) -and
+             -not ($item -is [hashtable]) -and
+             $null -eq $item.PSObject.Properties['Id'] -and
+             $null -eq $item.PSObject.Properties['NodeId'])
+
+        if ($shouldEnumerate) {
+            foreach ($nestedItem in @($item)) {
+                if ($null -ne $nestedItem) {
+                    $pending.Enqueue($nestedItem)
+                }
+            }
+            continue
+        }
+
+        $resolvedNode = Resolve-CFGNodeValue -CFG $CFG -Value $item
+        if ($resolvedNode) {
+            $items += $resolvedNode
+        }
+    }
+
+    return @($items)
 }
 
 # 获取后继节点
@@ -3315,7 +3477,7 @@ function Get-NextNodes {
     )
 
     if ($null -eq $Node) {
-        return ,@()
+        return @()
     }
 
     $edges = Get-CFGOutgoingEdges -CFG $CFG -FromNodeId $Node.Id
@@ -3324,8 +3486,8 @@ function Get-NextNodes {
         # If Condition 入口 - 跟随 Condition 边
         "If Condition" {
             $edge = $edges | Where-Object { $_.Label -eq "Condition" } | Select-Object -First 1
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
 
         # 条件节点 - 根据求值结果选择边
@@ -3335,8 +3497,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "False" } | Select-Object -First 1
             }
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
 
         # ForEach/Process 条件节点
@@ -3346,8 +3508,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "No more items" } | Select-Object -First 1
             }
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
         "ProcessCondition" {
             if ($Context.LastConditionResult) {
@@ -3355,8 +3517,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "No more items" } | Select-Object -First 1
             }
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
 
         # Switch 条件节点
@@ -3366,8 +3528,8 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "False" } | Select-Object -First 1
             }
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
 
         # Case 条件节点
@@ -3377,34 +3539,34 @@ function Get-NextNodes {
             } else {
                 $edge = $edges | Where-Object { $_.Label -eq "False" } | Select-Object -First 1
             }
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
 
         # 控制流跳转节点
         "Return" {
             $edge = $edges | Where-Object { $_.Label -eq "Return" } | Select-Object -First 1
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
         "Exit" {
             $edge = $edges | Where-Object { $_.Label -eq "Exit" } | Select-Object -First 1
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
         "Break" {
             $edge = $edges | Where-Object { $_.Label -eq "Break" } | Select-Object -First 1
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
         "Continue" {
             $edge = $edges | Where-Object { $_.Label -eq "Continue" } | Select-Object -First 1
-            if ($edge) { return ,(ConvertTo-CFGNodeArray -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
-            return ,@()
+            if ($edge) { return (ConvertTo-CFGNodeArray -CFG $CFG -Value (Get-NodeById -CFG $CFG -Id $edge.To)) }
+            return @()
         }
         "Throw" {
             # 暂不处理异常，直接终止
-            return ,@()
+            return @()
         }
 
         # 其他节点 - 跟随顺序边
@@ -3418,7 +3580,7 @@ function Get-NextNodes {
                 $nextNode = Get-NodeById -CFG $CFG -Id $edge.To
                 if ($nextNode) { $nextNodes += $nextNode }
             }
-            return ,(ConvertTo-CFGNodeArray -Value $nextNodes)
+            return (ConvertTo-CFGNodeArray -CFG $CFG -Value $nextNodes)
         }
     }
 }
@@ -3659,7 +3821,7 @@ function Invoke-NodeDirect {
 
     # 处理管道变量：如果 VarsWritten 中有 _pipe_ 变量，将执行结果赋值给它
     if ($execResult.Success -and $Node.Type -eq 'PipelineElement') {
-        foreach ($varInfo in $Node.VarsWritten) {
+        foreach ($varInfo in (Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')) {
             if ($varInfo.Name -match '^_pipe_[a-f0-9]+$') {
                 # 将执行结果赋值给管道变量
                 $pipeVarName = $varInfo.Name
@@ -3671,11 +3833,11 @@ function Invoke-NodeDirect {
     # 条件节点记录结果
     $conditionTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
     if ($Node.Type -in $conditionTypes) {
-        $conditionItems = if ($execResult.Success) {
-            @(Get-ExecutionResultItems -Value $execResult.Result -TreatArraysAsSequence)
+        $conditionItems = [object[]]@(if ($execResult.Success) {
+                Get-ExecutionResultItems -Value $execResult.Result -TreatArraysAsSequence
         } else {
             @()
-        }
+        })
 
         if ($conditionItems.Count -gt 0) {
             $Context.LastConditionResult = [bool]$conditionItems[0]
@@ -3775,8 +3937,9 @@ function Invoke-NodeSafe {
                 $isDefinitionNode = $true
             }
             # 也检查 VarsWritten 是否包含脚本块变量名（排除纯定义节点）
-            if ($Node.VarsWritten) {
-                foreach ($varInfo in $Node.VarsWritten) {
+            $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+            if ($nodeVarsWritten.Count -gt 0) {
+                foreach ($varInfo in $nodeVarsWritten) {
                     if ($varInfo.Name -eq $blockName -or $varInfo.Name -match '^_block_') {
                         $isDefinitionNode = $true
                         break
@@ -3880,8 +4043,9 @@ function Invoke-NodeSafe {
         $preservedText = [string]$Node.Text
         $placeholder = New-BlockedPlaceholder -Command "$($methodCheck.Type).$($methodCheck.Method)" -Reason $methodCheck.Reason -PreservedText $preservedText
 
-        if ($Node.VarsWritten) {
-            foreach ($varInfo in $Node.VarsWritten) {
+        $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+        if ($nodeVarsWritten.Count -gt 0) {
+            foreach ($varInfo in $nodeVarsWritten) {
                 $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$varInfo.Name)
                 $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $placeholder)
                 Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName -Reason $methodCheck.Reason
@@ -3908,8 +4072,9 @@ function Invoke-NodeSafe {
         $preservedText = [string]$Node.Text
         $placeholder = New-BlockedPlaceholder -Command $comCheck.Detail -Reason $comCheck.Reason -PreservedText $preservedText
 
-        if ($Node.VarsWritten) {
-            foreach ($varInfo in $Node.VarsWritten) {
+        $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+        if ($nodeVarsWritten.Count -gt 0) {
+            foreach ($varInfo in $nodeVarsWritten) {
                 $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$varInfo.Name)
                 $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $placeholder)
                 Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName -Reason $comCheck.Reason
@@ -3957,8 +4122,9 @@ function Invoke-NodeSafe {
         $placeholder = New-BlockedPlaceholder -Command $commandInfo.ResolvedName -Reason $checkResult.Reason -PreservedText $preservedText
 
         # 如果节点有写入的变量，将其设置为占位符，防止后续引用报错
-        if ($Node.VarsWritten) {
-            foreach ($varInfo in $Node.VarsWritten) {
+        $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+        if ($nodeVarsWritten.Count -gt 0) {
+            foreach ($varInfo in $nodeVarsWritten) {
                 $actualVarName = Resolve-AssignmentActualVariableName -Context $Context -VariableName ([string]$varInfo.Name)
                 $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualVarName, $placeholder)
                 Set-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName -Reason $checkResult.Reason
@@ -4022,7 +4188,7 @@ function Invoke-NodeSafe {
         }
         "DynamicInvoke" {
             Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dynamic invoke detected: $($checkResult.Target)"
-            return Handle-DynamicInvoke -Node $Node -Context $Context -CommandInfo $commandInfo -DynamicTypeFromCommand $checkResult.DynamicType
+            return Handle-DynamicInvoke -Node $Node -Context $Context -CommandInfo $commandInfo -DynamicTypeFromCommand (Get-CFGObjectPropertyValue -Object $checkResult -Name 'DynamicType' -Default $null)
         }
         default {
             # 默认执行
@@ -4083,8 +4249,9 @@ function Get-CallerPipelineInput {
 
     $pipeVarNames = @()
 
-    if ($CallerNode -and $CallerNode.VarsRead) {
-        foreach ($varInfo in $CallerNode.VarsRead) {
+    $callerNodeVarsRead = @(Get-CFGNodeVarInfos -Node $CallerNode -PropertyName 'VarsRead')
+    if ($CallerNode -and $callerNodeVarsRead.Count -gt 0) {
+        foreach ($varInfo in $callerNodeVarsRead) {
             if ($varInfo.Name -match '^_pipe_[a-f0-9]+$' -and $varInfo.Name -notin $pipeVarNames) {
                 $pipeVarNames += $varInfo.Name
             }
@@ -4092,8 +4259,9 @@ function Get-CallerPipelineInput {
     }
 
     # 兜底：部分节点可能只在 VarsWritten 中记录了管道中间变量
-    if ($pipeVarNames.Count -eq 0 -and $CallerNode -and $CallerNode.VarsWritten) {
-        foreach ($varInfo in $CallerNode.VarsWritten) {
+    $callerNodeVarsWritten = @(Get-CFGNodeVarInfos -Node $CallerNode -PropertyName 'VarsWritten')
+    if ($pipeVarNames.Count -eq 0 -and $CallerNode -and $callerNodeVarsWritten.Count -gt 0) {
+        foreach ($varInfo in $callerNodeVarsWritten) {
             if ($varInfo.Name -match '^_pipe_[a-f0-9]+$' -and $varInfo.Name -notin $pipeVarNames) {
                 $pipeVarNames += $varInfo.Name
             }
@@ -4230,7 +4398,7 @@ function Add-OutputsToCurrentCapture {
         $frame.Outputs = @()
     }
 
-    $items = Get-ExecutionResultItems -Value $Result -TreatArraysAsSequence
+    $items = [object[]]@(Get-ExecutionResultItems -Value $Result -TreatArraysAsSequence)
     if ($items.Count -eq 0) {
         return
     }
@@ -4901,9 +5069,7 @@ function Expand-ForEachNumericStringInputCoreIfNeeded {
     }
 
     $single = $normalizedItems[0]
-    if ($single -is [psobject] -and $null -ne $single.BaseObject -and $single.BaseObject -ne $single) {
-        $single = $single.BaseObject
-    }
+    $single = Unwrap-SafePSBaseObject -Value $single
     if ($single -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$single)) {
         return [PSCustomObject]@{ Changed = $false; Items = $normalizedItems; Reason = $null }
     }
@@ -4959,9 +5125,7 @@ function Expand-ForEachNumericStringInputIfNeeded {
 function Convert-ForEachItemToInt {
     param($Value)
 
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
 
     if ($Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or $Value -is [uint16] -or
         $Value -is [int] -or $Value -is [uint32] -or $Value -is [long]) {
@@ -5006,9 +5170,7 @@ function Try-Invoke-ForEachCharBxorFastPath {
 function Convert-ForEachItemToChar {
     param($Value)
 
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
 
     if ($Value -is [char]) {
         return [PSCustomObject]@{ Success = $true; Value = [char]$Value }
@@ -5156,8 +5318,9 @@ function Invoke-ForEachObjectCmdlet {
 
     # 将输出写回 _pipe_xxx（仅当该节点需要产生管道输出）
     $writesPipeVar = $false
-    if ($pipeVar -and $Node.VarsWritten) {
-        foreach ($varInfo in $Node.VarsWritten) {
+    $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+    if ($pipeVar -and $nodeVarsWritten.Count -gt 0) {
+        foreach ($varInfo in $nodeVarsWritten) {
             if ($varInfo.Name -eq $pipeVar) {
                 $writesPipeVar = $true
                 break
@@ -5348,8 +5511,9 @@ function Invoke-WhereObjectCmdlet {
 
     # 将输出写回 _pipe_xxx（仅当该节点需要产生管道输出）
     $writesPipeVar = $false
-    if ($pipeVar -and $Node.VarsWritten) {
-        foreach ($varInfo in $Node.VarsWritten) {
+    $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+    if ($pipeVar -and $nodeVarsWritten.Count -gt 0) {
+        foreach ($varInfo in $nodeVarsWritten) {
             if ($varInfo.Name -eq $pipeVar) {
                 $writesPipeVar = $true
                 break
@@ -5978,8 +6142,9 @@ function Invoke-SelectObjectCmdlet {
 
     # 将输出写回 _pipe_xxx（仅当该节点需要产生管道输出）
     $writesPipeVar = $false
-    if ($pipeVar -and $Node.VarsWritten) {
-        foreach ($varInfo in $Node.VarsWritten) {
+    $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+    if ($pipeVar -and $nodeVarsWritten.Count -gt 0) {
+        foreach ($varInfo in $nodeVarsWritten) {
             if ($varInfo.Name -eq $pipeVar) {
                 $writesPipeVar = $true
                 break
@@ -6072,7 +6237,8 @@ function Invoke-FunctionCall {
 
     # 5. 计算返回节点（调用者的下一个节点）
     $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context)
-    $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
+    $returnNode = if ($nextNodes.Count -gt 0) { Resolve-CFGNodeValue -CFG $Context.CFG -Value $nextNodes[0] } else { $null }
+    $returnNodeId = if ($returnNode) { $returnNode.Id } else { $null }
 
     # 6. 提取调用者的实参并求值（执行期从 Node.Text 解析）
     $arguments = @()
@@ -6521,7 +6687,8 @@ function Invoke-ScriptBlockCall {
 
     # 5. 计算返回节点
     $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context)
-    $returnNodeId = if ($nextNodes.Count -gt 0) { $nextNodes[0].Id } else { $null }
+    $returnNode = if ($nextNodes.Count -gt 0) { Resolve-CFGNodeValue -CFG $Context.CFG -Value $nextNodes[0] } else { $null }
+    $returnNodeId = if ($returnNode) { $returnNode.Id } else { $null }
 
     # 6. 提取调用者的实参并求值
     $arguments = @()
@@ -6633,12 +6800,12 @@ function Get-ForEachProcessMacroVariableMap {
         CurrentVar = $null
     }
 
-    foreach ($varInfo in @($Node.VarsRead)) {
+    foreach ($varInfo in (Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsRead')) {
         if ($varInfo.Name -match '^_pipe_[a-f0-9]+$') {
             $map.PipeVar = [string]$varInfo.Name
         }
     }
-    foreach ($varInfo in @($Node.VarsWritten)) {
+    foreach ($varInfo in (Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')) {
         switch -Regex ([string]$varInfo.Name) {
             '^__pfo_in_'      { $map.InputVar = [string]$varInfo.Name; break }
             '^__pfo_.*_idx$'  { $map.IndexVar = [string]$varInfo.Name; break }
@@ -6646,7 +6813,7 @@ function Get-ForEachProcessMacroVariableMap {
         }
     }
     if ($bindNode.Count -gt 0) {
-        foreach ($varInfo in @($bindNode[0].VarsWritten)) {
+        foreach ($varInfo in (Get-CFGNodeVarInfos -Node $bindNode[0] -PropertyName 'VarsWritten')) {
             if ($varInfo.Name -match '^__pfo_.*_cur$') {
                 $map.CurrentVar = [string]$varInfo.Name
                 break
@@ -6943,7 +7110,8 @@ function Handle-DynamicInvoke {
 
     Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Type: $dynType"
 
-    if ($argumentValue -is [BlockedCommandPlaceholder] -or ($argumentValue -is [psobject] -and $argumentValue.BaseObject -is [BlockedCommandPlaceholder])) {
+    $argumentBaseObject = Get-SafePSBaseObject -Value $argumentValue
+    if ($argumentValue -is [BlockedCommandPlaceholder] -or ($null -ne $argumentBaseObject -and $argumentBaseObject -is [BlockedCommandPlaceholder])) {
         $preservedCommandText = Get-PreservedDynamicInvokeCommandText -Node $Node -ArgCode $argCode -DisplayArgCode $displayArgCode -PreservedArgumentText $blockedArgumentPreservedText
         $dynamicRecord.PreservedCommandText = $preservedCommandText
         $dynamicRecord.ReplacementText = $preservedCommandText
@@ -7175,7 +7343,8 @@ function Handle-DynamicInvoke {
 
         # 检查修改后的节点是否为调用形式（& $_dyn_xxx 或 . $_dyn_xxx）
         # 如果是，需要跳转到子图执行，而不是直接执行
-        $isCallForm = $Node.Text -match '^[&\.]?\s*\$' -and -not $Node.VarsWritten
+        $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
+        $isCallForm = $Node.Text -match '^[&\.]?\s*\$' -and ($nodeVarsWritten.Count -eq 0)
 
         if ($isCallForm) {
             # 设置调用节点的 Invokes 信息，让后续调用检测能找到
@@ -7200,8 +7369,8 @@ function Handle-DynamicInvoke {
         $execResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $execCode
 
         # 记录变量到块名的映射（用于后续调用时查找正确的子图）
-        if ($Node.VarsWritten -and $Node.VarsWritten.Count -gt 0) {
-            foreach ($varInfo in $Node.VarsWritten) {
+        if ($nodeVarsWritten.Count -gt 0) {
+            foreach ($varInfo in $nodeVarsWritten) {
                 # 将赋值目标变量映射到块名
                 $Context.VarToBlockMapping[$varInfo.Name] = $blockName
                 Write-ExecutionLog -Context $Context -Message "  [MAPPING] `$$($varInfo.Name) -> $blockName"
@@ -7209,9 +7378,9 @@ function Handle-DynamicInvoke {
         }
 
         # 记录变量写入
-        if ($Node.VarsWritten -and $Node.VarsWritten.Count -gt 0) {
+        if ($nodeVarsWritten.Count -gt 0) {
             Write-ExecutionLog -Context $Context -Message "  VarsWritten:"
-            foreach ($varInfo in $Node.VarsWritten) {
+            foreach ($varInfo in $nodeVarsWritten) {
                 $varValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $varInfo.Name
                 Write-ExecutionLog -Context $Context -Message ({ "    `$$($varInfo.Name) = $(Format-VariableValue $varValue)" }).GetNewClosure()
             }
@@ -7488,9 +7657,13 @@ function Invoke-NodeTraverse {
             }
         }
 
+        Ensure-CFGNodeExecutionShape -Node $currentNode
+        $currentNodeVarsRead = @(Get-CFGObjectPropertyValue -Object $currentNode -Name 'VarsRead' -Default @())
+        $currentNodeVarsWritten = @(Get-CFGObjectPropertyValue -Object $currentNode -Name 'VarsWritten' -Default @())
+
         # 记录执行前的变量值（读取的变量）
         $varsBefore = @{}
-        foreach ($varInfo in $currentNode.VarsRead) {
+        foreach ($varInfo in $currentNodeVarsRead) {
             if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
                 Write-ExecutionLog -Context $Context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
                 continue
@@ -7536,8 +7709,8 @@ function Invoke-NodeTraverse {
             }
 
             # PipelineElement：仅捕获末端元素的输出；写 _pipe_ 的节点为中间步骤（只用于传递）
-            if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNode.VarsWritten) {
-                foreach ($v in $currentNode.VarsWritten) {
+            if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNodeVarsWritten.Count -gt 0) {
+                foreach ($v in $currentNodeVarsWritten) {
                     if ($v.Name -match '^_pipe_[a-f0-9]+$') {
                         $captureThis = $false
                         break
@@ -7564,7 +7737,7 @@ function Invoke-NodeTraverse {
 
         # 记录执行后的变量值（写入的变量）
         $varsAfter = @{}
-        foreach ($varInfo in $currentNode.VarsWritten) {
+        foreach ($varInfo in $currentNodeVarsWritten) {
             if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
                 Write-ExecutionLog -Context $Context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
                 continue
@@ -7585,13 +7758,22 @@ function Invoke-NodeTraverse {
         Update-CFGAssignmentBlockedTaint -Node $currentNode -Context $Context
         Update-VariableScriptBlockMappingAfterNodeExecution -Node $currentNode -Context $Context
 
+        $execAction = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Action')
+        $execTarget = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Target'
+        $execReason = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Reason')
+        $execError = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Error')
+        $execOutput = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Result'
+        $execExecuted = [bool](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Executed' -Default $false)
+        $execSuccess = [bool](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Success' -Default $false)
+        $execJumpToNode = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'JumpToNode'
+
         # 写日志
         $shortText = $currentNode.Text  # 显示完整代码
-        $status = if ($execResult.Action -eq "Blocked") {
+        $status = if ($execAction -eq "Blocked") {
             "BLOCKED"
-        } elseif (-not $execResult.Executed) {
+        } elseif (-not $execExecuted) {
             "SKIP"
-        } elseif ($execResult.Success) {
+        } elseif ($execSuccess) {
             "OK"
         } else {
             "ERR"
@@ -7601,17 +7783,17 @@ function Invoke-NodeTraverse {
         Write-ExecutionLog -Context $Context -Message "  Status: $status"
 
         # 记录额外的执行动作信息
-        if ($execResult.Action -and $execResult.Action -notin @("Execute", "Skip")) {
-            Write-ExecutionLog -Context $Context -Message "  Action: $($execResult.Action)"
-            if ($execResult.Target) {
-                Write-ExecutionLog -Context $Context -Message "  Target: $($execResult.Target)"
+        if ($execAction -and $execAction -notin @("Execute", "Skip")) {
+            Write-ExecutionLog -Context $Context -Message "  Action: $execAction"
+            if ($null -ne $execTarget -and -not [string]::IsNullOrWhiteSpace([string]$execTarget)) {
+                Write-ExecutionLog -Context $Context -Message "  Target: $execTarget"
             }
-            if ($execResult.Reason) {
-                Write-ExecutionLog -Context $Context -Message "  Reason: $($execResult.Reason)"
+            if (-not [string]::IsNullOrWhiteSpace($execReason)) {
+                Write-ExecutionLog -Context $Context -Message "  Reason: $execReason"
             }
         }
 
-        if ($execResult.Executed) {
+        if ($execExecuted) {
             # 记录读取的变量
             if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsBefore.Count -gt 0) {
                 Write-ExecutionLog -Context $Context -Message "  VarsRead:"
@@ -7631,22 +7813,22 @@ function Invoke-NodeTraverse {
             }
 
             # 记录执行结果
-            if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
+            if ($null -ne $execOutput -and @($execOutput).Count -gt 0) {
                 $formattedResult = $null
                 if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogResultDetailsEnabled') {
-                    $formattedResult = Format-VariableValue $execResult.Result
+                    $formattedResult = Format-VariableValue $execOutput
                     Write-ExecutionLog -Context $Context -Message "  Result: $formattedResult"
                 }
 
                 # 如果在函数/脚本块作用域中，更新 LastSubgraphResult 用于返回值
                 if ($Context.ScopeStack.Count -gt 0) {
-                    $Context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execResult.Result -TreatArraysAsSequence
+                    $Context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execOutput -TreatArraysAsSequence
                 }
             }
 
             # 记录错误
-            if (-not $execResult.Success -and $execResult.Error) {
-                Write-ExecutionLog -Context $Context -Message "  Error: $($execResult.Error)"
+            if (-not $execSuccess -and -not [string]::IsNullOrWhiteSpace($execError)) {
+                Write-ExecutionLog -Context $Context -Message "  Error: $execError"
             }
 
             # 记录条件结果
@@ -7656,15 +7838,18 @@ function Invoke-NodeTraverse {
         }
 
         # 处理函数/脚本块调用 - 跳转到子图
-        if ($execResult.Action -in @("CallFunction", "CallScriptBlock") -and $execResult.JumpToNode) {
-            Write-ExecutionLog -Context $Context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
-            $currentNode = $execResult.JumpToNode
+        if ($execAction -in @("CallFunction", "CallScriptBlock") -and $execJumpToNode) {
+            $jumpNode = Resolve-CFGNodeValue -CFG $Context.CFG -Value $execJumpToNode
+            if ($jumpNode) {
+                Write-ExecutionLog -Context $Context -Message "  [JUMP] Jumping to Node $($jumpNode.Id)"
+            }
+            $currentNode = $jumpNode
             continue  # 跳转后不继续遍历当前节点的后继
         }
 
         # 获取后继节点并继续遍历
         $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context)
-        $currentNode = if ($nextNodes.Count -gt 0) { $nextNodes[0] } else { $null }
+        $currentNode = if ($nextNodes.Count -gt 0) { Resolve-CFGNodeValue -CFG $Context.CFG -Value $nextNodes[0] } else { $null }
     }
 }
 
@@ -7831,8 +8016,9 @@ function Get-SubgraphLocalVars {
         if ($nodeId -eq $EndNodeId) { continue }
 
         # 收集写入的变量（Local 作用域或未指定作用域）
-        if ($node.VarsWritten) {
-            foreach ($varInfo in $node.VarsWritten) {
+        $nodeVarsWritten = @(Get-CFGNodeVarInfos -Node $node -PropertyName 'VarsWritten')
+        if ($nodeVarsWritten.Count -gt 0) {
+            foreach ($varInfo in $nodeVarsWritten) {
                 # 跳过 global/script 作用域变量
                 if ($varInfo.Scope -notin @('Global', 'Script')) {
                     $localVars[$varInfo.Name] = $true
@@ -7950,8 +8136,8 @@ function Test-SuspiciousVariables {
     $suspicious = @()
 
     $allVars = @()
-    if ($Node.VarsRead) { $allVars += $Node.VarsRead }
-    if ($Node.VarsWritten) { $allVars += $Node.VarsWritten }
+    $allVars += @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsRead')
+    $allVars += @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
 
     foreach ($varInfo in $allVars) {
         if ($varInfo.Name -match '^_sc_[a-f0-9]{8}_') {
@@ -9137,7 +9323,7 @@ function Test-CommandSafety {
     }
 
     # 1.25. powershell/pwsh -Command 视为和 IEX 同类的动态执行入口
-    if ($hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
+    if ($hostDynamicInfo -and (Get-CFGObjectPropertyValue -Object $hostDynamicInfo -Name 'DynamicType' -Default $null) -eq 'PowerShellCommand') {
         return @{
             Action      = "DynamicInvoke"
             IsForbidden = $false
@@ -9185,7 +9371,7 @@ function Test-CommandSafety {
                 Action      = "DynamicInvoke"
                 IsForbidden = $false
                 Target      = $wrappedDynamic.EffectiveCommand
-                DynamicType = $wrappedDynamic.DynamicType
+                DynamicType = (Get-CFGObjectPropertyValue -Object $wrappedDynamic -Name 'DynamicType' -Default $null)
             }
         }
     }
@@ -9995,9 +10181,7 @@ function Invoke-CFGTraversal {
     )
 
     # 创建/清空日志文件（允许 LogPath=$null 以禁用日志）
-    if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
-        $null = New-Item -Path $LogPath -ItemType File -Force
-    }
+    Initialize-ExecutionLogFile -LogPath $LogPath
 
     # 创建执行上下文
     $execContext = New-ExecutionContext
@@ -10119,6 +10303,7 @@ function Invoke-CFGTraversal {
         DynamicBudgetStopwatch    = [System.Diagnostics.Stopwatch]::new()
     }
 
+    Ensure-CFGExecutionNodeShapes -CFG $CFG
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
     $hostDisplay = Format-PowerShellHostInfo -HostInfo $context.HostInfo
     Write-ExecutionLog -Context $context -Message "Host: $hostDisplay"
@@ -10181,9 +10366,7 @@ function New-CFGExecutionSession {
         [bool]$SafeMode = $true
     )
 
-    if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
-        $null = New-Item -Path $LogPath -ItemType File -Force
-    }
+    Initialize-ExecutionLogFile -LogPath $LogPath
 
     $execContext = New-ExecutionContext
     $context = @{
@@ -10302,6 +10485,7 @@ function New-CFGExecutionSession {
         DynamicBudgetStopwatch    = [System.Diagnostics.Stopwatch]::new()
     }
 
+    Ensure-CFGExecutionNodeShapes -CFG $CFG
     Write-ExecutionLog -Context $context -Message "=== CFG 调试会话开始 ==="
     $hostDisplay = Format-PowerShellHostInfo -HostInfo $context.HostInfo
     Write-ExecutionLog -Context $context -Message "Host: $hostDisplay"
@@ -10319,7 +10503,7 @@ function New-CFGExecutionSession {
     $null = Ensure-CFGExecutionIndexes -CFG $CFG
     Write-ExecutionLog -Context $context -Message ""
 
-    $startNode = Get-CFGFirstNodeByType -CFG $CFG -Type "Start"
+    $startNode = Resolve-CFGNodeValue -CFG $CFG -Value (Get-CFGFirstNodeByType -CFG $CFG -Type "Start")
     $completed = $false
     $stopReason = $null
     if ($null -eq $startNode) {
@@ -10479,6 +10663,131 @@ function Get-CFGConditionEdgeLabel {
     }
 }
 
+function Get-CFGExecutionResultValue {
+    param(
+        $ExecutionResult,
+        [Parameter(Mandatory)][string]$Name,
+        $Default = $null
+    )
+
+    if ($null -eq $ExecutionResult) { return $Default }
+
+    if ($ExecutionResult -is [hashtable]) {
+        if ($ExecutionResult.ContainsKey($Name)) {
+            return $ExecutionResult[$Name]
+        }
+        return $Default
+    }
+
+    $prop = $ExecutionResult.PSObject.Properties[$Name]
+    if ($null -ne $prop) {
+        return $prop.Value
+    }
+
+    return $Default
+}
+
+function Get-CFGObjectPropertyValue {
+    param(
+        $Object,
+        [Parameter(Mandatory)][string]$Name,
+        $Default = $null
+    )
+
+    if ($null -eq $Object) { return $Default }
+
+    if ($Object -is [hashtable]) {
+        if ($Object.ContainsKey($Name)) {
+            return $Object[$Name]
+        }
+        return $Default
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -ne $prop) {
+        return $prop.Value
+    }
+
+    return $Default
+}
+
+function Set-CFGObjectDefaultProperty {
+    param(
+        $Object,
+        [Parameter(Mandatory)][string]$Name,
+        $Value
+    )
+
+    if ($null -eq $Object) { return }
+
+    if ($Object -is [hashtable]) {
+        if (-not $Object.ContainsKey($Name) -or $null -eq $Object[$Name]) {
+            $Object[$Name] = $Value
+        }
+        return
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -eq $prop) {
+        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        return
+    }
+
+    if ($null -eq $prop.Value) {
+        try {
+            $prop.Value = $Value
+        } catch {
+            $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        }
+    }
+}
+
+function Ensure-CFGNodeExecutionShape {
+    param($Node)
+
+    if ($null -eq $Node) { return }
+
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'Text' -Value ''
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'VarsRead' -Value @()
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'VarsWritten' -Value @()
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'Resolvables' -Value @()
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'AliasesUsed' -Value @()
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'DynamicInvoke' -Value $null
+    Set-CFGObjectDefaultProperty -Object $Node -Name 'Invokes' -Value @{ Functions = @(); ScriptBlocks = @() }
+
+    $invokes = Get-CFGObjectPropertyValue -Object $Node -Name 'Invokes' -Default $null
+    if ($invokes -is [hashtable]) {
+        if (-not $invokes.ContainsKey('Functions') -or $null -eq $invokes['Functions']) {
+            $invokes['Functions'] = @()
+        }
+        if (-not $invokes.ContainsKey('ScriptBlocks') -or $null -eq $invokes['ScriptBlocks']) {
+            $invokes['ScriptBlocks'] = @()
+        }
+    } elseif ($null -ne $invokes) {
+        Set-CFGObjectDefaultProperty -Object $invokes -Name 'Functions' -Value @()
+        Set-CFGObjectDefaultProperty -Object $invokes -Name 'ScriptBlocks' -Value @()
+    }
+}
+
+function Ensure-CFGExecutionNodeShapes {
+    param([hashtable]$CFG)
+
+    if (-not $CFG -or -not $CFG.ContainsKey('Nodes') -or -not $CFG.Nodes) { return }
+    foreach ($node in @($CFG.Nodes)) {
+        Ensure-CFGNodeExecutionShape -Node $node
+    }
+}
+
+function Get-CFGNodeVarInfos {
+    param(
+        $Node,
+        [Parameter(Mandatory)][ValidateSet('VarsRead', 'VarsWritten')][string]$PropertyName
+    )
+
+    Ensure-CFGNodeExecutionShape -Node $Node
+    return @(Get-CFGObjectPropertyValue -Object $Node -Name $PropertyName -Default @())
+}
+
 function Invoke-CFGStep {
     param(
         [Parameter(Mandatory)][hashtable]$Session,
@@ -10540,12 +10849,14 @@ function Invoke-CFGStep {
     }
 
     while (-not $Session.IsCompleted) {
-        $currentNode = $Session.CurrentNode
+        $currentNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $Session.CurrentNode
+        $Session.CurrentNode = $currentNode
         if ($null -eq $currentNode) {
             $Session.IsCompleted = $true
             if (-not $Session.StopReason) { $Session.StopReason = 'NoNextNode' }
             break
         }
+        Ensure-CFGNodeExecutionShape -Node $currentNode
 
         $globalBudgetStatus = Get-ContextBudgetStatus -Context $context -BudgetPropertyName 'GlobalTimeBudgetMs' -StopwatchPropertyName 'ExecutionStopwatch' -StopReason 'GlobalTimeBudgetExceeded'
         if ($globalBudgetStatus.Exceeded) {
@@ -10620,7 +10931,7 @@ function Invoke-CFGStep {
                     }
 
                     Write-ExecutionLog -Context $context -Message "  [RETURN] Returning from $($scope.ScopeType) '$($scope.ScopeName)' to Node $($scope.ReturnNodeId)"
-                    $nextNode = Get-NodeById -CFG $context.CFG -Id $scope.ReturnNodeId
+                    $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value (Get-NodeById -CFG $context.CFG -Id $scope.ReturnNodeId)
                 } else {
                     $context.LastSubgraphResult = $returnValue
                     Write-ExecutionLog -Context $context -Message ({ "  [RETURN] Inline call completed, preserving result: $(Format-VariableValue $returnValue)" }).GetNewClosure()
@@ -10649,6 +10960,7 @@ function Invoke-CFGStep {
                 AutoPassed       = $true
             })
 
+            $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $nextNode
             $Session.CurrentNode = $nextNode
             if ($null -eq $nextNode) {
                 $Session.IsCompleted = $true
@@ -10689,13 +11001,14 @@ function Invoke-CFGStep {
                 $context.LastSubgraphResult = $returnValue
                 if ($currentScope.EndNodeId) {
                     Write-ExecutionLog -Context $context -Message "  [RETURN] Jumping to EndNode $($currentScope.EndNodeId)"
-                    $nextNode = Get-NodeById -CFG $context.CFG -Id $currentScope.EndNodeId
+                    $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value (Get-NodeById -CFG $context.CFG -Id $currentScope.EndNodeId)
                 }
             } else {
                 $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context)
                 if ($nextNodes.Count -gt 0) { $nextNode = $nextNodes[0] }
             }
 
+            $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $nextNode
             $edgeLabel = if ($nextNode) { Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $currentNode.Id -ToNodeId $nextNode.Id } else { $null }
             Add-Record ([PSCustomObject]@{
                 Time             = (Get-Date).ToString('HH:mm:ss.fff')
@@ -10808,8 +11121,11 @@ function Invoke-CFGStep {
             }
         }
 
+        $currentNodeVarsRead = @(Get-CFGObjectPropertyValue -Object $currentNode -Name 'VarsRead' -Default @())
+        $currentNodeVarsWritten = @(Get-CFGObjectPropertyValue -Object $currentNode -Name 'VarsWritten' -Default @())
+
         $varsBefore = @{}
-        foreach ($varInfo in @($currentNode.VarsRead)) {
+        foreach ($varInfo in $currentNodeVarsRead) {
             if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
                 Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
                 continue
@@ -10844,6 +11160,14 @@ function Invoke-CFGStep {
         $nextEdgeLabel = $null
         $autoPassed = Test-CFGDebugAutoPassNodeType -NodeType $currentNode.Type
         $failureSource = 'Runtime'
+        $execAction = $null
+        $execTarget = $null
+        $execReason = $null
+        $execError = $null
+        $execOutput = $null
+        $execExecuted = $false
+        $execSuccess = $false
+        $execJumpToNode = $null
 
         try {
             $execResult = Invoke-NodeSafe -Node $currentNode -Context $context
@@ -10852,8 +11176,8 @@ function Invoke-CFGStep {
                 $captureThis = $true
                 $nonOutputTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition', 'OutputCaptureStart', 'OutputCaptureEnd')
                 if ($currentNode.Type -in $nonOutputTypes) { $captureThis = $false }
-                if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNode.VarsWritten) {
-                    foreach ($v in $currentNode.VarsWritten) {
+                if ($captureThis -and $currentNode.Type -eq 'PipelineElement' -and $currentNodeVarsWritten.Count -gt 0) {
+                    foreach ($v in $currentNodeVarsWritten) {
                         if ($v.Name -match '^_pipe_[a-f0-9]+$') {
                             $captureThis = $false
                             break
@@ -10876,7 +11200,7 @@ function Invoke-CFGStep {
                 }
             }
 
-            foreach ($varInfo in @($currentNode.VarsWritten)) {
+            foreach ($varInfo in $currentNodeVarsWritten) {
                 if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
                     Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
                     continue
@@ -10895,24 +11219,33 @@ function Invoke-CFGStep {
             Update-CFGAssignmentBlockedTaint -Node $currentNode -Context $context
             Update-VariableScriptBlockMappingAfterNodeExecution -Node $currentNode -Context $context
 
-            $status = if ($execResult.Action -eq 'Blocked') {
+            $execAction = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Action')
+            $execTarget = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Target'
+            $execReason = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Reason')
+            $execError = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Error')
+            $execOutput = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Result'
+            $execExecuted = [bool](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Executed' -Default $false)
+            $execSuccess = [bool](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Success' -Default $false)
+            $execJumpToNode = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'JumpToNode'
+
+            $status = if ($execAction -eq 'Blocked') {
                 'BLOCKED'
-            } elseif (-not $execResult.Executed) {
+            } elseif (-not $execExecuted) {
                 'SKIP'
-            } elseif ($execResult.Success) {
+            } elseif ($execSuccess) {
                 'OK'
             } else {
                 'ERR'
             }
 
             Write-ExecutionLog -Context $context -Message "  Status: $status"
-            if ($execResult.Action -and $execResult.Action -notin @('Execute', 'Skip')) {
-                Write-ExecutionLog -Context $context -Message "  Action: $($execResult.Action)"
-                if ($execResult.Target) { Write-ExecutionLog -Context $context -Message "  Target: $($execResult.Target)" }
-                if ($execResult.Reason) { Write-ExecutionLog -Context $context -Message "  Reason: $($execResult.Reason)" }
+            if ($execAction -and $execAction -notin @('Execute', 'Skip')) {
+                Write-ExecutionLog -Context $context -Message "  Action: $execAction"
+                if ($null -ne $execTarget -and -not [string]::IsNullOrWhiteSpace([string]$execTarget)) { Write-ExecutionLog -Context $context -Message "  Target: $execTarget" }
+                if (-not [string]::IsNullOrWhiteSpace($execReason)) { Write-ExecutionLog -Context $context -Message "  Reason: $execReason" }
             }
 
-            if ($execResult.Executed) {
+            if ($execExecuted) {
                 if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsBefore.Count -gt 0) {
                     Write-ExecutionLog -Context $context -Message '  VarsRead:'
                     foreach ($kv in $varsBefore.GetEnumerator()) {
@@ -10925,25 +11258,27 @@ function Invoke-CFGStep {
                         Write-ExecutionLog -Context $context -Message ({ "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)" }).GetNewClosure()
                     }
                 }
-                if ($null -ne $execResult.Result -and $execResult.Result.Count -gt 0) {
+                if ($null -ne $execOutput -and @($execOutput).Count -gt 0) {
                     if (Test-ExecutionLogDetailEnabled -Context $context -FlagName 'LogResultDetailsEnabled') {
-                        Write-ExecutionLog -Context $context -Message ({ "  Result: $(Format-VariableValue $execResult.Result)" }).GetNewClosure()
+                        Write-ExecutionLog -Context $context -Message ({ "  Result: $(Format-VariableValue $execOutput)" }).GetNewClosure()
                     }
                     if ($context.ScopeStack.Count -gt 0) {
-                        $context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execResult.Result -TreatArraysAsSequence
+                        $context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execOutput -TreatArraysAsSequence
                     }
                 }
-                if (-not $execResult.Success -and $execResult.Error) {
-                    Write-ExecutionLog -Context $context -Message "  Error: $($execResult.Error)"
+                if (-not $execSuccess -and -not [string]::IsNullOrWhiteSpace($execError)) {
+                    Write-ExecutionLog -Context $context -Message "  Error: $execError"
                 }
                 if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')) {
                     Write-ExecutionLog -Context $context -Message "  ConditionResult: $($context.LastConditionResult)"
                 }
             }
 
-            if ($execResult.Action -in @('CallFunction', 'CallScriptBlock') -and $execResult.JumpToNode) {
-                Write-ExecutionLog -Context $context -Message "  [JUMP] Jumping to Node $($execResult.JumpToNode.Id)"
-                $nextNode = $execResult.JumpToNode
+            if ($execAction -in @('CallFunction', 'CallScriptBlock') -and $execJumpToNode) {
+                $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $execJumpToNode
+                if ($nextNode) {
+                    Write-ExecutionLog -Context $context -Message "  [JUMP] Jumping to Node $($nextNode.Id)"
+                }
             } else {
                 $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context)
                 if ($nextNodes.Count -gt 0) {
@@ -10951,6 +11286,7 @@ function Invoke-CFGStep {
                 }
             }
 
+            $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $nextNode
             $nextEdgeLabel = if ($nextNode) { Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $currentNode.Id -ToNodeId $nextNode.Id } else { $null }
         }
         catch {
@@ -10965,10 +11301,18 @@ function Invoke-CFGStep {
                 Reason   = $_.Exception.GetType().FullName
             }
             $status = 'ERR'
+            $execAction = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Action')
+            $execTarget = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Target'
+            $execReason = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Reason')
+            $execError = [string](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Error')
+            $execOutput = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Result'
+            $execExecuted = [bool](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Executed' -Default $false)
+            $execSuccess = [bool](Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'Success' -Default $false)
+            $execJumpToNode = Get-CFGExecutionResultValue -ExecutionResult $execResult -Name 'JumpToNode'
             Write-ExecutionLog -Context $context -Message '  Status: ERR'
             Write-ExecutionLog -Context $context -Message '  Action: InternalError'
-            Write-ExecutionLog -Context $context -Message "  Reason: $($execResult.Reason)"
-            Write-ExecutionLog -Context $context -Message "  Error: $($execResult.Error)"
+            Write-ExecutionLog -Context $context -Message "  Reason: $execReason"
+            Write-ExecutionLog -Context $context -Message "  Error: $execError"
             try {
                 $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $currentNode -Context $context)
                 if ($nextNodes.Count -gt 0) {
@@ -10978,12 +11322,13 @@ function Invoke-CFGStep {
             catch {
                 $nextNode = $null
             }
+            $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $nextNode
             $nextEdgeLabel = if ($nextNode) { Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $currentNode.Id -ToNodeId $nextNode.Id } else { $null }
         }
 
         $failureRecord = $null
-        if ($execResult.Executed -and -not $execResult.Success -and $execResult.Error) {
-            $failureRecord = Add-CFGExecutionFailure -Session $Session -Node $currentNode -Step $Session.StepCounter -Status $status -Action $execResult.Action -Reason $execResult.Reason -Error $execResult.Error -NextNode $nextNode -NextEdgeLabel $nextEdgeLabel -Source $failureSource
+        if ($execExecuted -and -not $execSuccess -and -not [string]::IsNullOrWhiteSpace($execError)) {
+            $failureRecord = Add-CFGExecutionFailure -Session $Session -Node $currentNode -Step $Session.StepCounter -Status $status -Action $execAction -Reason $execReason -Error $execError -NextNode $nextNode -NextEdgeLabel $nextEdgeLabel -Source $failureSource
             if ($failureRecord) {
                 Write-ExecutionLog -Context $context -Message "  [CONTINUE] Failure recorded (#$($failureRecord.Index)); continuing to next node."
                 Flush-ExecutionLogBuffer -Context $context
@@ -10996,13 +11341,13 @@ function Invoke-CFGStep {
             NodeType         = $currentNode.Type
             Code             = [string]$currentNode.Text
             Status           = $status
-            Action           = $execResult.Action
-            Target           = $execResult.Target
-            Reason           = $execResult.Reason
-            Error            = $execResult.Error
-            Result           = if ($null -ne $execResult.Result) { Format-VariableValue $execResult.Result } else { $null }
-            Executed         = [bool]$execResult.Executed
-            Success          = [bool]$execResult.Success
+            Action           = $execAction
+            Target           = $execTarget
+            Reason           = $execReason
+            Error            = $execError
+            Result           = if ($null -ne $execOutput) { Format-VariableValue $execOutput } else { $null }
+            Executed         = $execExecuted
+            Success          = $execSuccess
             ConditionResult  = if ($currentNode.Type -in @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')) { [bool]$context.LastConditionResult } else { $null }
             VarsRead         = Convert-VarMapToRecord -VarMap $varsBefore
             VarsWritten      = Convert-VarMapToRecord -VarMap $varsAfter
@@ -11014,6 +11359,7 @@ function Invoke-CFGStep {
             AutoPassed       = $autoPassed
         })
 
+        $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $nextNode
         $Session.CurrentNode = $nextNode
         if ($null -eq $nextNode) {
             $Session.IsCompleted = $true
@@ -11391,7 +11737,7 @@ function Get-CFGVariableStackPlaceholderRows {
         param($Node, [string]$Source)
 
         if (-not $Node) { return }
-        $varInfos = @($Node.VarsRead) + @($Node.VarsWritten)
+        $varInfos = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsRead') + @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
         foreach ($varInfo in @($varInfos)) {
             if ($null -eq $varInfo -or $null -eq $varInfo.Name) { continue }
 
@@ -11654,7 +12000,19 @@ function Get-CFGNextEdgePreview {
     }
 
     $context = $Session.Context
-    $node = $Session.CurrentNode
+    $node = Resolve-CFGNodeValue -CFG $context.CFG -Value $Session.CurrentNode
+    if ($null -eq $node) {
+        return [PSCustomObject]@{
+            HasPreview         = $false
+            NodeId             = $null
+            NodeType           = $null
+            EdgeLabel          = $null
+            ToNodeId           = $null
+            PredictedCondition = $null
+            Error              = 'Current CFG node could not be resolved.'
+        }
+    }
+    $Session.CurrentNode = $node
     $conditionTypes = @('Condition', 'ForEachCondition', 'ProcessCondition', 'SwitchCondition', 'CaseCondition')
 
     if ($node.Type -in $conditionTypes) {
@@ -11673,7 +12031,7 @@ function Get-CFGNextEdgePreview {
         }
 
         $pred = $false
-        $predItems = @(Get-ExecutionResultItems -Value $eval.Result -TreatArraysAsSequence)
+        $predItems = [object[]]@(Get-ExecutionResultItems -Value $eval.Result -TreatArraysAsSequence)
         if ($predItems.Count -gt 0) {
             $pred = [bool]$predItems[0]
         }
@@ -11692,7 +12050,7 @@ function Get-CFGNextEdgePreview {
         }
     }
 
-    $nextNodes = @(Get-NextNodes -CFG $context.CFG -Node $node -Context $context)
+    $nextNodes = @(ConvertTo-CFGNodeArray -CFG $context.CFG -Value (Get-NextNodes -CFG $context.CFG -Node $node -Context $context))
     if ($nextNodes.Count -eq 0) {
         return [PSCustomObject]@{
             HasPreview         = $false
@@ -11705,7 +12063,18 @@ function Get-CFGNextEdgePreview {
         }
     }
 
-    $nextNode = $nextNodes[0]
+    $nextNode = Resolve-CFGNodeValue -CFG $context.CFG -Value $nextNodes[0]
+    if ($null -eq $nextNode) {
+        return [PSCustomObject]@{
+            HasPreview         = $false
+            NodeId             = $node.Id
+            NodeType           = $node.Type
+            EdgeLabel          = $null
+            ToNodeId           = $null
+            PredictedCondition = $null
+            Error              = 'Next CFG node could not be resolved.'
+        }
+    }
     $label = Get-CFGEdgeLabel -CFG $context.CFG -FromNodeId $node.Id -ToNodeId $nextNode.Id
     return [PSCustomObject]@{
         HasPreview         = $true

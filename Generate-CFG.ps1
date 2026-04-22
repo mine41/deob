@@ -241,13 +241,68 @@ function Get-PowerShellHostPayloadEvaluationCode {
     return [string]$PayloadAst.Extent.Text
 }
 
+function Get-SafePSBaseObject {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    try {
+        $psObject = $Value.PSObject
+    } catch {
+        return $null
+    }
+
+    if ($null -eq $psObject) { return $null }
+
+    try {
+        return $psObject.BaseObject
+    } catch {
+        return $null
+    }
+}
+
+function Unwrap-SafePSBaseObject {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    $baseObject = Get-SafePSBaseObject -Value $Value
+    if ($null -ne $baseObject -and $baseObject -ne $Value) {
+        return $baseObject
+    }
+
+    return $Value
+}
+
+function Get-GenerateObjectPropertyValue {
+    param(
+        $Object,
+        [Parameter(Mandatory)][string]$Name,
+        $Default = $null
+    )
+
+    if ($null -eq $Object) { return $Default }
+
+    if ($Object -is [hashtable]) {
+        if ($Object.ContainsKey($Name)) {
+            return $Object[$Name]
+        }
+        return $Default
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -ne $prop) {
+        return $prop.Value
+    }
+
+    return $Default
+}
+
 function Convert-DynamicCommandCandidateToName {
     param($Value)
 
     if ($null -eq $Value) { return $null }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
 
     if ($Value -is [string]) {
         $name = $Value.Trim()
@@ -636,7 +691,7 @@ function Get-DynamicInvokeInfo {
         }
 
         $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $cmdAst
-        if ($hostDynamicInfo -and $hostDynamicInfo.DynamicType -eq 'PowerShellCommand') {
+        if ($hostDynamicInfo -and (Get-GenerateObjectPropertyValue -Object $hostDynamicInfo -Name 'DynamicType' -Default $null) -eq 'PowerShellCommand') {
             $results += @{
                 Type   = 'PowerShellCommand'
                 ArgAst = $hostDynamicInfo.ArgumentAst
@@ -646,7 +701,7 @@ function Get-DynamicInvokeInfo {
         $wrappedDynamicInfo = Get-WrappedDynamicInvocationInfo -CommandAst $cmdAst
         if ($wrappedDynamicInfo) {
             $results += @{
-                Type   = $wrappedDynamicInfo.DynamicType
+                Type   = (Get-GenerateObjectPropertyValue -Object $wrappedDynamicInfo -Name 'DynamicType' -Default $null)
                 ArgAst = $wrappedDynamicInfo.ArgumentAst
             }
         }
@@ -1160,7 +1215,7 @@ function Try-DecodeEncodedCommand {
     )
 
     $hostDynamicInfo = Get-PowerShellHostDynamicInvocationInfo -CommandAst $CommandAst
-    if (-not $hostDynamicInfo -or $hostDynamicInfo.DynamicType -ne 'EncodedCommand') {
+    if (-not $hostDynamicInfo -or (Get-GenerateObjectPropertyValue -Object $hostDynamicInfo -Name 'DynamicType' -Default $null) -ne 'EncodedCommand') {
         return $null
     }
 
@@ -1506,7 +1561,10 @@ function Get-AllNestedScriptBlocks {
         $ast
     )
 
-    if ($null -eq $ast) { return @() }
+    if ($null -eq $ast) {
+        Write-Output -NoEnumerate @()
+        return
+    }
 
     $scriptBlocks = $ast.FindAll({
         param($n)
@@ -1525,7 +1583,7 @@ function Get-AllNestedScriptBlocks {
         return $true
     })
 
-    return @($scriptBlocks)
+    Write-Output -NoEnumerate @($scriptBlocks)
 }
 
 # 辅助函数：判断 ScriptBlock 是立即执行还是延迟执行
@@ -2800,7 +2858,7 @@ function Expand-NestedPipelines {
         [ref]$prevNodeRef
     )
 
-    $nestedPipelines = Get-AllNestedPipelines -ast $ast
+    $nestedPipelines = @(Get-AllNestedPipelines -ast $ast)
     if ($nestedPipelines.Count -eq 0) {
         return $null
     }
@@ -5240,7 +5298,7 @@ function Convert-AstNode {
     # 六、其余节点（包含嵌套 Pipeline、ScriptBlock 的通用处理）
     else {
         # 检测节点内是否有嵌套的多元素 Pipeline
-        $nestedPipelines = Get-AllNestedPipelines -ast $node
+        $nestedPipelines = @(Get-AllNestedPipelines -ast $node)
 
         if ($nestedPipelines.Count -gt 0) {
             # 按位置倒序排列（从后往前处理，避免文本替换时位置偏移）

@@ -100,6 +100,27 @@ function Import-UiAssemblies {
 
 Import-UiAssemblies
 
+$uiLocPath = Join-Path $PSScriptRoot 'Ui-Localization.ps1'
+if (-not (Test-Path -LiteralPath $uiLocPath)) { throw "缺少文件: $uiLocPath" }
+. $uiLocPath
+
+$script:UiLanguage = 'zh-CN'
+if (-not $NoUI) {
+    $selectedLanguage = Show-LanguageSelectionDialog
+    if ([string]::IsNullOrWhiteSpace([string]$selectedLanguage)) { return }
+    $script:UiLanguage = [string]$selectedLanguage
+}
+$script:UiText = Get-UiTextPack -Scope 'Debug' -Language $script:UiLanguage
+
+function L {
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [object[]]$FormatArgs = @()
+    )
+
+    return Get-UiText -Pack $script:UiText -Key $Key -Args $FormatArgs
+}
+
 $genPath = Join-Path $PSScriptRoot 'Generate-CFG.ps1'
 $execPath = Join-Path $PSScriptRoot 'Execute-CFG.ps1'
 if (-not (Test-Path -LiteralPath $genPath)) { throw "缺少文件: $genPath" }
@@ -237,13 +258,37 @@ function New-SkipRecord {
     }
 }
 
+function Unwrap-SafePSBaseObject {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    try {
+        $psObject = $Value.PSObject
+    } catch {
+        return $Value
+    }
+
+    if ($null -eq $psObject) { return $Value }
+
+    try {
+        $baseObject = $psObject.BaseObject
+    } catch {
+        return $Value
+    }
+
+    if ($null -ne $baseObject -and $baseObject -ne $Value) {
+        return $baseObject
+    }
+
+    return $Value
+}
+
 function Test-StaticReplacementScalarValue {
     param($Value)
 
     if ($null -eq $Value) { return $true }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
     if ($Value -is [scriptblock]) { return $false }
     if ($Value -is [BlockedCommandPlaceholder]) { return $false }
 
@@ -268,9 +313,7 @@ function Test-StaticBindingValue {
     param($Value)
 
     if ($null -eq $Value) { return $true }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
     if ($Value -is [scriptblock]) { return $false }
     if ($Value -is [BlockedCommandPlaceholder]) { return $false }
     if ($Value -is [System.Collections.IDictionary]) { return $false }
@@ -289,9 +332,7 @@ function Get-StaticValueTypeName {
     param($Value)
 
     if ($null -eq $Value) { return 'Null' }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
     if ($null -eq $Value) { return 'Null' }
     return [string]$Value.GetType().Name
 }
@@ -314,9 +355,7 @@ function Convert-StaticInterpolatedValueToString {
     param($Value)
 
     if ($null -eq $Value) { return '' }
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
     if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
         $parts = @()
         foreach ($item in $Value) {
@@ -961,7 +1000,7 @@ function Get-WholeScriptDynamicLoaderReplacementCandidates {
                     $parseInfo = [PSCustomObject]@{ SourceText = $ScriptText }
                     $wrapped = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $last -Context $Context
                     $cmdName = Convert-DynamicCommandCandidateToName -Value $last.GetCommandName()
-                    if ($wrapped.Success -and $wrapped.DynamicType -eq 'IEX') {
+                    if ($wrapped.Success -and (Get-CFGObjectPropertyValue -Object $wrapped -Name 'DynamicType' -Default $null) -eq 'IEX') {
                         $payloadText = Get-CommandArgumentText -CommandAst $last -ParseInfo $parseInfo -FirstArgumentIndex $wrapped.ArgumentStartIndex
                         $dynamicType = 'IEX'
                     } elseif ($cmdName -in @('Invoke-Expression', 'iex')) {
@@ -975,7 +1014,7 @@ function Get-WholeScriptDynamicLoaderReplacementCandidates {
         $parseInfo = [PSCustomObject]@{ SourceText = $ScriptText }
         $wrapped = Get-CommandAstWrappedDynamicInvocationInfo -CommandAst $statement -Context $Context
         $cmdName = Convert-DynamicCommandCandidateToName -Value $statement.GetCommandName()
-        if ($wrapped.Success -and $wrapped.DynamicType -eq 'IEX') {
+        if ($wrapped.Success -and (Get-CFGObjectPropertyValue -Object $wrapped -Name 'DynamicType' -Default $null) -eq 'IEX') {
             $payloadText = Get-CommandArgumentText -CommandAst $statement -ParseInfo $parseInfo -FirstArgumentIndex $wrapped.ArgumentStartIndex
             $dynamicType = 'IEX'
         } elseif ($cmdName -in @('Invoke-Expression', 'iex')) {
@@ -1871,7 +1910,9 @@ function Get-RuntimeSubgraphInfoForNode {
         $Node
     )
 
-    if ($null -eq $Context -or $null -eq $Node) { return $null }
+    if ($null -eq $Context) { return $null }
+    $Node = Resolve-CFGNodeValue -CFG $Context.CFG -Value $Node
+    if ($null -eq $Node) { return $null }
     if (-not $Node.PSObject.Properties['RuntimeBlockName']) { return $null }
 
     $blockName = [string]$Node.RuntimeBlockName
@@ -1887,6 +1928,7 @@ function Get-GraphNodeIdForDisplay {
         $Node
     )
 
+    $Node = Resolve-CFGNodeValue -CFG $Context.CFG -Value $Node
     if ($null -eq $Node) { return 0 }
     $nodeId = [int]$Node.Id
 
@@ -1908,6 +1950,7 @@ function Get-ReplacementOwnerNodeId {
         $Node
     )
 
+    $Node = Resolve-CFGNodeValue -CFG $Context.CFG -Value $Node
     if ($null -eq $Node) { return $null }
 
     $runtimeInfo = Get-RuntimeSubgraphInfoForNode -Context $Context -Node $Node
@@ -1924,6 +1967,7 @@ function Build-RuntimeSubgraphRows {
         $CurrentNode
     )
 
+    $CurrentNode = Resolve-CFGNodeValue -CFG $Context.CFG -Value $CurrentNode
     $entries = Get-ContextRuntimeSubgraphs -Context $Context
     if (-not $entries -or $entries.Count -eq 0) { return @() }
 
@@ -1943,17 +1987,23 @@ function Build-RuntimeSubgraphRows {
     $rows = @()
     foreach ($info in $entries) {
         $isCurrent = (-not [string]::IsNullOrWhiteSpace($currentRuntimeBlock) -and $currentRuntimeBlock -eq [string]$info.BlockName)
-        $status = if ($isCurrent) {
+        $statusKey = if ($isCurrent) {
             'Current'
         } elseif ($activeBlockNames.Contains([string]$info.BlockName)) {
             'Open'
         } else {
             'Returned'
         }
+        $status = switch ($statusKey) {
+            'Current' { L 'dynamic.status.current' }
+            'Open' { L 'dynamic.status.open' }
+            default { L 'dynamic.status.returned' }
+        }
 
         $rows += [PSCustomObject]@{
             BlockName        = [string]$info.BlockName
             DynamicType      = [string]$info.DynamicType
+            StatusKey        = $statusKey
             Status           = $status
             CallerNodeId     = if ($info.CallerNodeId) { [int]$info.CallerNodeId } else { $null }
             CallerText       = ConvertTo-PreviewText -Text ([string]$info.CallerText) -MaxLen 90
@@ -1983,31 +2033,33 @@ function Get-RuntimeSubgraphDetailText {
     }
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("BlockName : $($Row.BlockName)") | Out-Null
-    $lines.Add("Type      : $($Row.DynamicType)") | Out-Null
-    $lines.Add("Status    : $($Row.Status)") | Out-Null
-    if ($Row.ParentBlockName) { $lines.Add("Parent    : $($Row.ParentBlockName)") | Out-Null }
-    if ($Row.CallerNodeId) { $lines.Add("Caller    : Node $($Row.CallerNodeId)") | Out-Null }
+    $lines.Add("$((L 'dynamic.field.block')) : $([string]$Row.BlockName)") | Out-Null
+    $lines.Add("$((L 'dynamic.field.type')) : $([string]$Row.DynamicType)") | Out-Null
+    $lines.Add("$((L 'dynamic.field.status')) : $([string]$Row.Status)") | Out-Null
+    if ($Row.ParentBlockName) { $lines.Add("$((L 'dynamic.field.parent')) : $([string]$Row.ParentBlockName)") | Out-Null }
+    if ($Row.CallerNodeId) { $lines.Add("$((L 'dynamic.field.caller')) : Node $([int]$Row.CallerNodeId)") | Out-Null }
     if ($info -and $info.CallerText) {
-        $lines.Add("CallerText: $([string]$info.CallerText)") | Out-Null
+        $lines.Add("$((L 'dynamic.field.caller_text')) : $([string]$info.CallerText)") | Out-Null
     }
     if ($info -and $info.ArgumentCode) {
-        $lines.Add("ArgCode   : $([string]$info.ArgumentCode)") | Out-Null
+        $lines.Add("$((L 'dynamic.field.arg_code')) : $([string]$info.ArgumentCode)") | Out-Null
     }
     if ($info -and $info.ArgumentValue) {
-        $lines.Add("Code      : $([string]$info.ArgumentValue)") | Out-Null
+        $lines.Add("$((L 'dynamic.field.code')) : $([string]$info.ArgumentValue)") | Out-Null
     }
     if ($info -and $info.PSObject.Properties['StopReason'] -and $info.StopReason) {
-        $lines.Add("StopReason: $([string]$info.StopReason)") | Out-Null
+        $lines.Add("$((L 'dynamic.field.stop_reason')) : $([string]$info.StopReason)") | Out-Null
     }
     if ($info -and $info.PSObject.Properties['StopMessage'] -and $info.StopMessage) {
-        $lines.Add("StopMsg   : $([string]$info.StopMessage)") | Out-Null
+        $stopReason = if ($info.PSObject.Properties['StopReason']) { [string]$info.StopReason } else { $null }
+        $stopMessage = Resolve-LocalizedDiagnosticMessage -Language $script:UiLanguage -Reason $stopReason -Message ([string]$info.StopMessage)
+        $lines.Add("$((L 'dynamic.field.stop_message')) : $([string]$stopMessage)") | Out-Null
     }
     if ($info -and $info.BlockStartId) {
-        $lines.Add("Range     : $($info.BlockStartId) -> $($info.BlockEndId)") | Out-Null
+        $lines.Add("$((L 'dynamic.field.range')) : $($info.BlockStartId) -> $($info.BlockEndId)") | Out-Null
     }
     if ($Row.CurrentNodeId) {
-        $lines.Add("Current   : Node $($Row.CurrentNodeId)") | Out-Null
+        $lines.Add("$((L 'dynamic.field.current')) : Node $([int]$Row.CurrentNodeId)") | Out-Null
     }
 
     return ($lines -join [Environment]::NewLine)
@@ -2028,6 +2080,7 @@ $logPath = Join-Path $WorkDir 'debug.execution.log'
 $outPath = Join-Path $WorkDir 'debug.out.ps1'
 $reportPath = Join-Path $WorkDir 'debug.report.json'
 $uiErrorLogPath = Join-Path $WorkDir 'debug.ui-error.log'
+Remove-Item -LiteralPath $uiErrorLogPath -ErrorAction SilentlyContinue
 
 $cfg = Get-ScriptControlFlow -ScriptPath $scriptPathFull
 if (-not $cfg) { throw "CFG 生成失败: $scriptPathFull" }
@@ -2042,6 +2095,18 @@ $session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $M
 $currentHostDisplay = Format-PowerShellHostInfo -HostInfo $session.Context.HostInfo
 $script:CurrentHostDisplay = $currentHostDisplay
 $preview = Build-DebugPreview -Context $session.Context -ScriptText $scriptText -Strategy $OverlapStrategy
+
+function Set-DebugWindowTitle {
+    param($Window)
+
+    if ($null -eq $Window) { return }
+    $fileName = [System.IO.Path]::GetFileName($scriptPathFull)
+    if ([string]::IsNullOrWhiteSpace([string]$script:CurrentHostDisplay)) {
+        $Window.Title = [string](L 'xaml.window_title')
+        return
+    }
+    $Window.Title = "{0} - {1} [{2}]" -f (L 'xaml.window_title'), $fileName, $script:CurrentHostDisplay
+}
 
 if ($NoUI) {
     [PSCustomObject]@{
@@ -2060,10 +2125,10 @@ if ($NoUI) {
     return
 }
 
-[xml]$mainXaml = @'
+$mainXamlText = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="解混淆调试模式" Height="920" Width="1550"
+        Title="__LOC_XAML_WINDOW_TITLE__" Height="920" Width="1550"
         WindowStartupLocation="CenterScreen">
   <DockPanel>
     <Border DockPanel.Dock="Top" Background="#F3F3F3" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1">
@@ -2074,11 +2139,11 @@ if ($NoUI) {
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" Grid.Column="0">
-          <Button Name="BtnNext" Content="下一步" Width="90" Margin="0,0,8,0"/>
-          <Button Name="BtnRunAll" Content="执行到最后" Width="100" Margin="0,0,8,0"/>
-          <Button Name="BtnReset" Content="重置" Width="90" Margin="0,0,8,0"/>
-          <Button Name="BtnExport" Content="导出重建脚本" Width="120" Margin="0,0,12,0"/>
-          <TextBlock Text="CFG缩放" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#444"/>
+          <Button Name="BtnNext" Content="__LOC_XAML_BTN_NEXT__" Width="90" Margin="0,0,8,0"/>
+          <Button Name="BtnRunAll" Content="__LOC_XAML_BTN_RUN_ALL__" Width="100" Margin="0,0,8,0"/>
+          <Button Name="BtnReset" Content="__LOC_XAML_BTN_RESET__" Width="90" Margin="0,0,8,0"/>
+          <Button Name="BtnExport" Content="__LOC_XAML_BTN_EXPORT__" Width="120" Margin="0,0,12,0"/>
+          <TextBlock Text="__LOC_XAML_ZOOM_LABEL__" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#444"/>
           <Button Name="BtnZoomOut" Content="-" Width="28" Margin="0,0,6,0"/>
           <Slider Name="SldZoom" Width="140" Minimum="20" Maximum="300" Value="100" TickFrequency="10"
                   IsSnapToTickEnabled="False" SmallChange="5" LargeChange="20" VerticalAlignment="Center"
@@ -2105,7 +2170,7 @@ if ($NoUI) {
         <DataGrid.Columns>
           <DataGridTextColumn Header="Step" Binding="{Binding Step}" Width="60"/>
           <DataGridTextColumn Header="Node" Binding="{Binding NodeId}" Width="65"/>
-          <DataGridTextColumn Header="域" Binding="{Binding Scope}" Width="80"/>
+          <DataGridTextColumn Header="__LOC_XAML_COLUMN_SCOPE__" Binding="{Binding Scope}" Width="80"/>
           <DataGridTextColumn Header="Type" Binding="{Binding NodeType}" Width="130"/>
           <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90"/>
           <DataGridTextColumn Header="Next" Binding="{Binding NextText}" Width="*"/>
@@ -2137,7 +2202,7 @@ if ($NoUI) {
                       Background="#E0E0E0"/>
 
         <TabControl Grid.Row="2" Margin="6,6,10,10">
-          <TabItem Header="当前节点">
+          <TabItem Header="__LOC_XAML_TAB_CURRENT_NODE__">
             <Grid Margin="10">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -2167,7 +2232,7 @@ if ($NoUI) {
                           EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12" Margin="0,8,0,0"
                           IsReadOnly="False">
                   <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="替换" Width="56">
+                    <DataGridTemplateColumn Header="__LOC_XAML_COLUMN_REPLACE__" Width="56">
                       <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                           <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center"/>
@@ -2175,10 +2240,10 @@ if ($NoUI) {
                       </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="110"/>
-                    <DataGridTextColumn Header="来源" Binding="{Binding SourceLabel}" Width="66"/>
-                    <DataGridTextColumn Header="置信" Binding="{Binding ConfidenceLabel}" Width="66"/>
-                    <DataGridTextColumn Header="变量" Binding="{Binding VariableName}" Width="110"/>
-                    <DataGridTextColumn Header="变化" Binding="{Binding ChangedFlag}" Width="66"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_SOURCE__" Binding="{Binding SourceLabel}" Width="66"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_CONFIDENCE__" Binding="{Binding ConfidenceLabel}" Width="66"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_VARIABLE__" Binding="{Binding VariableName}" Width="110"/>
+                    <DataGridTextColumn Header="__LOC_XAML_COLUMN_CHANGED__" Binding="{Binding ChangedFlag}" Width="66"/>
                     <DataGridTextColumn Header="Original" Binding="{Binding Original}" Width="*"/>
                     <DataGridTextColumn Header="Replacement" Binding="{Binding Replacement}" Width="*"/>
                     <DataGridTextColumn Header="Start" Binding="{Binding StartOffset}" Width="70"/>
@@ -2189,7 +2254,7 @@ if ($NoUI) {
             </Grid>
           </TabItem>
 
-          <TabItem Header="变量栈">
+          <TabItem Header="__LOC_XAML_TAB_VARIABLE_STACK__">
             <Grid Margin="10">
               <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -2198,9 +2263,9 @@ if ($NoUI) {
               <DataGrid Name="VarGrid" Grid.Row="0" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                         EnableRowVirtualization="True" FontFamily="Consolas" FontSize="12">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="变量" Binding="{Binding DisplayName}" Width="160"/>
-                  <DataGridTextColumn Header="实际名" Binding="{Binding ActualName}" Width="220"/>
-                  <DataGridTextColumn Header="值" Binding="{Binding ValueText}" Width="*"/>
+                  <DataGridTextColumn Header="__LOC_XAML_COLUMN_DISPLAY_NAME__" Binding="{Binding DisplayName}" Width="160"/>
+                  <DataGridTextColumn Header="__LOC_XAML_COLUMN_ACTUAL_NAME__" Binding="{Binding ActualName}" Width="220"/>
+                  <DataGridTextColumn Header="__LOC_XAML_COLUMN_VALUE__" Binding="{Binding ValueText}" Width="*"/>
                 </DataGrid.Columns>
               </DataGrid>
               <Border Grid.Row="1" Margin="0,8,0,0" BorderBrush="#DDDDDD" BorderThickness="1" Padding="8">
@@ -2214,19 +2279,19 @@ if ($NoUI) {
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="当前变量:" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="0" Text="__LOC_XAML_CURRENT_VARIABLE__" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="1" Name="TxtVarName" Margin="8,0,12,0"/>
-                  <TextBlock Grid.Column="2" Text="新值表达式:" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="2" Text="__LOC_XAML_NEW_VALUE_EXPRESSION__" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="3" Name="TxtVarExpr" Margin="8,0,12,0"/>
-                  <Button Grid.Column="4" Name="BtnApplyVar" Content="应用变量" Width="90" Margin="0,0,8,0"/>
-                  <Button Grid.Column="5" Name="BtnRefreshVar" Content="刷新" Width="70"/>
-                  <CheckBox Grid.Column="6" Name="ChkVarAdvanced" Content="高级内部变量" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                  <Button Grid.Column="4" Name="BtnApplyVar" Content="__LOC_XAML_BTN_APPLY_VAR__" Width="90" Margin="0,0,8,0"/>
+                  <Button Grid.Column="5" Name="BtnRefreshVar" Content="__LOC_XAML_BTN_REFRESH_VAR__" Width="70"/>
+                  <CheckBox Grid.Column="6" Name="ChkVarAdvanced" Content="__LOC_XAML_CHK_ADVANCED__" Margin="12,0,0,0" VerticalAlignment="Center"/>
                 </Grid>
               </Border>
             </Grid>
           </TabItem>
 
-          <TabItem Header="导出预览">
+          <TabItem Header="__LOC_XAML_TAB_EXPORT_PREVIEW__">
             <Grid Margin="10">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -2239,7 +2304,7 @@ if ($NoUI) {
             </Grid>
           </TabItem>
 
-          <TabItem Header="动态子图">
+          <TabItem Header="__LOC_XAML_TAB_RUNTIME_SUBGRAPHS__">
             <Grid Margin="10">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -2277,6 +2342,7 @@ if ($NoUI) {
 </Window>
 '@
 
+[xml]$mainXaml = Resolve-LocalizedTemplate -Template $mainXamlText -Pack $script:UiText
 $reader = New-Object System.Xml.XmlNodeReader $mainXaml
 $window = [System.Windows.Markup.XamlReader]::Load($reader)
 
@@ -2338,6 +2404,7 @@ $script:DebugState = @{
     Preview        = $preview
     SelectedRuntimeBlockName = $null
     LastGraphSignature = ''
+    IsRunAllActive = $false
 }
 
 $script:NodeRectsDip = @{}
@@ -2345,7 +2412,9 @@ $script:NodeHotRects = @{}
 $script:GraphZoom = 1.0
 $script:SyncingZoom = $false
 $script:SyncingNodeSelection = $false
+$script:SyncingDynamicSelection = $false
 $script:SelectionRefreshQueued = $false
+$script:RunAllTimer = $null
 
 $highlightRect = New-Object System.Windows.Shapes.Rectangle
 $highlightRect.Stroke = [System.Windows.Media.Brushes]::Red
@@ -2403,7 +2472,7 @@ function Get-GraphStateSignature {
 function Ensure-GraphLoaded {
     Reset-GraphOverlay
     if (-not (Test-Path -LiteralPath $script:DebugState.PngPath)) {
-        Set-GraphPlaceholder -Message "(未找到 cfg.png)"
+        Set-GraphPlaceholder -Message (L 'graph.placeholder.missing_png')
         return
     }
     try {
@@ -2417,7 +2486,7 @@ function Ensure-GraphLoaded {
         $bmp.Freeze()
         $graphImage.Source = $bmp
     } catch {
-        Set-GraphPlaceholder -Message "(加载 cfg.png 失败: $_)"
+        Set-GraphPlaceholder -Message (L 'graph.placeholder.load_png_failed' @($_.Exception.Message))
     }
 }
 
@@ -2444,7 +2513,7 @@ function Refresh-LiveGraphArtifacts {
         $script:DebugState.LastGraphSignature = $newSignature
         return $true
     } catch {
-        $msg = if ([string]::IsNullOrWhiteSpace($Reason)) { "动态刷新 CFG 图失败: $($_.Exception.Message)" } else { "动态刷新 CFG 图失败($Reason): $($_.Exception.Message)" }
+        $msg = L 'graph.refresh_failed' @($Reason, $_.Exception.Message)
         Update-StatusBar -Suffix $msg
         return $false
     }
@@ -2610,9 +2679,9 @@ function Update-StatusBar {
     if ($sessionNow.Context.ContainsKey('RuntimeSubgraphs') -and $sessionNow.Context.RuntimeSubgraphs) {
         $runtimeCount = [int]$sessionNow.Context.RuntimeSubgraphs.Count
     }
-    $base = "Script=$($script:DebugState.ScriptPath) | Steps=$($script:DebugState.Steps.Count) | Visits=$($sessionNow.Context.TotalVisits) | Runtime=$runtimeCount | Completed=$($sessionNow.IsCompleted)"
+    $base = L 'status.base' @($script:DebugState.ScriptPath, $script:DebugState.Steps.Count, $sessionNow.Context.TotalVisits, $runtimeCount, $sessionNow.IsCompleted)
     if ($script:DebugState.HoldPendingNextNodeId) {
-        $base = "$base | Hold=$($script:DebugState.HoldAfterNodeId)->$($script:DebugState.HoldPendingNextNodeId)"
+        $base = L 'status.hold' @($base, $script:DebugState.HoldAfterNodeId, $script:DebugState.HoldPendingNextNodeId)
     }
     if ([string]::IsNullOrWhiteSpace($Suffix)) {
         $txtStatus.Text = $base
@@ -2630,7 +2699,11 @@ function Try-AdvanceFromHold {
     if (-not $script:DebugState.HoldPendingNextNodeId) { return $false }
 
     $toId = [int]$script:DebugState.HoldPendingNextNodeId
-    $nextNode = Get-NodeById -CFG $script:DebugState.Cfg -Id $toId
+    $nextNode = Resolve-CFGNodeValue -CFG $script:DebugState.Cfg -Value (Get-NodeById -CFG $script:DebugState.Cfg -Id $toId)
+    if ($null -eq $nextNode) {
+        Clear-HoldState
+        return $false
+    }
     $script:DebugState.Session.CurrentNode = $nextNode
     Clear-HoldState
     return $true
@@ -2641,7 +2714,9 @@ function Try-EnterHoldAfterStep {
 
     if (-not $Records -or $Records.Count -eq 0) { return $false }
     if ($script:DebugState.HoldPendingNextNodeId) { return $false }
-    if (-not $script:DebugState.Session.CurrentNode) { return $false }
+    $sessionCurrentNode = Resolve-CFGNodeValue -CFG $script:DebugState.Cfg -Value $script:DebugState.Session.CurrentNode
+    $script:DebugState.Session.CurrentNode = $sessionCurrentNode
+    if (-not $sessionCurrentNode) { return $false }
 
     $executed = @($Records | Where-Object { $_.Executed -and (-not $_.AutoPassed) })
     if ($executed.Count -eq 0) { return $false }
@@ -2652,10 +2727,10 @@ function Try-EnterHoldAfterStep {
     $cands = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq $nodeId })
     if ($cands.Count -le 0) { return $false }
 
-    $nextNode = $script:DebugState.Session.CurrentNode
+    $nextNode = $sessionCurrentNode
     if ($null -eq $nextNode) { return $false }
 
-    $holdNode = Get-NodeById -CFG $script:DebugState.Cfg -Id $nodeId
+    $holdNode = Resolve-CFGNodeValue -CFG $script:DebugState.Cfg -Value (Get-NodeById -CFG $script:DebugState.Cfg -Id $nodeId)
     if ($null -eq $holdNode) { return $false }
 
     $script:DebugState.HoldPendingNextNodeId = [int]$nextNode.Id
@@ -2720,9 +2795,9 @@ function Update-PreviewUi {
                     }
                 } | Select-Object -Unique)
             if ($names.Count -gt 0) {
-                $script:DebugState.LastAutoUncheckMessage = "检测到变量值变化，已取消勾选: $($names -join ', ')"
+                $script:DebugState.LastAutoUncheckMessage = L 'preview.auto_uncheck_named' @($names -join ', ')
             } else {
-                $script:DebugState.LastAutoUncheckMessage = "检测到变量值变化，已自动取消相关勾选。"
+                $script:DebugState.LastAutoUncheckMessage = L 'preview.auto_uncheck_generic'
             }
         } else {
             $script:DebugState.LastAutoUncheckMessage = $null
@@ -2740,28 +2815,30 @@ function Update-PreviewUi {
     $changedVars = @($p.Candidates | Where-Object { $_.IsSimpleVariable -and $_.IsValueChanged }).Count
     $staticHigh = @($p.Candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'High' }).Count
     $staticLow = @($p.Candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'Low' }).Count
-    $summary = "候选片段=$($p.Candidates.Count) | 当前选择=$($p.Selected.Count) | 跳过=$($p.Skipped.Count) | 静态高=$staticHigh | 静态低=$staticLow | 变化变量=$changedVars | 默认策略=$OverlapStrategy | 手动规则=$manualRules"
+    $summary = L 'preview.summary' @($p.Candidates.Count, $p.Selected.Count, $p.Skipped.Count, $staticHigh, $staticLow, $changedVars, $OverlapStrategy, $manualRules)
     if ($staticLow -gt 0) {
-        $summary = "$summary | 低置信静态候选默认不勾选"
+        $summary = L 'preview.low_conf_note' @($summary)
     }
     $txtPreviewSummary.Text = $summary
     $txtRebuiltPreview.Text = [string]$p.Rebuilt
 }
 
 function Update-DynamicSubgraphUi {
-    $rows = Build-RuntimeSubgraphRows -Context $script:DebugState.Session.Context -CurrentNode $script:DebugState.Session.CurrentNode
+    $currentNode = Resolve-CFGNodeValue -CFG $script:DebugState.Session.Context.CFG -Value $script:DebugState.Session.CurrentNode
+    $script:DebugState.Session.CurrentNode = $currentNode
+    $rows = Build-RuntimeSubgraphRows -Context $script:DebugState.Session.Context -CurrentNode $currentNode
     $dynamicGrid.ItemsSource = @($rows)
 
     if (-not $rows -or $rows.Count -eq 0) {
-        $txtDynamicSummary.Text = "运行时动态子图: 0"
-        $txtDynamicDetail.Text = "当前尚未触发运行时动态子图。"
+        $txtDynamicSummary.Text = L 'dynamic.none_summary'
+        $txtDynamicDetail.Text = L 'dynamic.none_detail'
         $script:DebugState.SelectedRuntimeBlockName = $null
         return
     }
 
     $currentBlockName = $null
-    if ($script:DebugState.Session.CurrentNode -and $script:DebugState.Session.CurrentNode.PSObject.Properties['RuntimeBlockName']) {
-        $currentBlockName = [string]$script:DebugState.Session.CurrentNode.RuntimeBlockName
+    if ($currentNode -and $currentNode.PSObject.Properties['RuntimeBlockName']) {
+        $currentBlockName = [string]$currentNode.RuntimeBlockName
     }
 
     $targetRow = $null
@@ -2776,16 +2853,27 @@ function Update-DynamicSubgraphUi {
     }
     if ($targetRow -and $targetRow.Count -gt 0) {
         $targetRow = $targetRow[0]
-        $dynamicGrid.SelectedItem = $targetRow
+        $script:SyncingDynamicSelection = $true
+        try {
+            $dynamicGrid.SelectedItem = $targetRow
+        } finally {
+            $script:SyncingDynamicSelection = $false
+        }
         $script:DebugState.SelectedRuntimeBlockName = [string]$targetRow.BlockName
         $txtDynamicDetail.Text = Get-RuntimeSubgraphDetailText -Context $script:DebugState.Session.Context -Row $targetRow
     } else {
+        $script:SyncingDynamicSelection = $true
+        try {
+            $dynamicGrid.SelectedItem = $null
+        } finally {
+            $script:SyncingDynamicSelection = $false
+        }
         $txtDynamicDetail.Text = ''
     }
 
-    $activeCount = @($rows | Where-Object { $_.Status -in @('Current', 'Open') }).Count
+    $activeCount = @($rows | Where-Object { $_.StatusKey -in @('Current', 'Open') }).Count
     $hostDisplay = if ([string]::IsNullOrWhiteSpace([string]$script:CurrentHostDisplay)) { '' } else { [string]$script:CurrentHostDisplay }
-    $txtDynamicSummary.Text = "运行时动态子图: $($rows.Count) | 活动中: $activeCount | 当前宿主: $hostDisplay"
+    $txtDynamicSummary.Text = L 'dynamic.summary' @($rows.Count, $activeCount, $hostDisplay)
 }
 
 function Set-CandidateSelection {
@@ -2828,8 +2916,9 @@ function Set-CandidateSelection {
 function Update-NodeReplacementUi {
     param($CurrentNode)
 
+    $CurrentNode = Resolve-CFGNodeValue -CFG $script:DebugState.Session.Context.CFG -Value $CurrentNode
     if ($null -eq $CurrentNode -or -not $script:DebugState.Preview) {
-        $txtNodeReplaceSummary.Text = "当前节点可替换片段: 0"
+        $txtNodeReplaceSummary.Text = L 'replace.none'
         $script:SyncingNodeSelection = $true
         try { $nodeReplaceGrid.ItemsSource = @() } finally { $script:SyncingNodeSelection = $false }
         return
@@ -2851,16 +2940,16 @@ function Update-NodeReplacementUi {
                         StartOffset = $_.StartOffset
                         EndOffset   = $_.EndOffset
                         Type        = $_.Type
-                        SourceLabel = if ([string]$_.SourceKind -eq 'Static') { '静态' } else { '动态' }
+                        SourceLabel = if ([string]$_.SourceKind -eq 'Static') { L 'replace.source_static' } else { L 'replace.source_dynamic' }
                         ConfidenceLabel = switch ([string]$_.Confidence) {
-                            'High' { '高' }
-                            'Low' { '低' }
+                            'High' { L 'replace.confidence.high' }
+                            'Low' { L 'replace.confidence.low' }
                             default { '' }
                         }
                         VariableName = if ([string]::IsNullOrWhiteSpace([string]$_.VariableName)) { '' } else { [string]$_.VariableName }
                         IsSimpleVariable = [bool]$_.IsSimpleVariable
                         IsValueChanged = [bool]$_.IsValueChanged
-                        ChangedFlag = if ([bool]$_.IsValueChanged) { '是' } else { '' }
+                        ChangedFlag = if ([bool]$_.IsValueChanged) { L 'replace.changed_flag' } else { '' }
                         Original    = [string]$_.Original
                         Replacement = [string]$_.Replacement
                     }
@@ -2875,17 +2964,17 @@ function Update-NodeReplacementUi {
         } | Select-Object -Unique)
     $staticHigh = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq $ownerNodeId -and $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'High' }).Count
     $staticLow = @($script:DebugState.Preview.Candidates | Where-Object { [int]$_.NodeId -eq $ownerNodeId -and $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'Low' }).Count
-    $summary = "当前节点可替换片段: $($nodeItems.Count) | 已选择: $selectedCount | 静态高: $staticHigh | 静态低: $staticLow"
+    $summary = L 'replace.summary' @($nodeItems.Count, $selectedCount, $staticHigh, $staticLow)
     if ($isRuntimeNode) {
-        $summary = "$summary | 显示来源节点 Node $ownerNodeId 的候选"
+        $summary = L 'replace.summary_source_node' @($summary, $ownerNodeId)
     }
     if ($changedRows.Count -gt 0) {
-        $summary = "$summary | 值变化变量: $($changedNames -join ', ')"
+        $summary = L 'replace.summary_changed' @($summary, ($changedNames -join ', '))
     }
     if ($staticLow -gt 0) {
-        $summary = "$summary | 低置信静态候选默认不勾选"
+        $summary = L 'replace.summary_low_conf' @($summary)
     }
-    $summary = "$summary | 说明：值变化变量默认取消勾选，手动再勾选将使用最后值"
+    $summary = L 'replace.summary_note' @($summary)
     $txtNodeReplaceSummary.Text = $summary
 
     $script:SyncingNodeSelection = $true
@@ -2897,13 +2986,22 @@ function Update-NodeReplacementUi {
 }
 function Request-SelectionRefresh {
     if ($script:SelectionRefreshQueued) { return }
+    if ($null -eq $window -or $null -eq $window.Dispatcher -or $window.Dispatcher.HasShutdownStarted -or $window.Dispatcher.HasShutdownFinished) {
+        $script:SelectionRefreshQueued = $false
+        return
+    }
     $script:SelectionRefreshQueued = $true
     $null = $window.Dispatcher.InvokeAsync(
         [Action]{
-            $script:SelectionRefreshQueued = $false
-            Update-PreviewUi
-            Update-NodeReplacementUi -CurrentNode $script:DebugState.Session.CurrentNode
-            Update-StatusBar -Suffix "片段选择已更新"
+            try {
+                $script:SelectionRefreshQueued = $false
+                if (-not $script:DebugState -or -not $script:DebugState.Session) { return }
+                Update-PreviewUi
+                Update-NodeReplacementUi -CurrentNode $script:DebugState.Session.CurrentNode
+                Update-StatusBar -Suffix (L 'replace.selection_updated')
+            } catch {
+                Write-DebugUiException -Exception $_ -ActionName 'SelectionRefresh'
+            }
         },
         [System.Windows.Threading.DispatcherPriority]::Background
     )
@@ -2919,14 +3017,18 @@ function Append-StepRecords {
     param([array]$Records)
     foreach ($r in @($Records)) {
         $nextText = if ($r.NextNodeId) {
-            if ([string]::IsNullOrWhiteSpace([string]$r.NextEdgeLabel)) { "-> $($r.NextNodeId)" } else { "$($r.NextEdgeLabel) -> $($r.NextNodeId)" }
+            if ([string]::IsNullOrWhiteSpace([string]$r.NextEdgeLabel)) {
+                L 'step.next_plain' @($r.NextNodeId)
+            } else {
+                L 'step.next_labeled' @($r.NextEdgeLabel, $r.NextNodeId)
+            }
         } else {
             ''
         }
         $row = [PSCustomObject]@{
             Step     = $r.Step
             NodeId   = $r.NodeId
-            Scope    = if ($r.PSObject.Properties['RuntimeBlockName'] -and -not [string]::IsNullOrWhiteSpace([string]$r.RuntimeBlockName)) { 'Runtime' } else { 'Static' }
+            Scope    = if ($r.PSObject.Properties['RuntimeBlockName'] -and -not [string]::IsNullOrWhiteSpace([string]$r.RuntimeBlockName)) { L 'step.scope.runtime' } else { L 'step.scope.static' }
             NodeType = $r.NodeType
             Status   = $r.Status
             NextText = $nextText
@@ -2943,36 +3045,37 @@ function Append-StepRecords {
 function Update-CurrentNodeUi {
     $sessionNow = $script:DebugState.Session
     $graphRefreshed = Refresh-LiveGraphArtifacts -Reason 'UpdateCurrentNodeUi'
-    $curNode = $sessionNow.CurrentNode
+    $curNode = Resolve-CFGNodeValue -CFG $sessionNow.Context.CFG -Value $sessionNow.CurrentNode
+    $sessionNow.CurrentNode = $curNode
     if ($sessionNow.IsCompleted -or $null -eq $curNode) {
-        $txtNodeHeader.Text = "(执行结束)"
-        $txtNodeMeta.Text = "StopReason=$($sessionNow.StopReason)"
-        $txtNextEdge.Text = "下一边: (无)"
+        $txtNodeHeader.Text = L 'node.completed'
+        $txtNodeMeta.Text = L 'node.stop_reason' @($sessionNow.StopReason)
+        $txtNextEdge.Text = L 'node.next.none'
         $txtNodeCode.Text = ""
         Update-NodeReplacementUi -CurrentNode $null
         Update-Highlight -NodeId 0
     } else {
         $runtimeInfo = Get-RuntimeSubgraphInfoForNode -Context $sessionNow.Context -Node $curNode
         if ($runtimeInfo) {
-            $txtNodeHeader.Text = "Node $($curNode.Id) [$($curNode.Type)] | Runtime $($runtimeInfo.BlockName)"
+            $txtNodeHeader.Text = L 'node.header.runtime' @($curNode.Id, $curNode.Type, $runtimeInfo.BlockName)
         } else {
-            $txtNodeHeader.Text = "Node $($curNode.Id) [$($curNode.Type)]"
+            $txtNodeHeader.Text = L 'node.header.static' @($curNode.Id, $curNode.Type)
         }
         $holdHere = ($script:DebugState.HoldPendingNextNodeId -and ([int]$script:DebugState.HoldAfterNodeId -eq [int]$curNode.Id))
         if ($holdHere) {
-            $txtNodeMeta.Text = "该节点已执行并产生可替换片段。请勾选替换项，再次点击 '下一步' 进入后继节点。"
+            $txtNodeMeta.Text = L 'node.meta.hold'
         } else {
-            $txtNodeMeta.Text = "当前尚未执行该节点。点击 '下一步' 执行。"
+            $txtNodeMeta.Text = L 'node.meta.pending'
         }
         if ($runtimeInfo) {
-            $metaSuffix = " 当前位于运行时子图 $($runtimeInfo.BlockName)"
+            $metaSuffix = L 'node.meta.runtime.base' @($runtimeInfo.BlockName)
             if ($runtimeInfo.CallerNodeId) {
-                $metaSuffix += "，来源调用节点为 Node $($runtimeInfo.CallerNodeId)。"
+                $metaSuffix = L 'node.meta.runtime.caller' @($metaSuffix, $runtimeInfo.CallerNodeId)
             } else {
-                $metaSuffix += '。'
+                $metaSuffix = L 'node.meta.runtime.no_caller' @($metaSuffix)
             }
             if ($runtimeInfo.ArgumentValue) {
-                $metaSuffix += " 动态代码: $(ConvertTo-PreviewText -Text ([string]$runtimeInfo.ArgumentValue) -MaxLen 120)"
+                $metaSuffix = L 'node.meta.runtime.code' @($metaSuffix, (ConvertTo-PreviewText -Text ([string]$runtimeInfo.ArgumentValue) -MaxLen 120))
             }
             $txtNodeMeta.Text += $metaSuffix
         }
@@ -2980,9 +3083,10 @@ function Update-CurrentNodeUi {
         $dynamicStopReason = if ($dynamicRecord -is [hashtable]) { [string]$dynamicRecord['StopReason'] } elseif ($dynamicRecord) { [string]$dynamicRecord.StopReason } else { $null }
         $dynamicStopMessage = if ($dynamicRecord -is [hashtable]) { [string]$dynamicRecord['StopMessage'] } elseif ($dynamicRecord) { [string]$dynamicRecord.StopMessage } else { $null }
         if (-not [string]::IsNullOrWhiteSpace($dynamicStopReason)) {
-            $stopText = " 动态递归已停止: $dynamicStopReason。"
+            $stopText = L 'node.meta.runtime_stop' @($dynamicStopReason)
             if (-not [string]::IsNullOrWhiteSpace($dynamicStopMessage)) {
-                $stopText += " $dynamicStopMessage"
+                $localizedStopMessage = Resolve-LocalizedDiagnosticMessage -Language $script:UiLanguage -Reason $dynamicStopReason -Message $dynamicStopMessage
+                $stopText = L 'node.meta.runtime_stop_message' @($stopText, $localizedStopMessage)
             }
             $txtNodeMeta.Text += $stopText
         }
@@ -2995,22 +3099,22 @@ function Update-CurrentNodeUi {
                 $edgeLabel = Get-CFGEdgeLabel -CFG $script:DebugState.Cfg -FromNodeId ([int]$curNode.Id) -ToNodeId $toId
             }
             if ([string]::IsNullOrWhiteSpace([string]$edgeLabel)) {
-                $txtNextEdge.Text = "下一步将前进到: Node $toId"
+                $txtNextEdge.Text = L 'node.next.advance_plain' @($toId)
             } else {
-                $txtNextEdge.Text = "下一步将前进: $edgeLabel -> Node $toId"
+                $txtNextEdge.Text = L 'node.next.advance_labeled' @($edgeLabel, $toId)
             }
         } else {
             $previewEdge = Get-CFGNextEdgePreview -Session $sessionNow
             if ($previewEdge.Error) {
-                $txtNextEdge.Text = "预计下一边: (无法预估) $($previewEdge.Error)"
+                $txtNextEdge.Text = L 'node.next.predict_error' @($previewEdge.Error)
             } elseif ($previewEdge.HasPreview) {
                 if ($null -ne $previewEdge.PredictedCondition) {
-                    $txtNextEdge.Text = "预计下一边: $($previewEdge.EdgeLabel) -> Node $($previewEdge.ToNodeId) (Condition=$($previewEdge.PredictedCondition))"
+                    $txtNextEdge.Text = L 'node.next.predict_with_condition' @($previewEdge.EdgeLabel, $previewEdge.ToNodeId, $previewEdge.PredictedCondition)
                 } else {
-                    $txtNextEdge.Text = "预计下一边: $($previewEdge.EdgeLabel) -> Node $($previewEdge.ToNodeId)"
+                    $txtNextEdge.Text = L 'node.next.predict' @($previewEdge.EdgeLabel, $previewEdge.ToNodeId)
                 }
             } else {
-                $txtNextEdge.Text = "预计下一边: (无)"
+                $txtNextEdge.Text = L 'node.next.predict_none'
             }
         }
         Update-NodeReplacementUi -CurrentNode $curNode
@@ -3024,30 +3128,138 @@ function Update-CurrentNodeUi {
     }
     if ($graphRefreshed) {
         if ([string]::IsNullOrWhiteSpace([string]$suffix)) {
-            $suffix = 'CFG 图已按当前运行时子图刷新'
+            $suffix = L 'status.graph_refreshed'
         } else {
-            $suffix = "$suffix | CFG 图已按当前运行时子图刷新"
+            $suffix = "$suffix | $(L 'status.graph_refreshed')"
         }
     }
     Update-StatusBar -Suffix $suffix
     Update-DynamicSubgraphUi
-    $btnNext.IsEnabled = (-not $sessionNow.IsCompleted)
-    $btnRunAll.IsEnabled = (-not $sessionNow.IsCompleted)
+    Update-ToolbarState
+}
+
+function Update-ToolbarState {
+    $sessionNow = if ($script:DebugState) { $script:DebugState.Session } else { $null }
+    $isBusy = ($script:DebugState -and $script:DebugState.IsRunAllActive -eq $true)
+    $isCompleted = if ($sessionNow) { [bool]$sessionNow.IsCompleted } else { $true }
+    $hasSession = ($null -ne $sessionNow)
+
+    $btnNext.IsEnabled = ($hasSession -and (-not $isCompleted) -and (-not $isBusy))
+    $btnRunAll.IsEnabled = ($hasSession -and (-not $isCompleted) -and (-not $isBusy))
+    $btnReset.IsEnabled = $hasSession
+    $btnExport.IsEnabled = ($hasSession -and ($isCompleted -or (-not $isBusy)))
+}
+
+function Queue-RunAllFinalizeUi {
+    if ($null -eq $window -or $null -eq $window.Dispatcher -or $window.Dispatcher.HasShutdownStarted -or $window.Dispatcher.HasShutdownFinished) {
+        return
+    }
+
+    $null = $window.Dispatcher.InvokeAsync(
+        [Action]{
+            try {
+                if (-not $script:DebugState -or -not $script:DebugState.Session) { return }
+                Refresh-VarGrid
+                Update-PreviewUi
+                Update-CurrentNodeUi
+            } catch {
+                Write-DebugUiException -Exception $_ -ActionName 'BtnRunAllFinalize'
+            }
+        },
+        [System.Windows.Threading.DispatcherPriority]::Background
+    )
+}
+
+function Stop-RunAllExecution {
+    if ($script:RunAllTimer) {
+        try {
+            $script:RunAllTimer.Stop()
+        } catch {
+        }
+        $script:RunAllTimer = $null
+    }
+
+    if ($script:DebugState) {
+        $script:DebugState.IsRunAllActive = $false
+    }
+
+    Update-ToolbarState
+}
+
+function Complete-RunAllExecution {
+    Stop-RunAllExecution
+    Queue-RunAllFinalizeUi
+}
+
+function Start-RunAllExecution {
+    if (-not $script:DebugState -or -not $script:DebugState.Session) { return }
+    if ($script:DebugState.IsRunAllActive) { return }
+
+    if ($script:DebugState.HoldPendingNextNodeId) {
+        $null = Try-AdvanceFromHold
+    }
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(1)
+    $timer.Add_Tick({
+        try {
+            if (-not $script:DebugState -or -not $script:DebugState.Session) {
+                Stop-RunAllExecution
+                return
+            }
+
+            if ($script:DebugState.Session.IsCompleted) {
+                Complete-RunAllExecution
+                return
+            }
+
+            $batchSize = 40
+            $batchIndex = 0
+            while ($batchIndex -lt $batchSize -and -not $script:DebugState.Session.IsCompleted) {
+                $res = Invoke-CFGStep -Session $script:DebugState.Session
+                Append-StepRecords -Records $res.Records
+                $batchIndex++
+            }
+
+            if ($script:DebugState.Session.IsCompleted) {
+                Complete-RunAllExecution
+            } else {
+                Update-CurrentNodeUi
+            }
+        } catch {
+            Stop-RunAllExecution
+            Write-DebugUiException -Exception $_ -ActionName 'BtnRunAll'
+            try {
+                if ($script:DebugState -and $script:DebugState.Session) {
+                    Update-CurrentNodeUi
+                }
+            } catch {
+            }
+        }
+    })
+
+    $script:RunAllTimer = $timer
+    $script:DebugState.IsRunAllActive = $true
+    Update-ToolbarState
+    Update-StatusBar -Suffix $null
+    $timer.Start()
 }
 
 function Reset-DebugSession {
+    Stop-RunAllExecution
     if ($script:DebugState.Session) {
         Close-CFGExecutionSession -Session $script:DebugState.Session
     }
 
     $freshCfg = Get-ScriptControlFlow -ScriptPath $script:DebugState.ScriptPath
     if (-not $freshCfg) {
-        throw "重置失败：无法重新生成 CFG: $($script:DebugState.ScriptPath)"
+        throw (L 'reset.cfg_failed' @($script:DebugState.ScriptPath))
     }
 
     Clear-HoldState
     $script:DebugState.Cfg = $freshCfg
     $script:DebugState.Layout = $null
+    $script:DebugState.OriginalText = Get-FullScriptTextFromFile -Path $script:DebugState.ScriptPath
     $script:DebugState.Session = New-CFGExecutionSession -CFG $script:DebugState.Cfg -LogPath $script:DebugState.LogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs
     $script:DebugState.Steps = New-Object System.Collections.ArrayList
     $script:DebugState.UserSelection = @{}
@@ -3059,6 +3271,8 @@ function Reset-DebugSession {
     $script:DebugState.LastAutoUncheckMessage = $null
     $script:DebugState.SelectedRuntimeBlockName = $null
     $script:DebugState.LastGraphSignature = ''
+    $script:DebugState.IsRunAllActive = $false
+    $script:DebugState.Preview = $null
     $stepsGrid.ItemsSource = @()
     $txtVarName.Text = ""
     $txtVarExpr.Text = ""
@@ -3117,8 +3331,8 @@ function Export-DebugResult {
     $report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $script:DebugState.ReportPath -Encoding UTF8
 
     [System.Windows.MessageBox]::Show(
-        "导出完成：`n$($script:DebugState.OutPath)`n$($script:DebugState.ReportPath)",
-        "导出完成",
+        (L 'export.success_message' @("`n", $script:DebugState.OutPath, $script:DebugState.ReportPath)),
+        (L 'export.success_title'),
         "OK",
         "Information"
     ) | Out-Null
@@ -3147,8 +3361,8 @@ function Write-DebugUiException {
     $detail.Add((''.PadLeft(72, '-'))) | Out-Null
     Add-Content -LiteralPath $uiErrorLogPath -Value ($detail -join [Environment]::NewLine) -Encoding UTF8
 
-    $message = "操作失败: $ActionName`n$($Exception.Exception.Message)`n`n详细堆栈已写入:`n$uiErrorLogPath"
-    [System.Windows.MessageBox]::Show($message, 'PSDissect 调试错误', 'OK', 'Error') | Out-Null
+    $message = L 'error.ui_message' @("`n", $ActionName, $Exception.Exception.Message, $uiErrorLogPath)
+    [System.Windows.MessageBox]::Show($message, (L 'error.title'), 'OK', 'Error') | Out-Null
 }
 
 function Invoke-DebugUiAction {
@@ -3173,6 +3387,7 @@ $graphImage.Add_Loaded({ Rebuild-GraphHotspots; Update-CurrentNodeUi })
 $graphImage.Add_SizeChanged({ Rebuild-GraphHotspots; Update-CurrentNodeUi })
 
 $dynamicGrid.Add_SelectionChanged({
+    if ($script:SyncingDynamicSelection) { return }
     $row = $dynamicGrid.SelectedItem
     if ($row) {
         $script:DebugState.SelectedRuntimeBlockName = [string]$row.BlockName
@@ -3194,22 +3409,15 @@ $btnNext.Add_Click({
         $held = Try-EnterHoldAfterStep -Records $res.Records
         Update-CurrentNodeUi
         if ($held) {
-            Update-StatusBar -Suffix "节点已执行，等待选择替换片段后再前进"
+            Update-StatusBar -Suffix (L 'btn_next_hold')
         }
     }
 })
 
 $btnRunAll.Add_Click({
-    if ($script:DebugState.HoldPendingNextNodeId) {
-        $null = Try-AdvanceFromHold
+    Invoke-DebugUiAction -ActionName 'BtnRunAll' -Action {
+        Start-RunAllExecution
     }
-    while (-not $script:DebugState.Session.IsCompleted) {
-        $res = Invoke-CFGStep -Session $script:DebugState.Session
-        Append-StepRecords -Records $res.Records
-    }
-    Refresh-VarGrid
-    Update-PreviewUi
-    Update-CurrentNodeUi
 })
 
 $btnReset.Add_Click({ Reset-DebugSession })
@@ -3228,7 +3436,7 @@ $nodeReplaceGrid.AddHandler(
         if ($changed) {
             if ($item.PSObject.Properties['IsValueChanged'] -and [bool]$item.IsValueChanged) {
                 $varLabel = if ($item.PSObject.Properties['VariableName'] -and -not [string]::IsNullOrWhiteSpace([string]$item.VariableName)) { '$' + [string]$item.VariableName } else { [string]$item.Original }
-                Update-StatusBar -Suffix "已勾选变化变量 $varLabel，导出时将使用最后值"
+                Update-StatusBar -Suffix (L 'var.changed_selected' @($varLabel))
             }
             Request-SelectionRefresh
         }
@@ -3269,13 +3477,13 @@ $btnApplyVar.Add_Click({
         $varName = [string]$selectedRow.ActualName
     }
     if ([string]::IsNullOrWhiteSpace($varName)) {
-        [System.Windows.MessageBox]::Show("请选择变量，或直接输入变量名。", "提示", "OK", "Warning") | Out-Null
+        [System.Windows.MessageBox]::Show((L 'var.prompt_select'), (L 'var.prompt_title'), "OK", "Warning") | Out-Null
         return
     }
 
     $expr = [string]$txtVarExpr.Text
     if ([string]::IsNullOrWhiteSpace($expr)) {
-        [System.Windows.MessageBox]::Show("请输入变量新值表达式。", "提示", "OK", "Warning") | Out-Null
+        [System.Windows.MessageBox]::Show((L 'var.prompt_expression'), (L 'var.prompt_title'), "OK", "Warning") | Out-Null
         return
     }
     try {
@@ -3283,9 +3491,9 @@ $btnApplyVar.Add_Click({
         Refresh-VarGrid
         Update-PreviewUi -Force
         Update-CurrentNodeUi
-        Update-StatusBar -Suffix "Set $($setResult.Name) = $($setResult.ValueText)"
+        Update-StatusBar -Suffix (L 'var.set_status' @($setResult.Name, $setResult.ValueText))
     } catch {
-        [System.Windows.MessageBox]::Show("设置变量失败: $($_.Exception.Message)", "错误", "OK", "Error") | Out-Null
+        [System.Windows.MessageBox]::Show((L 'var.error_set_failed' @($_.Exception.Message)), (L 'var.error_title'), "OK", "Error") | Out-Null
     }
 })
 
@@ -3309,12 +3517,13 @@ $btnZoomIn.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom + 0.1) })
 $btnZoomReset.Add_Click({ Set-GraphZoom -Zoom 1.0 })
 
 $window.Add_Closed({
+    Stop-RunAllExecution
     if ($script:DebugState.Session) {
         Close-CFGExecutionSession -Session $script:DebugState.Session
     }
 })
 
-$window.Title = "解混淆调试模式 - $([System.IO.Path]::GetFileName($scriptPathFull)) [$currentHostDisplay]"
+Set-DebugWindowTitle -Window $window
 try {
     $null = $window.ShowDialog()
 } catch {
