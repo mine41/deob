@@ -291,4 +291,3 @@ $null
 - `Generate-CFG.ps1`：CFG 生成与 DOT 导出
 - `Execute-CFG.ps1`：执行器和调试会话 API
 - `Ui-Localization.ps1`：debug/replay 的中英文 UI 文本
-- `in/`：输入样例目录
