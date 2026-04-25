@@ -39,6 +39,14 @@ pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\in\in.ps1
 pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
 ```
 
+如果你要用 `powershell.exe -File` 调 `Rebuild-Deobfuscated.ps1`，布尔入口参数建议直接写成普通值：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -FullOutput false -SafeMode true
+```
+
+目前支持的布尔写法包括 `true/false`、`$true/$false`、`1/0`、`yes/no`、`on/off`。
+
 ## 常用流程
 
 ### 1. 自动解混
@@ -146,6 +154,7 @@ pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt
 | `-GlobalTimeBudgetMs` | `120000` | 整体时间预算，单位为毫秒，`0` 表示不限 |
 | `-DynamicTimeBudgetMs` | `15000` | 单次动态展开预算，单位为毫秒，`0` 表示不限 |
 | `-SafeMode` | `$true` | 是否启用安全保护 |
+| `-PreExecutionGateMode` | `Balanced` | 先审后执行门控：`Disabled` / `Conservative` / `Balanced` / `Aggressive` |
 | `-DryRun` | `$false` | 只分析，不写最终输出 |
 
 常用示例：
@@ -160,6 +169,27 @@ pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt
 # 仅做分析，不写最终输出
 .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -DryRun
 ```
+
+`PreExecutionGateMode` 用来控制“先审后执行”门控的激进程度：
+
+- `Disabled`：关闭门控，基本回到旧的“能下钻就下钻”策略
+- `Conservative`：只有明显高风险或高开销片段才会提前拦截
+- `Balanced`：默认模式，适合固定预算实验，例如 `120s`
+- `Aggressive`：更强调在预算内完成，会更早把复杂片段改为浅层处理或直接停止
+
+门控对片段会给出三类决策：
+
+- `Full`：正常继续分析和执行
+- `Shallow`：继续，但会收紧预算，并跳过最昂贵的阶段
+- `Stop`：不再继续深挖，直接保留当前层已经恢复出的文本或证据
+
+如果你是在做 `120s` 左右的标准评测，推荐先用：
+
+```powershell
+.\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -FullOutput $false -MaxRounds 5 -GlobalTimeBudgetMs 120000 -DynamicTimeBudgetMs 5000 -SafeMode $false -PreExecutionGateMode Balanced
+```
+
+每轮 `report.json` 里也可能出现这些门控相关字段：`GateMode`、`GateDecision`、`GateScore`、`GateReasons`、`GateMetrics`。
 
 ### `Debug-Deobfuscation.Wpf.ps1`
 

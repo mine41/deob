@@ -39,6 +39,14 @@ pwsh -NoProfile -Sta -File .\Debug-Deobfuscation.Wpf.ps1 -ScriptPath .\in\in.ps1
 pwsh -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1 -WorkDir .\in\in.rebuilt.ps1.work -Round 1
 ```
 
+For `powershell.exe -File`, prefer plain boolean-compatible values for entry parameters:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -FullOutput false -SafeMode true
+```
+
+Supported boolean forms are `true/false`, `$true/$false`, `1/0`, `yes/no`, and `on/off`.
+
 ## Typical Workflow
 
 ### 1. Automatic Deobfuscation
@@ -146,6 +154,7 @@ Notes:
 | `-GlobalTimeBudgetMs` | `120000` | Overall time budget in milliseconds. `0` means unlimited. |
 | `-DynamicTimeBudgetMs` | `15000` | Time budget for one dynamic expansion in milliseconds. `0` means unlimited. |
 | `-SafeMode` | `$true` | Whether to keep safety protections enabled |
+| `-PreExecutionGateMode` | `Balanced` | Complexity-aware pre-execution gate: `Disabled` / `Conservative` / `Balanced` / `Aggressive` |
 | `-DryRun` | `$false` | Analyze only, do not write the final output |
 
 Common examples:
@@ -160,6 +169,27 @@ Common examples:
 # Analysis only, no final output file
 .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -DryRun
 ```
+
+Pre-execution gate modes:
+
+- `Disabled`: do not apply the gate. The tool behaves like the old always-deepen strategy.
+- `Conservative`: stop or downscale only obviously risky or very expensive fragments.
+- `Balanced`: default mode. Good general setting for fixed-budget experiments such as `120s`.
+- `Aggressive`: prioritize finishing within budget. More fragments are shallow-processed or skipped early.
+
+The gate can classify a fragment as:
+
+- `Full`: continue normal analysis and execution
+- `Shallow`: continue, but tighten budgets and skip the most expensive stages
+- `Stop`: do not deepen further; keep the current recovered text or evidence instead
+
+Recommended baseline for a `120s` experiment:
+
+```powershell
+.\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -FullOutput $false -MaxRounds 5 -GlobalTimeBudgetMs 120000 -DynamicTimeBudgetMs 5000 -SafeMode $false -PreExecutionGateMode Balanced
+```
+
+Round reports may also include gate-related fields such as `GateMode`, `GateDecision`, `GateScore`, `GateReasons`, and `GateMetrics`.
 
 ### `Debug-Deobfuscation.Wpf.ps1`
 

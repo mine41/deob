@@ -119,17 +119,6 @@ function New-BlockedPlaceholder {
     return [BlockedCommandPlaceholder]::new($Command, $Reason, $PreservedText)
 }
 
-# 创建执行上下文（Runspace）
-function New-ExecutionContext {
-    $runspace = [runspacefactory]::CreateRunspace()
-    $runspace.Open()
-
-    return @{
-        Runspace = $runspace
-    }
-}
-
-# 关闭执行上下文
 function Get-PowerShellHostInfo {
     $processName = $null
     $exePath = $null
@@ -199,6 +188,81 @@ function Format-PowerShellHostInfo {
     return $text
 }
 
+function Resolve-ExecutionContextChildHostExecutable {
+    param(
+        [ValidateSet('powershell', 'pwsh', 'current')]
+        [string]$PreferredHost = 'powershell'
+    )
+
+    if ($PreferredHost -eq 'current') {
+        $currentHost = Get-PowerShellHostInfo
+        if ($currentHost -and -not [string]::IsNullOrWhiteSpace([string]$currentHost.ExecutablePath) -and
+            (Test-Path -LiteralPath ([string]$currentHost.ExecutablePath))) {
+            return [string]$currentHost.ExecutablePath
+        }
+    }
+
+    if ($PreferredHost -eq 'pwsh') {
+        $pwshCommand = @(Get-Command pwsh.exe, pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if ($pwshCommand.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$pwshCommand[0].Source)) {
+            return [string]$pwshCommand[0].Source
+        }
+    }
+
+    $powershellExe = (Get-Command powershell.exe -CommandType Application -ErrorAction SilentlyContinue).Source
+    if (-not [string]::IsNullOrWhiteSpace([string]$powershellExe)) {
+        return [string]$powershellExe
+    }
+
+    if ($PreferredHost -eq 'current') {
+        $currentHost = Get-PowerShellHostInfo
+        if ($currentHost -and -not [string]::IsNullOrWhiteSpace([string]$currentHost.ExecutablePath) -and
+            (Test-Path -LiteralPath ([string]$currentHost.ExecutablePath))) {
+            return [string]$currentHost.ExecutablePath
+        }
+    }
+
+    return (Get-Command pwsh.exe -CommandType Application -ErrorAction Stop).Source
+}
+
+function Convert-ExecutionContextCodeToBase64 {
+    param([AllowNull()][string]$Code)
+
+    $text = if ($null -eq $Code) { '' } else { [string]$Code }
+    return [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($text))
+}
+
+function New-ExecutionContext {
+    param(
+        [ValidateSet('Runspace', 'SubprocessReplay')]
+        [string]$Backend = 'Runspace',
+        [ValidateSet('powershell', 'pwsh', 'current')]
+        [string]$ChildHost = 'powershell'
+    )
+
+    if ($Backend -eq 'SubprocessReplay') {
+        $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('psdissect_exec_' + [guid]::NewGuid().ToString('N'))
+        $null = [System.IO.Directory]::CreateDirectory($tempRoot)
+
+        return @{
+            Runspace         = $null
+            Backend          = 'SubprocessReplay'
+            ChildHost        = $ChildHost
+            ChildHostExe     = Resolve-ExecutionContextChildHostExecutable -PreferredHost $ChildHost
+            TempRoot         = $tempRoot
+            ReplayStatements = (New-Object 'System.Collections.Generic.List[string]')
+        }
+    }
+
+    $runspace = [runspacefactory]::CreateRunspace()
+    $runspace.Open()
+
+    return @{
+        Runspace = $runspace
+        Backend  = 'Runspace'
+    }
+}
+
 function Add-CFGVisitedNodeCount {
     param(
         [hashtable]$Context,
@@ -221,19 +285,234 @@ function Add-CFGVisitedNodeCount {
 }
 function Close-ExecutionContext {
     param([hashtable]$ExecContext)
+
+    if ($null -eq $ExecContext) {
+        return
+    }
+
     if ($ExecContext.Runspace) {
         $ExecContext.Runspace.Close()
         $ExecContext.Runspace.Dispose()
     }
+
+    if ($ExecContext.ContainsKey('TempRoot') -and -not [string]::IsNullOrWhiteSpace([string]$ExecContext.TempRoot)) {
+        try {
+            if (Test-Path -LiteralPath ([string]$ExecContext.TempRoot)) {
+                Remove-Item -LiteralPath ([string]$ExecContext.TempRoot) -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+        }
+    }
 }
 
-# 在 Runspace 中执行代码（带超时机制）
+function Invoke-InSubprocessReplayContext {
+    param(
+        [Parameter(Mandatory)][hashtable]$ExecContext,
+        [Parameter(Mandatory)][string]$Code,
+        [int]$TimeoutMs = 5000,
+        [bool]$PersistOnSuccess = $true
+    )
+
+    $childExe = if ($ExecContext.ContainsKey('ChildHostExe')) { [string]$ExecContext.ChildHostExe } else { $null }
+    if ([string]::IsNullOrWhiteSpace($childExe)) {
+        return @{
+            Success = $false
+            Error   = 'Subprocess host executable is unavailable'
+            Result  = $null
+            Timeout = $false
+        }
+    }
+
+    $tempRoot = if ($ExecContext.ContainsKey('TempRoot')) { [string]$ExecContext.TempRoot } else { $null }
+    if ([string]::IsNullOrWhiteSpace($tempRoot)) {
+        return @{
+            Success = $false
+            Error   = 'Subprocess temp root is unavailable'
+            Result  = $null
+            Timeout = $false
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $tempRoot)) {
+        $null = [System.IO.Directory]::CreateDirectory($tempRoot)
+    }
+
+    if (-not $ExecContext.ContainsKey('ReplayStatements') -or $null -eq $ExecContext.ReplayStatements) {
+        $ExecContext.ReplayStatements = (New-Object 'System.Collections.Generic.List[string]')
+    }
+
+    $invokeId = [guid]::NewGuid().ToString('N')
+    $runnerPath = Join-Path $tempRoot ("invoke_${invokeId}.ps1")
+    $resultPath = Join-Path $tempRoot ("invoke_${invokeId}.result.clixml")
+    $errorPath = Join-Path $tempRoot ("invoke_${invokeId}.error.txt")
+
+    $replayEncoded = @()
+    foreach ($statement in @($ExecContext.ReplayStatements)) {
+        $replayEncoded += ("'" + (Convert-ExecutionContextCodeToBase64 -Code ([string]$statement)) + "'")
+    }
+    $currentEncoded = Convert-ExecutionContextCodeToBase64 -Code $Code
+
+    $runnerText = @"
+`$ErrorActionPreference = 'Stop'
+`$ProgressPreference = 'SilentlyContinue'
+
+function Decode-ExecutionContextCode {
+    param([AllowNull()][string]`$Encoded)
+
+    if ([string]::IsNullOrWhiteSpace(`$Encoded)) {
+        return ''
+    }
+
+    return [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(`$Encoded))
+}
+
+`$replayBlocks = @(
+$(if ($replayEncoded.Count -gt 0) { $replayEncoded -join ",`r`n" } else { '' })
+)
+`$currentBlock = '$currentEncoded'
+
+try {
+    foreach (`$encoded in `$replayBlocks) {
+        `$block = Decode-ExecutionContextCode -Encoded `$encoded
+        if (-not [string]::IsNullOrWhiteSpace(`$block)) {
+            `$null = @(& ([scriptblock]::Create(`$block)))
+        }
+    }
+
+    `$currentCode = Decode-ExecutionContextCode -Encoded `$currentBlock
+    `$result = @(& ([scriptblock]::Create(`$currentCode)))
+    Export-Clixml -LiteralPath '$resultPath' -InputObject ([pscustomobject]@{
+        Success = `$true
+        Result  = @(`$result)
+    })
+    exit 0
+} catch {
+    `$detail = if (`$_.Exception -and -not [string]::IsNullOrWhiteSpace([string]`$_.Exception.Message)) {
+        [string]`$_.Exception.Message
+    } else {
+        ([string]`$_)
+    }
+    Set-Content -LiteralPath '$errorPath' -Value `$detail -Encoding UTF8
+    exit 1
+}
+"@
+
+    [System.IO.File]::WriteAllText($runnerPath, $runnerText, [System.Text.Encoding]::UTF8)
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $childExe
+    $psi.Arguments = ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $runnerPath.Replace('"', '""'))
+    $psi.WorkingDirectory = $tempRoot
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+
+    $process = $null
+    try {
+        $process = [System.Diagnostics.Process]::Start($psi)
+        if ($null -eq $process) {
+            return @{
+                Success = $false
+                Error   = 'Failed to start subprocess host'
+                Result  = $null
+                Timeout = $false
+            }
+        }
+
+        $completed = $process.WaitForExit($TimeoutMs)
+        if (-not $completed) {
+            try { $process.Kill() } catch { }
+            try { $process.WaitForExit() } catch { }
+            return @{
+                Success = $false
+                Error   = "Execution timeout after ${TimeoutMs}ms"
+                Result  = $null
+                Timeout = $true
+            }
+        }
+
+        $stdoutText = $process.StandardOutput.ReadToEnd()
+        $stderrText = $process.StandardError.ReadToEnd()
+        if ($process.ExitCode -ne 0) {
+            $errorText = $null
+            if (Test-Path -LiteralPath $errorPath) {
+                $errorText = [System.IO.File]::ReadAllText($errorPath, [System.Text.Encoding]::UTF8)
+            }
+            if ([string]::IsNullOrWhiteSpace($errorText)) {
+                $errorText = if (-not [string]::IsNullOrWhiteSpace($stderrText)) { $stderrText } elseif (-not [string]::IsNullOrWhiteSpace($stdoutText)) { $stdoutText } else { "Subprocess exited with code $($process.ExitCode)" }
+            }
+            return @{
+                Success = $false
+                Error   = ([string]$errorText).Trim()
+                Result  = $null
+                Timeout = $false
+            }
+        }
+
+        if (-not (Test-Path -LiteralPath $resultPath)) {
+            return @{
+                Success = $false
+                Error   = 'Subprocess completed without a result payload'
+                Result  = $null
+                Timeout = $false
+            }
+        }
+
+        $payload = Import-Clixml -LiteralPath $resultPath
+        $result = if ($payload -and $payload.PSObject.Properties['Result']) { $payload.Result } else { $null }
+
+        if ($PersistOnSuccess) {
+            $ExecContext.ReplayStatements.Add([string]$Code) | Out-Null
+        }
+
+        return @{
+            Success = $true
+            Error   = $null
+            Result  = $result
+            Timeout = $false
+        }
+    } catch {
+        return @{
+            Success = $false
+            Error   = $_.Exception.Message
+            Result  = $null
+            Timeout = $false
+        }
+    } finally {
+        if ($process) {
+            $process.Dispose()
+        }
+
+        foreach ($path in @($runnerPath, $resultPath, $errorPath)) {
+            try {
+                if (-not [string]::IsNullOrWhiteSpace([string]$path) -and (Test-Path -LiteralPath $path)) {
+                    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+                }
+            } catch {
+            }
+        }
+    }
+}
+
+# 在执行上下文中执行代码（可选子进程硬超时后端）
 function Invoke-InContext {
     param(
         [hashtable]$ExecContext,
         [string]$Code,
-        [int]$TimeoutMs = 5000  # 默认 5 秒超时
+        [int]$TimeoutMs = 5000,
+        [bool]$PersistOnSuccess = $true
     )
+
+    $backend = if ($ExecContext -and $ExecContext.ContainsKey('Backend') -and -not [string]::IsNullOrWhiteSpace([string]$ExecContext.Backend)) {
+        [string]$ExecContext.Backend
+    } else {
+        'Runspace'
+    }
+
+    if ($backend -eq 'SubprocessReplay') {
+        return (Invoke-InSubprocessReplayContext -ExecContext $ExecContext -Code $Code -TimeoutMs $TimeoutMs -PersistOnSuccess:$PersistOnSuccess)
+    }
 
     try {
         $ps = [powershell]::Create()
@@ -1481,6 +1760,364 @@ function Record-LiteralizedCommandResult {
     Write-ExecutionLog -Context $Context -Message "  [LITERALIZE] Safe command folded for `$${0}: {1}" -f $info.VariableName, $info.Pattern
 }
 
+function Test-SensitiveSinkText {
+    param(
+        [AllowNull()][string]$Text,
+        [string]$SinkKind = 'Generic'
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    $trimmed = $Text.Trim()
+    $isUrlLike = ($trimmed -match '^(?i)(?:https?|ftp)://') -or
+        ($trimmed -match '^(?:(?:\d{1,3}\.){3}\d{1,3})(?::\d+)?(?:/.*)?$') -or
+        ($trimmed -match '^(?i:[A-Za-z0-9.-]+\.[A-Za-z]{2,})(?:[:/].*)?$')
+    $isProcessArgLike = $trimmed -match '(?i)(?:https?://|\.hta\b|-enc(?:odedcommand)?\b|-command\b|mshta(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|wscript(?:\.exe)?|cscript(?:\.exe)?|cmd(?:\.exe)?\s+/c)'
+    $isRegistryLike = $trimmed -match '^(?i:(?:registry::)?(?:hkcu|hklm|hkcr|hku|hkcc):\\|hkey_(?:current_user|local_machine|classes_root|users|current_config)\\)'
+    $isFilePathLike = ($trimmed -match '^(?i:[a-z]:\\)') -or
+        ($trimmed -match '^\\\\[^\\]+\\[^\\]+') -or
+        ($trimmed -match '^(?i)(?:\.{1,2}\\|~\\|\$env:[A-Za-z_][A-Za-z0-9_]*\\|%[A-Za-z_][A-Za-z0-9_]*%\\)') -or
+        (($trimmed -match '[\\/]' -or $trimmed -match '(?i)^(?:temp|appdata|programdata|desktop|documents|downloads|startup|system32|syswow64)$') -and
+            $trimmed -notmatch '^(?i)(?:https?|ftp)://')
+    if ($trimmed -match '^[\\/]+[*?]') {
+        $isFilePathLike = $false
+    }
+    $isCommandTextLike = ($trimmed -match '(?i)\b(?:invoke-expression|iex|start-process|invoke-webrequest|invoke-restmethod|downloadstring|downloadfile|set-itemproperty|new-itemproperty|reg\s+add|reg\s+query|reg\s+delete|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?)\b')
+    $isLauncherArgLike = $isProcessArgLike -or
+        ($trimmed -match '(?i)(?:\s|^)(?:/c|/k|-command|-file|-f|-enc|-encodedcommand|javascript:|vbscript:|http://|https://|\\\\)')
+
+    switch ($SinkKind) {
+        'Url' { return $isUrlLike }
+        'Host' { return ($trimmed -match '^(?:(?:\d{1,3}\.){3}\d{1,3}|[A-Za-z0-9.-]+\.[A-Za-z]{2,})$') }
+        'StartProcessArgs' { return ($isProcessArgLike -or $isUrlLike) }
+        'LauncherArgs' { return ($isLauncherArgLike -or $isUrlLike -or $isFilePathLike) }
+        'CommandText' { return ($isCommandTextLike -or $isUrlLike -or $isFilePathLike -or $isRegistryLike) }
+        'FilePath' { return $isFilePathLike }
+        'DirectoryPath' { return $isFilePathLike }
+        'RegKey' { return $isRegistryLike }
+        default { return ($isUrlLike -or $isProcessArgLike -or $isFilePathLike) }
+    }
+}
+
+function Get-SensitiveSinkValueText {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    $materialized = Convert-DynamicInvocationValueToScriptText -Value $Value
+    if ($materialized -and $materialized.Success -and -not [string]::IsNullOrWhiteSpace([string]$materialized.Text)) {
+        return [string]$materialized.Text
+    }
+
+    try {
+        $text = [string]$Value
+    } catch {
+        return $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    return $text
+}
+
+function Get-ResolvedCommandArgumentEntries {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [hashtable]$Context,
+        [int]$CallerNodeId = -1
+    )
+
+    $entries = @()
+    if (-not $CommandAst -or -not $CommandAst.CommandElements) {
+        return @()
+    }
+
+    $positionalIndex = 0
+    for ($i = 1; $i -lt $CommandAst.CommandElements.Count; $i++) {
+        $elem = $CommandAst.CommandElements[$i]
+
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $argAst = $elem.Argument
+            if (-not $argAst -and ($i + 1) -lt $CommandAst.CommandElements.Count -and
+                $CommandAst.CommandElements[$i + 1] -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                $i++
+                $argAst = $CommandAst.CommandElements[$i]
+            }
+
+            $resolved = Resolve-InvocationArgumentValue -ArgumentAst $argAst -Context $Context -CallerNodeId $CallerNodeId
+            $entries += [PSCustomObject]@{
+                Kind    = 'Named'
+                Name    = [string]$elem.ParameterName
+                Position = $null
+                Ast     = $argAst
+                Success = [bool]$resolved.Success
+                Value   = $resolved.Value
+            }
+            continue
+        }
+
+        $resolved = Resolve-InvocationArgumentValue -ArgumentAst $elem -Context $Context -CallerNodeId $CallerNodeId
+        $entries += [PSCustomObject]@{
+            Kind    = 'Positional'
+            Name    = $null
+            Position = $positionalIndex
+            Ast     = $elem
+            Success = [bool]$resolved.Success
+            Value   = $resolved.Value
+        }
+        $positionalIndex++
+    }
+
+    return @($entries)
+}
+
+function Get-SensitiveCommandReplacementRecord {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo = $null
+    )
+
+    $commandAst = if ($CommandInfo -and $CommandInfo.PSObject.Properties['Ast'] -and $CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $CommandInfo.Ast
+    } elseif ($Node -and $Node.Ast -is [System.Management.Automation.Language.CommandAst]) {
+        $Node.Ast
+    } else {
+        $null
+    }
+    if ($null -eq $commandAst) { return $null }
+
+    $commandName = if ($CommandInfo -and $CommandInfo.PSObject.Properties['ResolvedName'] -and
+        -not [string]::IsNullOrWhiteSpace([string]$CommandInfo.ResolvedName)) {
+        [string]$CommandInfo.ResolvedName
+    } else {
+        Convert-DynamicCommandCandidateToName -Value $commandAst.GetCommandName()
+    }
+    if ([string]::IsNullOrWhiteSpace($commandName)) { return $null }
+
+    $entries = @(Get-ResolvedCommandArgumentEntries -CommandAst $commandAst -Context $Context -CallerNodeId $Node.Id)
+    if ($entries.Count -eq 0) { return $null }
+
+    $getNamed = {
+        param([string[]]$Names)
+        foreach ($entry in @($entries)) {
+            if ($entry.Kind -ne 'Named') { continue }
+            foreach ($name in @($Names)) {
+                if (-not [string]::IsNullOrWhiteSpace($name) -and $entry.Name -and $entry.Name.Equals($name, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $entry
+                }
+            }
+        }
+        return $null
+    }
+    $getPositional = {
+        param([int]$Position)
+        foreach ($entry in @($entries)) {
+            if ($entry.Kind -eq 'Positional' -and [int]$entry.Position -eq $Position) {
+                return $entry
+            }
+        }
+        return $null
+    }
+
+    $targets = @()
+    switch ($commandName.ToLowerInvariant()) {
+        { $_ -in @('invoke-webrequest', 'iwr', 'curl', 'wget', 'invoke-restmethod', 'irm') } {
+            $target = & $getNamed @('Uri', 'Url')
+            if (-not $target) { $target = & $getPositional 0 }
+            if ($target -and $target.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $target; SinkKind = 'Url'; SinkType = 'CommandWebRequest' }
+            }
+
+            $outFileTarget = & $getNamed @('OutFile')
+            if ($outFileTarget -and $outFileTarget.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $outFileTarget; SinkKind = 'FilePath'; SinkType = 'CommandWebRequestOutFile' }
+            }
+        }
+        'start-bitstransfer' {
+            $target = & $getNamed @('Source')
+            if ($target -and $target.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $target; SinkKind = 'Url'; SinkType = 'CommandBitsSource' }
+            }
+
+            $destinationTarget = & $getNamed @('Destination')
+            if ($destinationTarget -and $destinationTarget.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $destinationTarget; SinkKind = 'FilePath'; SinkType = 'CommandBitsDestination' }
+            }
+        }
+        { $_ -in @('start-process', 'start', 'saps') } {
+            $filePathEntry = & $getNamed @('FilePath')
+            if (-not $filePathEntry) { $filePathEntry = & $getPositional 0 }
+            $argListEntry = & $getNamed @('ArgumentList')
+            if (-not $argListEntry) { $argListEntry = & $getPositional 1 }
+            $workingDirectoryEntry = & $getNamed @('WorkingDirectory')
+            $filePathText = if ($filePathEntry) { Get-SensitiveSinkValueText -Value $filePathEntry.Value } else { $null }
+
+            if ($filePathEntry -and $filePathEntry.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $filePathEntry; SinkKind = 'FilePath'; SinkType = 'CommandStartProcessFilePath' }
+            }
+            if ($workingDirectoryEntry -and $workingDirectoryEntry.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $workingDirectoryEntry; SinkKind = 'DirectoryPath'; SinkType = 'CommandStartProcessWorkingDirectory' }
+            }
+            if ($argListEntry -and $argListEntry.Ast -and
+                $filePathText -match '^(?i)(?:mshta|powershell|pwsh|cmd|wscript|cscript)(?:\.exe)?$') {
+                $targets += [PSCustomObject]@{ Entry = $argListEntry; SinkKind = 'LauncherArgs'; SinkType = 'CommandStartProcessArgs' }
+            }
+        }
+        { $_ -in @('set-content', 'sc', 'add-content', 'ac', 'clear-content', 'clc', 'get-content', 'gc', 'type', 'cat', 'new-item', 'ni', 'remove-item', 'rm', 'ri', 'del', 'erase', 'rd', 'invoke-item', 'ii') } {
+            $target = & $getNamed @('LiteralPath', 'Path', 'LP')
+            if (-not $target) { $target = & $getPositional 0 }
+            if ($target -and $target.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $target; SinkKind = 'FilePath'; SinkType = 'CommandPath' }
+            }
+        }
+        'out-file' {
+            $target = & $getNamed @('FilePath', 'LiteralPath', 'Path')
+            if (-not $target) { $target = & $getPositional 0 }
+            if ($target -and $target.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $target; SinkKind = 'FilePath'; SinkType = 'CommandOutFilePath' }
+            }
+        }
+        { $_ -in @('copy-item', 'copy', 'cp', 'cpi', 'move-item', 'mv', 'mi') } {
+            $sourceTarget = & $getNamed @('LiteralPath', 'Path', 'LP')
+            if (-not $sourceTarget) { $sourceTarget = & $getPositional 0 }
+            $destinationTarget = & $getNamed @('Destination', 'Dest')
+            if (-not $destinationTarget) { $destinationTarget = & $getPositional 1 }
+
+            if ($sourceTarget -and $sourceTarget.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $sourceTarget; SinkKind = 'FilePath'; SinkType = 'CommandSourcePath' }
+            }
+            if ($destinationTarget -and $destinationTarget.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $destinationTarget; SinkKind = 'FilePath'; SinkType = 'CommandDestinationPath' }
+            }
+        }
+        { $_ -in @('set-itemproperty', 'new-itemproperty', 'remove-itemproperty') } {
+            $target = & $getNamed @('LiteralPath', 'Path', 'LP')
+            if (-not $target) { $target = & $getPositional 0 }
+            if ($target -and $target.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $target; SinkKind = 'RegKey'; SinkType = 'CommandRegistryPath' }
+            }
+        }
+        'nslookup' {
+            $target = & $getPositional 0
+            if ($target -and $target.Ast) {
+                $targets += [PSCustomObject]@{ Entry = $target; SinkKind = 'Host'; SinkType = 'CommandNslookup' }
+            }
+        }
+    }
+
+    if ($targets.Count -eq 0) { return $null }
+
+    $replacementText = [string]$commandAst.Extent.Text
+    $localStart = [int]$commandAst.Extent.StartOffset
+    $applied = @()
+    foreach ($target in @($targets)) {
+        $entry = $target.Entry
+        if (-not $entry -or -not $entry.Ast -or -not $entry.Ast.Extent) { continue }
+
+        $valueText = Get-SensitiveSinkValueText -Value $entry.Value
+        if (-not (Test-SensitiveSinkText -Text $valueText -SinkKind ([string]$target.SinkKind))) {
+            continue
+        }
+
+        $formatted = Format-LiteralizedCommandValue -Value ([string]$valueText)
+        $entryStart = [int]$entry.Ast.Extent.StartOffset - $localStart
+        $entryEnd = [int]$entry.Ast.Extent.EndOffset - $localStart
+        if ($entryStart -lt 0 -or $entryEnd -le $entryStart -or $entryEnd -gt $replacementText.Length) {
+            continue
+        }
+
+        $originalArg = $replacementText.Substring($entryStart, $entryEnd - $entryStart)
+        if ($originalArg -eq $formatted) {
+            continue
+        }
+
+        $applied += [PSCustomObject]@{
+            Start    = $entryStart
+            End      = $entryEnd
+            Text     = $formatted
+            SinkType = [string]$target.SinkType
+        }
+    }
+
+    if ($applied.Count -eq 0) { return $null }
+
+    foreach ($item in @($applied | Sort-Object Start -Descending)) {
+        $replacementText = $replacementText.Substring(0, $item.Start) + $item.Text + $replacementText.Substring($item.End)
+    }
+
+    $globalExtent = Get-NodeAstGlobalExtent -Node $Node -Ast $commandAst
+    if ($null -eq $globalExtent) { return $null }
+
+    return [PSCustomObject]@{
+        NodeId           = $Node.Id
+        StartOffset      = [int]$globalExtent.StartOffset
+        EndOffset        = [int]$globalExtent.EndOffset
+        OriginalText     = [string]$commandAst.Extent.Text
+        ReplacementText  = [string]$replacementText
+        SinkType         = (($applied | ForEach-Object { [string]$_.SinkType } | Select-Object -Unique) -join ',')
+        Executed         = $true
+        Timestamp        = Get-Date
+        UsedEmptyFallback = $false
+    }
+}
+
+function Record-SensitiveSinkResult {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo = $null
+    )
+
+    if ($null -eq $Node -or $null -eq $Context -or $null -eq $Node.Ast) {
+        return
+    }
+
+    if (-not $Context.ContainsKey('SensitiveSinkResults') -or $null -eq $Context.SensitiveSinkResults) {
+        $Context.SensitiveSinkResults = @()
+    }
+
+    $record = Get-SensitiveCommandReplacementRecord -Node $Node -Context $Context -CommandInfo $CommandInfo
+    if ($null -eq $record -or [string]::IsNullOrWhiteSpace([string]$record.ReplacementText)) {
+        return
+    }
+
+    $Context.SensitiveSinkResults += $record
+    Write-ExecutionLog -Context $Context -Message "  [SINK] Literalized sensitive sink: $($record.SinkType)"
+}
+
+function Invoke-DynamicStopPostProcessRecovery {
+    param([AllowNull()][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+    if (-not (Get-Command Invoke-PostProcessDeobfuscatedScriptText -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+
+    try {
+        $recovered = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $ScriptText
+    } catch {
+        return $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$recovered)) {
+        return $null
+    }
+
+    if (Get-Command Get-NormalizedScriptComparisonText -ErrorAction SilentlyContinue) {
+        if ((Get-NormalizedScriptComparisonText -ScriptText $recovered) -eq (Get-NormalizedScriptComparisonText -ScriptText $ScriptText)) {
+            return $null
+        }
+    } elseif ([string]$recovered -eq [string]$ScriptText) {
+        return $null
+    }
+
+    return [string]$recovered
+}
+
 function ConvertTo-CanonicalPowerShellHostCommandText {
     param(
         [Parameter(Mandatory = $true)]
@@ -1573,6 +2210,513 @@ function Get-StopwatchBudgetStatus {
     }
 }
 
+function Get-PreExecutionGateThresholdScale {
+    param(
+        [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
+        [string]$Mode = 'Balanced'
+    )
+
+    switch ($Mode) {
+        'Conservative' { return 1.5 }
+        'Aggressive'   { return 0.6 }
+        default        { return 1.0 }
+    }
+}
+
+function Get-PreExecutionGateScoreThresholds {
+    param(
+        [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
+        [string]$Mode = 'Balanced'
+    )
+
+    switch ($Mode) {
+        'Conservative' { return [PSCustomObject]@{ Shallow = 9; Stop = 16 } }
+        'Aggressive'   { return [PSCustomObject]@{ Shallow = 5; Stop = 8 } }
+        default        { return [PSCustomObject]@{ Shallow = 7; Stop = 14 } }
+    }
+}
+
+function Add-PreExecutionGateReason {
+    param(
+        [System.Collections.Generic.List[string]]$ReasonList,
+        [string]$Reason
+    )
+
+    if ($null -eq $ReasonList -or [string]::IsNullOrWhiteSpace($Reason)) {
+        return
+    }
+
+    if (-not $ReasonList.Contains($Reason)) {
+        $ReasonList.Add($Reason) | Out-Null
+    }
+}
+
+function Get-PreExecutionGateTextMetrics {
+    param(
+        [string]$ScriptText,
+        [AllowNull()]$ParseInfo = $null
+    )
+
+    $text = if ($null -eq $ScriptText) { '' } else { [string]$ScriptText }
+    $lineCount = 0
+    if ($text.Length -gt 0) {
+        $lineCount = ([regex]::Matches($text, "`r`n|`n|`r")).Count + 1
+    }
+
+    $dynamicMatches = [regex]::Matches($text, '(?im)\b(?:Invoke-Expression|iex|ScriptBlock\s*::\s*Create|NewScriptBlock|powershell(?:\.exe)?|pwsh(?:\.exe)?)\b')
+    $loaderMatches = [regex]::Matches($text, '(?im)\b(?:DeflateStream|ReadToEnd|ToInt16|FromBase64String|-bxor|\[char\]|ConvertTo-SecureString|PSCredential|GetNetworkCredential|SecureStringToGlobalAlloc|PtrToString|MemoryStream|GzipStream)\b')
+    $functionMatches = [regex]::Matches($text, '(?im)^\s*function\b')
+    $largeArrayCount = 0
+    foreach ($m in @([regex]::Matches($text, '(?is)(?:0x[0-9a-f]{2}|\b\d{1,3}\b)\s*(?:,\s*(?:0x[0-9a-f]{2}|\b\d{1,3}\b)\s*)+'))) {
+        $itemCount = [regex]::Matches([string]$m.Value, '(?i)0x[0-9a-f]{2}|\b\d{1,3}\b').Count
+        if ($itemCount -gt $largeArrayCount) {
+            $largeArrayCount = $itemCount
+        }
+    }
+
+    $delayBombHit = $false
+    $delayIndicators = New-Object 'System.Collections.Generic.List[string]'
+    $delayPatterns = @(
+        @{ Name = 'StartSleep'; Pattern = '(?im)\b(?:Start-Sleep|sleep)\b' },
+        @{ Name = 'ThreadSleep'; Pattern = '(?im)\[(?:System\.)?Threading\.Thread\]\s*::\s*Sleep\s*\(' },
+        @{ Name = 'PingDelay'; Pattern = '(?im)\bping\b\s+-n\b' },
+        @{ Name = 'WhileTrue'; Pattern = '(?is)\bwhile\s*\(\s*(?:\$true|1|\(+\s*\[int(?:32|64)?\]\s*1\s*\)+)\s*\)' },
+        @{ Name = 'ForEver'; Pattern = '(?is)\bfor\s*\(\s*;\s*;\s*\)' }
+    )
+    foreach ($entry in $delayPatterns) {
+        if ($text -match $entry.Pattern) {
+            $delayBombHit = $true
+            $delayIndicators.Add([string]$entry.Name) | Out-Null
+        }
+    }
+
+    $interactiveComHit = $false
+    $interactiveComIndicators = New-Object 'System.Collections.Generic.List[string]'
+    $interactiveComPatterns = @(
+        @{ Name = 'WScriptShellPopup'; Pattern = '(?is)\bWScript\.Shell\b[\s\S]{0,160}?\.\s*Popup\s*\(' },
+        @{ Name = 'ShellApplicationShellExecute'; Pattern = '(?is)\bShell\.Application\b[\s\S]{0,200}?\.\s*ShellExecute\s*\(' },
+        @{ Name = 'ComShellExecute'; Pattern = '(?is)\bNew-Object\b[\s\S]{0,120}?(?<!\S)-(?:ComObject|Com)\b[\s\S]{0,200}?\.\s*ShellExecute\s*\(' },
+        @{ Name = 'ComRunExec'; Pattern = '(?is)\bNew-Object\b[\s\S]{0,120}?(?<!\S)-(?:ComObject|Com)\b[\s\S]{0,200}?\.\s*(?:Run|Exec)\s*\(' },
+        @{ Name = 'IEAutomation'; Pattern = '(?is)\bInternetExplorer\.Application\b|\.\s*Navigate2?\s*\(' }
+    )
+    foreach ($entry in $interactiveComPatterns) {
+        if ($text -match $entry.Pattern) {
+            $interactiveComHit = $true
+            $interactiveComIndicators.Add([string]$entry.Name) | Out-Null
+        }
+    }
+
+    $guiPayloadHit = $false
+    $guiPayloadIndicators = New-Object 'System.Collections.Generic.List[string]'
+    $guiPayloadPatterns = @(
+        @{ Name = 'WinFormsNamespace'; Pattern = '(?im)\bSystem\.Windows\.Forms\b' },
+        @{ Name = 'DrawingNamespace'; Pattern = '(?im)\bSystem\.Drawing\b' },
+        @{ Name = 'WinFormsForm'; Pattern = '(?im)\bNew-Object\s+System\.Windows\.Forms\.Form\b' },
+        @{ Name = 'GuiShowDialog'; Pattern = '(?im)\.\s*ShowDialog\s*\(' },
+        @{ Name = 'GuiShow'; Pattern = '(?im)\.\s*Show\s*\(' },
+        @{ Name = 'GuiEventHandler'; Pattern = '(?im)\bAdd_(?:Shown|Click|KeyDown)\b' }
+    )
+    foreach ($entry in $guiPayloadPatterns) {
+        if ($text -match $entry.Pattern) {
+            $guiPayloadHit = $true
+            $guiPayloadIndicators.Add([string]$entry.Name) | Out-Null
+        }
+    }
+
+    $archivePayloadHit = $false
+    $archivePayloadIndicators = New-Object 'System.Collections.Generic.List[string]'
+    $archivePayloadPatterns = @(
+        @{ Name = 'ExpandArchive'; Pattern = '(?im)\bExpand-Archive\b' },
+        @{ Name = 'ZipExtract'; Pattern = '(?im)\[(?:System\.)?IO\.Compression\.ZipFile\]\s*::\s*ExtractToDirectory\s*\(' },
+        @{ Name = 'ShellCopyHere'; Pattern = '(?im)\.\s*CopyHere\s*\(' }
+    )
+    foreach ($entry in $archivePayloadPatterns) {
+        if ($text -match $entry.Pattern) {
+            $archivePayloadHit = $true
+            $archivePayloadIndicators.Add([string]$entry.Name) | Out-Null
+        }
+    }
+
+    $compressedLoaderHit = $false
+    $compressedLoaderIndicators = New-Object 'System.Collections.Generic.List[string]'
+    $hasIexToken = ($text -match '(?im)\b(?:Invoke-Expression|iex)\b')
+    $hasBase64Token = ($text -match '(?im)\bFromBase64String\b')
+    $hasCompressedStreamToken = ($text -match '(?im)\b(?:DeflateStream|GzipStream)\b')
+    $hasMemoryStreamToken = ($text -match '(?im)\b(?:MemoryStream|StreamReader|ReadToEnd)\b')
+    if ($hasIexToken) { $compressedLoaderIndicators.Add('InvokeExpression') | Out-Null }
+    if ($hasBase64Token) { $compressedLoaderIndicators.Add('FromBase64String') | Out-Null }
+    if ($hasCompressedStreamToken) { $compressedLoaderIndicators.Add('CompressedStream') | Out-Null }
+    if ($hasMemoryStreamToken) { $compressedLoaderIndicators.Add('MemoryStreamReader') | Out-Null }
+    if (($hasIexToken -and $hasBase64Token -and ($hasCompressedStreamToken -or $hasMemoryStreamToken)) -or
+        ($hasCompressedStreamToken -and $hasBase64Token)) {
+        $compressedLoaderHit = $true
+    } elseif ($compressedLoaderIndicators.Count -eq 4) {
+        $compressedLoaderHit = $true
+    }
+    if (-not $compressedLoaderHit) {
+        $compressedLoaderIndicators.Clear()
+    }
+
+    return [PSCustomObject]@{
+        TextLength            = $text.Length
+        LineCount             = $lineCount
+        DynamicTokenCount     = $dynamicMatches.Count
+        LoaderTokenCount      = $loaderMatches.Count
+        LargeArrayElementCount = $largeArrayCount
+        DelayBombHit          = $delayBombHit
+        DelayBombIndicators   = @($delayIndicators.ToArray())
+        InteractiveComHit     = $interactiveComHit
+        InteractiveComIndicators = @($interactiveComIndicators.ToArray())
+        GuiPayloadHit         = $guiPayloadHit
+        GuiPayloadIndicators  = @($guiPayloadIndicators.ToArray())
+        ArchivePayloadHit     = $archivePayloadHit
+        ArchivePayloadIndicators = @($archivePayloadIndicators.ToArray())
+        CompressedLoaderHit   = $compressedLoaderHit
+        CompressedLoaderIndicators = @($compressedLoaderIndicators.ToArray())
+        FunctionKeywordCount  = $functionMatches.Count
+        ParseProvided         = ($null -ne $ParseInfo)
+    }
+}
+
+function Get-PreExecutionGateAstMetrics {
+    param(
+        [string]$ScriptText,
+        [AllowNull()]$ParseInfo = $null
+    )
+
+    $parse = $ParseInfo
+    if ($null -eq $parse) {
+        try {
+            $tokens = $null
+            $errors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+            $parse = [PSCustomObject]@{
+                Ast     = $ast
+                Tokens   = $tokens
+                Errors   = $errors
+                IsValid  = (-not $errors -or $errors.Count -eq 0)
+            }
+        } catch {
+            $parse = $null
+        }
+    }
+
+    if ($null -eq $parse -or -not $parse.Ast) {
+        return [PSCustomObject]@{
+            ParseSucceeded          = $false
+            AstNodeCount            = 0
+            LoopCount               = 0
+            PipelineMaxLen          = 0
+            NestedDynamicInvokeCount = 0
+            FunctionDefCount        = 0
+        }
+    }
+
+    $ast = $parse.Ast
+    $nodeCount = 0
+    $loopCount = 0
+    $pipelineMaxLen = 0
+    $nestedDynamicInvokeCount = 0
+    $functionDefCount = 0
+
+    foreach ($n in @($ast.FindAll({ param($node) $true }, $true))) {
+        $nodeCount++
+        if ($n -is [System.Management.Automation.Language.WhileStatementAst] -or
+            $n -is [System.Management.Automation.Language.DoWhileStatementAst] -or
+            $n -is [System.Management.Automation.Language.DoUntilStatementAst] -or
+            $n -is [System.Management.Automation.Language.ForStatementAst] -or
+            $n -is [System.Management.Automation.Language.ForEachStatementAst]) {
+            $loopCount++
+        }
+        if ($n -is [System.Management.Automation.Language.PipelineAst]) {
+            $count = @($n.PipelineElements).Count
+            if ($count -gt $pipelineMaxLen) {
+                $pipelineMaxLen = $count
+            }
+        }
+        if ($n -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+            $functionDefCount++
+        }
+        if ($n -is [System.Management.Automation.Language.CommandAst]) {
+            $name = $n.GetCommandName()
+            if ($name -match '(?i)^(Invoke-Expression|iex|powershell|powershell\.exe|pwsh|pwsh\.exe)$') {
+                $parent = $n.Parent
+                while ($parent) {
+                    if ($parent -is [System.Management.Automation.Language.CommandAst]) {
+                        $nestedDynamicInvokeCount++
+                        break
+                    }
+                    $parent = $parent.Parent
+                }
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        ParseSucceeded          = [bool]$parse.IsValid
+        AstNodeCount            = $nodeCount
+        LoopCount               = $loopCount
+        PipelineMaxLen          = $pipelineMaxLen
+        NestedDynamicInvokeCount = $nestedDynamicInvokeCount
+        FunctionDefCount        = $functionDefCount
+    }
+}
+
+function Resolve-PreExecutionGateDecision {
+    param(
+        [ValidateSet('Round', 'DynamicPayload', 'WholeScriptHelper', 'StaticExpr')]
+        [string]$Scope,
+        [string]$ScriptText,
+        [AllowNull()]$ParseInfo = $null,
+        [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
+        [string]$Mode = 'Balanced',
+        [bool]$SafeMode = $true
+    )
+
+    if ($Mode -eq 'Disabled') {
+        return [PSCustomObject]@{
+            Decision               = 'Full'
+            Score                  = 0
+            Reasons                = @()
+            Metrics                = [PSCustomObject]@{}
+            ReducedDynamicBudgetMs = $null
+            ReducedMaxIterations   = $null
+            ReducedMaxTotalNodes   = $null
+            SkipWholeScriptDynamic = $false
+            SkipStaticEval         = $false
+            ParseSucceeded         = $true
+            Scope                  = $Scope
+            Mode                   = $Mode
+        }
+    }
+
+    $scale = Get-PreExecutionGateThresholdScale -Mode $Mode
+    $scoreThresholds = Get-PreExecutionGateScoreThresholds -Mode $Mode
+    $reasons = New-Object 'System.Collections.Generic.List[string]'
+    $textMetrics = Get-PreExecutionGateTextMetrics -ScriptText $ScriptText -ParseInfo $ParseInfo
+    $score = 0
+
+    if ($textMetrics.TextLength -gt [int](65536 * $scale)) { $score += 8; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'HugeText' }
+    elseif ($textMetrics.TextLength -gt [int](16384 * $scale)) { $score += 4; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'LargeText' }
+    elseif ($textMetrics.TextLength -gt [int](4096 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'MediumText' }
+
+    if ($textMetrics.LineCount -gt [int](1000 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'ManyLines' }
+    elseif ($textMetrics.LineCount -gt [int](200 * $scale)) { $score += 1; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'SomewhatManyLines' }
+
+    if ($textMetrics.DynamicTokenCount -gt [int](8 * $scale)) { $score += 4; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'ManyDynamicTokens' }
+    elseif ($textMetrics.DynamicTokenCount -gt [int](3 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'SeveralDynamicTokens' }
+
+    if ($textMetrics.LoaderTokenCount -gt [int](128 * $scale)) { $score += 4; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'HeavyLoaderTokens' }
+    elseif ($textMetrics.LoaderTokenCount -gt [int](32 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'LoaderTokens' }
+
+    if ($textMetrics.LargeArrayElementCount -gt [int](2048 * $scale)) { $score += 6; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'HugeArrayLiteral' }
+    elseif ($textMetrics.LargeArrayElementCount -gt [int](512 * $scale)) { $score += 3; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'LargeArrayLiteral' }
+
+    if ($textMetrics.DelayBombHit) {
+        $score += 8
+        Add-PreExecutionGateReason -ReasonList $reasons -Reason 'DelayBomb'
+    }
+    if ($textMetrics.InteractiveComHit) {
+        $score += 10
+        Add-PreExecutionGateReason -ReasonList $reasons -Reason 'InteractiveCom'
+    }
+    if ($textMetrics.GuiPayloadHit) {
+        $score += 8
+        Add-PreExecutionGateReason -ReasonList $reasons -Reason 'GuiPayload'
+    }
+    if ($textMetrics.ArchivePayloadHit) {
+        $score += 6
+        Add-PreExecutionGateReason -ReasonList $reasons -Reason 'ArchivePayload'
+    }
+    if ($textMetrics.CompressedLoaderHit) {
+        $score += 7
+        Add-PreExecutionGateReason -ReasonList $reasons -Reason 'CompressedLoader'
+    }
+
+    if ($textMetrics.FunctionKeywordCount -gt [int](30 * $scale)) { $score += 3; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'ManyFunctions' }
+    elseif ($textMetrics.FunctionKeywordCount -gt [int](10 * $scale)) { $score += 1; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'SeveralFunctions' }
+
+    $needAstMetrics = (
+        $textMetrics.TextLength -gt [int](4096 * $scale) -or
+        ($Scope -eq 'WholeScriptHelper' -and $textMetrics.TextLength -gt [int](2048 * $scale)) -or
+        $textMetrics.FunctionKeywordCount -gt 0 -or
+        $score -ge 4
+    )
+    $astMetrics = [PSCustomObject]@{
+        ParseSucceeded          = $true
+        AstNodeCount            = 0
+        LoopCount               = 0
+        PipelineMaxLen          = 0
+        NestedDynamicInvokeCount = 0
+        FunctionDefCount        = 0
+    }
+    if ($needAstMetrics) {
+        $astMetrics = Get-PreExecutionGateAstMetrics -ScriptText $ScriptText -ParseInfo $ParseInfo
+        if (-not $astMetrics.ParseSucceeded) {
+            Add-PreExecutionGateReason -ReasonList $reasons -Reason 'GateParseFailed'
+        }
+        if ($astMetrics.AstNodeCount -gt [int](5000 * $scale)) { $score += 8; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'HugeAst' }
+        elseif ($astMetrics.AstNodeCount -gt [int](1200 * $scale)) { $score += 4; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'LargeAst' }
+        elseif ($astMetrics.AstNodeCount -gt [int](400 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'MediumAst' }
+
+        if ($astMetrics.LoopCount -gt 3) { $score += 5; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'ManyLoops' }
+        elseif ($astMetrics.LoopCount -gt 0) { $score += 3; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'LoopPresent' }
+
+        if ($astMetrics.PipelineMaxLen -gt [int](10 * $scale)) { $score += 4; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'LongPipeline' }
+        elseif ($astMetrics.PipelineMaxLen -gt [int](4 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'PipelineChain' }
+
+        if ($astMetrics.NestedDynamicInvokeCount -gt [int](5 * $scale)) { $score += 5; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'NestedDynamicInvoke' }
+        elseif ($astMetrics.NestedDynamicInvokeCount -gt [int](2 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'SomeNestedDynamicInvoke' }
+
+        if ($astMetrics.FunctionDefCount -gt [int](15 * $scale)) { $score += 4; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'ManyFunctionDefs' }
+        elseif ($astMetrics.FunctionDefCount -gt [int](5 * $scale)) { $score += 2; Add-PreExecutionGateReason -ReasonList $reasons -Reason 'FunctionDefsPresent' }
+    }
+
+    $decision = 'Full'
+    $skipWholeScriptDynamic = $false
+    $skipStaticEval = $false
+    $reducedDynamicBudgetMs = $null
+    $reducedMaxIterations = $null
+    $reducedMaxTotalNodes = $null
+
+    switch ($Scope) {
+        'Round' {
+            if ($textMetrics.DelayBombHit -or
+                $textMetrics.InteractiveComHit -or
+                $textMetrics.GuiPayloadHit -or
+                $textMetrics.ArchivePayloadHit -or
+                $textMetrics.CompressedLoaderHit -or
+                $textMetrics.TextLength -gt [int](65536 * $scale) -or
+                $textMetrics.LargeArrayElementCount -gt [int](4096 * $scale) -or
+                $astMetrics.AstNodeCount -gt [int](12000 * $scale) -or
+                $score -ge $scoreThresholds.Stop) {
+                $decision = 'Stop'
+            } elseif ($textMetrics.TextLength -gt [int](16384 * $scale) -or
+                $textMetrics.LargeArrayElementCount -gt [int](2048 * $scale) -or
+                $astMetrics.AstNodeCount -gt [int](3500 * $scale) -or
+                $score -ge $scoreThresholds.Shallow) {
+                $decision = 'Shallow'
+                $skipWholeScriptDynamic = $true
+                $skipStaticEval = $true
+                $reducedDynamicBudgetMs = 2000
+                $reducedMaxIterations = 250
+                $reducedMaxTotalNodes = 8000
+            }
+        }
+        'DynamicPayload' {
+            $shallowThreshold = if ($Mode -eq 'Conservative') { 8 } elseif ($Mode -eq 'Aggressive') { 4 } else { 6 }
+            $stopThreshold = if ($Mode -eq 'Conservative') { 14 } elseif ($Mode -eq 'Aggressive') { 7 } else { 12 }
+            if ($textMetrics.DelayBombHit -or
+                $textMetrics.InteractiveComHit -or
+                $textMetrics.GuiPayloadHit -or
+                $textMetrics.ArchivePayloadHit -or
+                $textMetrics.CompressedLoaderHit -or
+                $textMetrics.TextLength -gt [int](24576 * $scale) -or
+                $textMetrics.LargeArrayElementCount -gt [int](2048 * $scale) -or
+                $astMetrics.AstNodeCount -gt [int](5000 * $scale) -or
+                $score -ge $stopThreshold) {
+                $decision = 'Stop'
+            } elseif ($textMetrics.TextLength -gt [int](4096 * $scale) -or
+                $astMetrics.AstNodeCount -gt [int](1200 * $scale) -or
+                $score -ge $shallowThreshold) {
+                $decision = 'Shallow'
+                $reducedDynamicBudgetMs = 1000
+            }
+        }
+        'WholeScriptHelper' {
+            $threshold = if ($Mode -eq 'Conservative') { 9 } elseif ($Mode -eq 'Aggressive') { 4 } else { 6 }
+            if ($textMetrics.InteractiveComHit -or
+                $textMetrics.GuiPayloadHit -or
+                $textMetrics.ArchivePayloadHit -or
+                $textMetrics.CompressedLoaderHit -or
+                $textMetrics.TextLength -gt [int](2048 * $scale) -or
+                $score -ge $threshold -or
+                $astMetrics.AstNodeCount -gt [int](400 * $scale) -or
+                $astMetrics.LoopCount -gt 0 -or
+                $astMetrics.FunctionDefCount -gt 0) {
+                $decision = 'Stop'
+            }
+        }
+        'StaticExpr' {
+            if ($textMetrics.InteractiveComHit -or
+                $textMetrics.GuiPayloadHit -or
+                $textMetrics.ArchivePayloadHit -or
+                $textMetrics.CompressedLoaderHit -or
+                $textMetrics.TextLength -gt [int](1024 * $scale) -or
+                $textMetrics.LargeArrayElementCount -gt [int](512 * $scale) -or
+                $astMetrics.AstNodeCount -gt [int](250 * $scale) -or
+                $astMetrics.LoopCount -gt 0 -or
+                $astMetrics.NestedDynamicInvokeCount -gt 0) {
+                $decision = 'Stop'
+            }
+        }
+    }
+
+    if ($SafeMode -and $Scope -in @('Round', 'DynamicPayload')) {
+        if ($textMetrics.DelayBombHit -and $decision -ne 'Stop') {
+            $decision = 'Stop'
+        }
+    }
+
+    $metrics = [ordered]@{}
+    foreach ($name in @(
+        'TextLength', 'LineCount', 'DynamicTokenCount', 'LoaderTokenCount', 'LargeArrayElementCount',
+        'DelayBombHit', 'DelayBombIndicators',
+        'InteractiveComHit', 'InteractiveComIndicators',
+        'GuiPayloadHit', 'GuiPayloadIndicators',
+        'ArchivePayloadHit', 'ArchivePayloadIndicators',
+        'CompressedLoaderHit', 'CompressedLoaderIndicators',
+        'FunctionKeywordCount'
+    )) {
+        $metrics[$name] = $textMetrics.$name
+    }
+    foreach ($name in @('AstNodeCount', 'LoopCount', 'PipelineMaxLen', 'NestedDynamicInvokeCount', 'FunctionDefCount', 'ParseSucceeded')) {
+        $metrics[$name] = $astMetrics.$name
+    }
+
+    return [PSCustomObject]@{
+        Decision               = $decision
+        Score                  = $score
+        Reasons                = @($reasons.ToArray())
+        Metrics                = [PSCustomObject]$metrics
+        ReducedDynamicBudgetMs = $reducedDynamicBudgetMs
+        ReducedMaxIterations   = $reducedMaxIterations
+        ReducedMaxTotalNodes   = $reducedMaxTotalNodes
+        SkipWholeScriptDynamic = $skipWholeScriptDynamic
+        SkipStaticEval         = $skipStaticEval
+        ParseSucceeded         = [bool]$astMetrics.ParseSucceeded
+        Scope                  = $Scope
+        Mode                   = $Mode
+    }
+}
+
+function Get-PreExecutionGateDecision {
+    param(
+        [ValidateSet('Round', 'DynamicPayload', 'WholeScriptHelper', 'StaticExpr')]
+        [string]$Scope,
+        [string]$ScriptText,
+        [AllowNull()]$ParseInfo = $null,
+        [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
+        [string]$Mode = 'Balanced',
+        [bool]$SafeMode = $true,
+        [hashtable]$Cache = $null
+    )
+
+    $normalized = if ($null -eq $ScriptText) { '' } else { [string]$ScriptText }
+    $hash = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($normalized))
+    $cacheKey = "{0}|{1}|{2}|{3}" -f $Scope, $Mode, $SafeMode, $hash
+
+    if ($Cache -and $Cache.ContainsKey($cacheKey)) {
+        return $Cache[$cacheKey]
+    }
+
+    $decision = Resolve-PreExecutionGateDecision -Scope $Scope -ScriptText $normalized -ParseInfo $ParseInfo -Mode $Mode -SafeMode:$SafeMode
+    if ($Cache) {
+        $Cache[$cacheKey] = $decision
+    }
+    return $decision
+}
+
 function Normalize-LoopConditionText {
     param([string]$ConditionText)
 
@@ -1639,144 +2783,49 @@ function Test-DynamicPayloadAliasDefinitionStatement {
 function Test-DynamicPayloadShouldStopRecursing {
     param(
         [Parameter(Mandatory)][string]$ScriptText,
-        [bool]$SafeMode = $true
+        [bool]$SafeMode = $true,
+        [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
+        [string]$GateMode = 'Balanced',
+        [ValidateSet('DynamicPayload', 'WholeScriptHelper')]
+        [string]$GateScope = 'DynamicPayload',
+        [hashtable]$GateCache = $null,
+        [AllowNull()]$ParseInfo = $null
     )
 
-    $result = [ordered]@{
-        ShouldStop      = $false
-        StopReason      = $null
-        Message         = $null
-        FeatureSummary  = $null
-        Features        = @()
-        ParseSucceeded  = $false
-        AnalysisText    = $ScriptText
+    $gate = Get-PreExecutionGateDecision -Scope $GateScope -ScriptText $ScriptText -ParseInfo $ParseInfo -Mode $GateMode -SafeMode:$SafeMode -Cache $GateCache
+    $features = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($reason in @($gate.Reasons)) {
+        $features.Add([string]$reason) | Out-Null
     }
-
-    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
-        return [PSCustomObject]$result
-    }
-
-    $analysisText = $ScriptText
-    $topLevelLoopDetected = $false
-
-    try {
-        $tokens = $null
-        $errors = $null
-        $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
-        $result.ParseSucceeded = ($null -ne $ast -and (-not $errors -or $errors.Count -eq 0))
-
-        if ($ast) {
-            $topLevelStatements = New-Object System.Collections.Generic.List[object]
-            $analysisStatements = New-Object System.Collections.Generic.List[object]
-            foreach ($block in @($ast.BeginBlock, $ast.ProcessBlock, $ast.EndBlock)) {
-                if ($null -eq $block -or -not $block.Statements) { continue }
-                foreach ($statement in @($block.Statements)) {
-                    if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { continue }
-                    $topLevelStatements.Add($statement) | Out-Null
-                    if (-not (Test-DynamicPayloadAliasDefinitionStatement -Statement $statement)) {
-                        $analysisStatements.Add($statement) | Out-Null
-                    }
-
-                    if ($statement -is [System.Management.Automation.Language.WhileStatementAst]) {
-                        if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'True') {
-                            $topLevelLoopDetected = $true
-                        }
-                    } elseif ($statement -is [System.Management.Automation.Language.DoWhileStatementAst]) {
-                        if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'True') {
-                            $topLevelLoopDetected = $true
-                        }
-                    } elseif ($statement -is [System.Management.Automation.Language.DoUntilStatementAst]) {
-                        if (Test-LoopConditionLiteral -ConditionText $statement.Condition.Extent.Text -Expected 'False') {
-                            $topLevelLoopDetected = $true
-                        }
-                    } elseif ($statement -is [System.Management.Automation.Language.ForStatementAst]) {
-                        $conditionText = if ($statement.Condition) { $statement.Condition.Extent.Text } else { '' }
-                        if ([string]::IsNullOrWhiteSpace($conditionText) -or (Test-LoopConditionLiteral -ConditionText $conditionText -Expected 'True')) {
-                            $topLevelLoopDetected = $true
-                        }
-                    }
+    foreach ($indicatorProperty in @(
+        'DelayBombIndicators',
+        'InteractiveComIndicators',
+        'GuiPayloadIndicators',
+        'ArchivePayloadIndicators',
+        'CompressedLoaderIndicators'
+    )) {
+        if ($gate.Metrics -and $gate.Metrics.PSObject.Properties[$indicatorProperty]) {
+            foreach ($indicator in @($gate.Metrics.$indicatorProperty)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$indicator)) {
+                    $features.Add([string]$indicator) | Out-Null
                 }
             }
-
-            if ($analysisStatements.Count -gt 0) {
-                $analysisText = (($analysisStatements | ForEach-Object { $_.Extent.Text }) -join [Environment]::NewLine)
-            } elseif ($topLevelStatements.Count -gt 0) {
-                $analysisText = ''
-            }
         }
-    } catch {
-        $result.ParseSucceeded = $false
     }
 
-    $hasInfiniteLoop = $topLevelLoopDetected -or ($analysisText -match '(?is)\bwhile\s*\(\s*(?:\$true|1|\(+\s*\[int(?:32|64)?\]\s*1\s*\)+)\s*\)') -or ($analysisText -match '(?is)\bfor\s*\(\s*;\s*;\s*\)') -or ($analysisText -match '(?is)\bdo\b[\s\S]*?\bwhile\s*\(\s*(?:\$true|1|\(+\s*\[int(?:32|64)?\]\s*1\s*\)+)\s*\)') -or ($analysisText -match '(?is)\bdo\b[\s\S]*?\buntil\s*\(\s*(?:\$false|0|\(+\s*\[int(?:32|64)?\]\s*0\s*\)+)\s*\)')
-    $hasStartSleep = ($analysisText -match '(?i)\b(?:Start-Sleep|sleep)\b')
-    $hasInvokeExpression = ($analysisText -match '(?i)\b(?:Invoke-Expression|iex)\b')
-    $hasNetwork = ($analysisText -match '(?i)\b(?:Invoke-WebRequest|iwr|curl|wget|Invoke-RestMethod|irm|Start-BitsTransfer|DownloadFile|DownloadData|DownloadString|UploadData|UploadString|GetResponse|WebClient|WebRequest|HttpClient)\b')
-    $hasAddType = ($analysisText -match '(?i)\bAdd-Type\b')
-    $hasDllImport = ($analysisText -match '(?i)\bDllImport\s*\(')
-    $hasShellcodeApi = ($analysisText -match '(?i)\b(?:VirtualAlloc(?:Ex)?|VirtualProtect(?:Ex)?|CreateThread|CreateRemoteThread|WriteProcessMemory|ReadProcessMemory|OpenProcess|RtlMoveMemory|memset)\b')
-    $hasLargeByteArray = ($analysisText -match '(?is)\[(?:byte|Byte)\s*\[\]\]') -or ($analysisText -match '(?is)(?:0x[0-9a-f]{2}|\b\d{1,3}\b)\s*(?:,\s*(?:0x[0-9a-f]{2}|\b\d{1,3}\b)\s*){31,}')
-    $hasComObject = ($analysisText -match '(?i)\bNew-Object\b[\s\S]{0,120}?(?<!\S)-(?:ComObject|Com)\b')
-    $hasWscriptPopup = ($analysisText -match '(?i)\bWScript\.Shell\b') -or ($analysisText -match '(?i)\.\s*Popup\s*\(')
-    $hasIeAutomation = ($analysisText -match '(?i)\bInternetExplorer\.Application\b') -or ($analysisText -match '(?i)\.\s*Navigate2?\s*\(')
-
-    $features = New-Object System.Collections.Generic.List[string]
-    if ($hasInfiniteLoop) { $features.Add('InfiniteLoop') | Out-Null }
-    if ($hasStartSleep) { $features.Add('StartSleep') | Out-Null }
-    if ($hasNetwork) { $features.Add('Network') | Out-Null }
-    if ($hasInvokeExpression) { $features.Add('InvokeExpression') | Out-Null }
-    if ($hasAddType) { $features.Add('AddType') | Out-Null }
-    if ($hasDllImport) { $features.Add('DllImport') | Out-Null }
-    if ($hasShellcodeApi) { $features.Add('ShellcodeApi') | Out-Null }
-    if ($hasLargeByteArray) { $features.Add('LargeByteArray') | Out-Null }
-    if ($hasComObject) { $features.Add('ComObject') | Out-Null }
-    if ($hasWscriptPopup) { $features.Add('WScriptPopup') | Out-Null }
-    if ($hasIeAutomation) { $features.Add('IEAutomation') | Out-Null }
-
-    $result.Features = @($features)
-    $result.FeatureSummary = if ($features.Count -gt 0) { ($features -join ', ') } else { $null }
-    $result.AnalysisText = $analysisText
-
-    if (-not $result.ParseSucceeded) {
-        $result.ShouldStop = $true
-        $result.StopReason = 'DynamicPayloadParseFailed'
-        $result.Message = '动态脚本文本解析失败，停止递归执行，直接回写当前解出的脚本内容。'
-        return [PSCustomObject]$result
-    }
-
-    if ($hasInfiniteLoop) {
-        $result.ShouldStop = $true
-        $result.StopReason = 'DynamicPayloadInfiniteLoop'
-        $result.Message = '检测到顶层无限循环特征，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
-        return [PSCustomObject]$result
-    }
-
-    if ($SafeMode -and $hasNetwork -and $hasInvokeExpression) {
-        $result.ShouldStop = $true
-        $result.StopReason = 'DynamicPayloadNetworkInvokeExpression'
-        $result.Message = '检测到网络获取与动态执行组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
-        return [PSCustomObject]$result
-    }
-
-    if ($SafeMode -and $hasNetwork -and $hasStartSleep) {
-        $result.ShouldStop = $true
-        $result.StopReason = 'DynamicPayloadNetworkSleep'
-        $result.Message = '检测到网络轮询与休眠组合，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
-        return [PSCustomObject]$result
-    }
-
-    if ($hasShellcodeApi -and ($hasDllImport -or $hasAddType -or $hasLargeByteArray)) {
-        $result.ShouldStop = $true
-        $result.StopReason = 'DynamicPayloadDangerousShellcode'
-        $result.Message = '检测到 shellcode 注入特征，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
-        return [PSCustomObject]$result
-    }
-
-    if ($hasComObject -and ($hasWscriptPopup -or $hasIeAutomation)) {
-        $result.ShouldStop = $true
-        $result.StopReason = 'DynamicPayloadComAutomation'
-        $result.Message = '检测到 COM GUI/自动化特征，停止递归执行动态脚本，直接回写当前解出的脚本内容。'
-        return [PSCustomObject]$result
+    $result = [ordered]@{
+        ShouldStop       = ($gate.Decision -eq 'Stop')
+        Decision         = [string]$gate.Decision
+        StopReason       = if ($gate.Decision -eq 'Stop') { "PreExecutionGate:$GateScope" } else { $null }
+        Message          = if ($gate.Decision -eq 'Stop') { '动态脚本文本命中先审后执行门控，停止递归执行并保留当前层已恢复内容。' } else { $null }
+        FeatureSummary   = if (@($features).Count -gt 0) { (@($features) -join ', ') } else { $null }
+        Features         = @($features)
+        ParseSucceeded   = [bool]$gate.ParseSucceeded
+        AnalysisText     = $ScriptText
+        GateScore        = [int]$gate.Score
+        GateReasons      = @($gate.Reasons)
+        GateMetrics      = $gate.Metrics
+        ReducedDynamicBudgetMs = $gate.ReducedDynamicBudgetMs
     }
 
     return [PSCustomObject]$result
@@ -1796,12 +2845,30 @@ function Test-InteractiveComNode {
     }
 
     $text = [string]$Node.Text
-    $hasPopup = ($text -match '(?i)\.\s*Popup\s*\(') -or ($text -match '(?i)\bWScript\.Shell\b')
+    $hasPopupCall = ($text -match '(?i)\.\s*Popup\s*\(')
+    $hasWScriptShell = ($text -match '(?i)\bWScript\.Shell\b')
+    $hasShellApplication = ($text -match '(?i)\bShell\.Application\b')
+    $hasShellExecute = ($text -match '(?i)\.\s*ShellExecute\s*\(')
+    $hasRunOrExec = ($text -match '(?i)\.\s*(?:Run|Exec)\s*\(')
     $hasIeAutomation = ($text -match '(?i)\bInternetExplorer\.Application\b') -or ($text -match '(?i)\.\s*Navigate2?\s*\(')
     $hasComObject = ($text -match '(?i)\bNew-Object\b[\s\S]{0,120}?(?<!\S)-(?:ComObject|Com)\b')
     $hasBusyLoop = ($text -match '(?i)\bwhile\b[\s\S]{0,200}?\.\s*(?:Busy|ReadyState)\b')
 
-    if ($hasComObject -and $hasPopup) {
+    if (($hasComObject -or $hasShellApplication) -and $hasShellExecute) {
+        $result.IsDangerous = $true
+        $result.Reason = 'COM ShellExecute 调用已阻断'
+        $result.Detail = 'Shell.Application.ShellExecute'
+        return [PSCustomObject]$result
+    }
+
+    if (($hasComObject -or $hasWScriptShell) -and $hasRunOrExec) {
+        $result.IsDangerous = $true
+        $result.Reason = 'COM 进程启动调用已阻断'
+        $result.Detail = 'WScript.Shell.Run/Exec'
+        return [PSCustomObject]$result
+    }
+
+    if (($hasComObject -or $hasWScriptShell) -and $hasPopupCall) {
         $result.IsDangerous = $true
         $result.Reason = 'COM GUI 弹窗调用已阻断'
         $result.Detail = 'WScript.Shell.Popup'
@@ -4165,6 +5232,7 @@ function Invoke-NodeSafe {
             }
             if ($result.Success) {
                 Record-LiteralizedCommandResult -Node $Node -Context $Context
+                Record-SensitiveSinkResult -Node $Node -Context $Context -CommandInfo $commandInfo
             }
 
             return $result
@@ -4206,6 +5274,7 @@ function Invoke-NodeSafe {
             }
             if ($result.Success) {
                 Record-LiteralizedCommandResult -Node $Node -Context $Context
+                Record-SensitiveSinkResult -Node $Node -Context $Context -CommandInfo $commandInfo
             }
 
             return $result
@@ -6647,6 +7716,33 @@ function Invoke-ScriptBlockCall {
         }
     }
 
+    if ($Context.ContainsKey('DynamicDepthLimit') -and $null -ne $Context.DynamicDepthLimit) {
+        $runtimeDepth = 0
+        if ($Context.ContainsKey('RuntimeSubgraphs') -and $Context.RuntimeSubgraphs -and $Context.RuntimeSubgraphs.ContainsKey($BlockName)) {
+            $runtimeInfo = $Context.RuntimeSubgraphs[$BlockName]
+            $cursor = if ($runtimeInfo -and $runtimeInfo.PSObject.Properties['ParentBlockName']) { [string]$runtimeInfo.ParentBlockName } else { $null }
+            while (-not [string]::IsNullOrWhiteSpace($cursor)) {
+                $runtimeDepth++
+                if (-not $Context.RuntimeSubgraphs.ContainsKey($cursor)) { break }
+                $parentInfo = $Context.RuntimeSubgraphs[$cursor]
+                $cursor = if ($parentInfo -and $parentInfo.PSObject.Properties['ParentBlockName']) { [string]$parentInfo.ParentBlockName } else { $null }
+            }
+        }
+
+        if ($runtimeDepth -ge [int]$Context.DynamicDepthLimit) {
+            Write-ExecutionLog -Context $Context -Message "  [DYNAMIC-GATE] Runtime subgraph depth $runtimeDepth reached DynamicDepthLimit=$($Context.DynamicDepthLimit), stop entering nested subgraph $BlockName"
+            return @{
+                Success  = $true
+                Executed = $true
+                Result   = $null
+                Error    = $null
+                Action   = "CallScriptBlock"
+                Target   = $BlockName
+                StopReason = 'PreExecutionGate:DynamicDepthLimit'
+            }
+        }
+    }
+
     # 1. 检查调用深度
     if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
         Write-ExecutionLog -Context $Context -Message "  [ERROR] Max call depth ($($Context.MaxCallDepth)) exceeded"
@@ -7171,6 +8267,11 @@ function Handle-DynamicInvoke {
         $dynamicRecord.StopReason = $dynamicBudgetStatus.StopReason
         $dynamicRecord.StopMessage = "单次动态展开预算已耗尽（Elapsed=${0}ms, Budget=${1}ms），停止继续深入，直接回写当前脚本内容。" -f $dynamicBudgetStatus.ElapsedMs, $dynamicBudgetStatus.BudgetMs
         $dynamicRecord.DynamicElapsedMs = $dynamicBudgetStatus.ElapsedMs
+        $postStopRecovered = Invoke-DynamicStopPostProcessRecovery -ScriptText $argumentValue
+        if (-not [string]::IsNullOrWhiteSpace($postStopRecovered)) {
+            $dynamicRecord.ReplacementText = $postStopRecovered
+            $dynamicRecord.PostStopRecovered = $true
+        }
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
 
         return @{
@@ -7184,13 +8285,21 @@ function Handle-DynamicInvoke {
         }
     }
 
-    $payloadStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $argumentValue -SafeMode:([bool]$Context.SafeMode)
+    $payloadStop = Test-DynamicPayloadShouldStopRecursing -ScriptText $argumentValue -SafeMode:([bool]$Context.SafeMode) -GateMode $(if ($Context.ContainsKey('PreExecutionGateMode') -and $Context.PreExecutionGateMode) { [string]$Context.PreExecutionGateMode } else { 'Balanced' }) -GateCache $(if ($Context.ContainsKey('PreExecutionGateCache')) { $Context.PreExecutionGateCache } else { $null })
     if ($payloadStop.ShouldStop) {
         $dynamicRecord.RecursionStopped = $true
         $dynamicRecord.StopReason = $payloadStop.StopReason
         $dynamicRecord.StopMessage = $payloadStop.Message
         $dynamicRecord.StopFeatures = @($payloadStop.Features)
         $dynamicRecord.StopFeatureSummary = $payloadStop.FeatureSummary
+        if ($payloadStop.PSObject.Properties['GateScore']) { $dynamicRecord.GateScore = $payloadStop.GateScore }
+        if ($payloadStop.PSObject.Properties['GateReasons']) { $dynamicRecord.GateReasons = @($payloadStop.GateReasons) }
+        if ($payloadStop.PSObject.Properties['GateMetrics']) { $dynamicRecord.GateMetrics = $payloadStop.GateMetrics }
+        $postStopRecovered = Invoke-DynamicStopPostProcessRecovery -ScriptText $argumentValue
+        if (-not [string]::IsNullOrWhiteSpace($postStopRecovered)) {
+            $dynamicRecord.ReplacementText = $postStopRecovered
+            $dynamicRecord.PostStopRecovered = $true
+        }
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($payloadStop.Message)"
         if ($payloadStop.FeatureSummary) {
             Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Features: $($payloadStop.FeatureSummary)"
@@ -7207,12 +8316,29 @@ function Handle-DynamicInvoke {
         }
     }
 
+    if ($payloadStop -and $payloadStop.PSObject.Properties['Decision'] -and [string]$payloadStop.Decision -eq 'Shallow' -and
+        $Context.ContainsKey('DynamicTimeBudgetMs') -and $null -ne $payloadStop.ReducedDynamicBudgetMs) {
+        $Context.DynamicTimeBudgetMs = [Math]::Min([int]$Context.DynamicTimeBudgetMs, [int]$payloadStop.ReducedDynamicBudgetMs)
+        $Context.DynamicDepthLimit = 1
+        $dynamicRecord.StopFeatures = @($payloadStop.Features)
+        $dynamicRecord.StopFeatureSummary = $payloadStop.FeatureSummary
+        $dynamicRecord.GateScore = $payloadStop.GateScore
+        $dynamicRecord.GateReasons = @($payloadStop.GateReasons)
+        $dynamicRecord.GateMetrics = $payloadStop.GateMetrics
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC-GATE] Shallow gate applied: DynamicBudget=$($Context.DynamicTimeBudgetMs)ms, DynamicDepthLimit=$($Context.DynamicDepthLimit)"
+    }
+
     $dynamicBudgetStatus = Get-StopwatchBudgetStatus -BudgetMs $Context.DynamicTimeBudgetMs -Stopwatch $dynamicInvocationStopwatch -StopReason 'DynamicInvocationBudgetExceeded'
     if ($dynamicBudgetStatus.Exceeded) {
         $dynamicRecord.RecursionStopped = $true
         $dynamicRecord.StopReason = $dynamicBudgetStatus.StopReason
         $dynamicRecord.StopMessage = "单次动态展开预算已耗尽（Elapsed=${0}ms, Budget=${1}ms），停止继续深入，直接回写当前脚本内容。" -f $dynamicBudgetStatus.ElapsedMs, $dynamicBudgetStatus.BudgetMs
         $dynamicRecord.DynamicElapsedMs = $dynamicBudgetStatus.ElapsedMs
+        $postStopRecovered = Invoke-DynamicStopPostProcessRecovery -ScriptText $argumentValue
+        if (-not [string]::IsNullOrWhiteSpace($postStopRecovered)) {
+            $dynamicRecord.ReplacementText = $postStopRecovered
+            $dynamicRecord.PostStopRecovered = $true
+        }
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
 
         return @{
@@ -9513,6 +10639,10 @@ function Test-DangerousMethodCall {
         # 进程启动（会悬挂/等待）
         @{ Type = 'System.Diagnostics.Process'; Methods = @('Start', 'WaitForExit', 'WaitForExitAsync') },
 
+        # 压缩/解包与 GUI 交互（会展开大量内容或等待用户）
+        @{ Type = 'System.IO.Compression.ZipFile'; Methods = @('ExtractToDirectory') },
+        @{ Type = 'System.Windows.Forms.Form'; Methods = @('ShowDialog') },
+
         # 线程睡眠（会悬挂）
         @{ Type = 'System.Threading.Thread'; Methods = @('Sleep', 'Join') },
 
@@ -9563,7 +10693,8 @@ function Test-DangerousMethodCall {
             'UploadFile', 'UploadData', 'UploadString',
             'Connect', 'Send', 'Receive', 'GetStream',
             'Start', 'WaitForExit',
-            'Sleep', 'Join', 'Wait'
+            'Sleep', 'Join', 'Wait',
+            'ShellExecute', 'Popup', 'ShowDialog', 'ExtractToDirectory'
         )
 
         if ($memberName -in $dangerousInstanceMethods) {
@@ -10197,12 +11328,16 @@ function Invoke-CFGTraversal {
         GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs = $DynamicTimeBudgetMs
         SafeMode            = $SafeMode
+        PreExecutionGateMode = 'Balanced'
+        PreExecutionGateCache = @{}
+        DynamicDepthLimit    = $null
         TotalVisits         = 0
         StopReason          = $null
         LastConditionResult = $true
         ResolvableResults   = @{}  # Key: "NodeId:StartOffset:EndOffset", Value: @{ NodeId, Resolvable, Values }
         VariableReadResults = @{}  # Key: "StartOffset:EndOffset", Value: @{ VarInfo; Values }
         LiteralizedCommandResults = @()
+        SensitiveSinkResults = @()
         BlockedTaintedVariables = @{}
         TrackedEnvironmentVariables = @{}
 
@@ -10268,6 +11403,8 @@ function Invoke-CFGTraversal {
             'Set-Disk',
             'Remove-Partition',
             'Optimize-Volume',
+            'Expand-Archive',
+            'Compress-Archive',
 
             # ========== 其他可能悬挂的操作 ==========
             'Out-Printer',
@@ -10380,12 +11517,16 @@ function New-CFGExecutionSession {
         GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs = $DynamicTimeBudgetMs
         SafeMode            = $SafeMode
+        PreExecutionGateMode = 'Balanced'
+        PreExecutionGateCache = @{}
+        DynamicDepthLimit    = $null
         TotalVisits         = 0
         StopReason          = $null
         LastConditionResult = $true
         ResolvableResults   = @{}
         VariableReadResults = @{}
         LiteralizedCommandResults = @()
+        SensitiveSinkResults = @()
         BlockedTaintedVariables = @{}
         TrackedEnvironmentVariables = @{}
 
@@ -10450,6 +11591,8 @@ function New-CFGExecutionSession {
             'Set-Disk',
             'Remove-Partition',
             'Optimize-Volume',
+            'Expand-Archive',
+            'Compress-Archive',
 
             # ========== 其他可能悬挂的操作 ==========
             'Out-Printer',
