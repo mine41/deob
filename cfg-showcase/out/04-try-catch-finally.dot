@@ -1,0 +1,39 @@
+digraph G {
+    rankdir=TB;
+    node [
+        fontname="Consolas"
+        shape=box
+        width=0
+        height=0
+        margin="0.2,0.1"
+        fontsize=10
+    ];
+    edge [fontname="Arial", arrowhead=vee, fontsize=9];
+
+    // Nodes
+    1 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 1 | Start</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Script Start</FONT></B>>, shape=oval, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    2 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 2 | End</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Script End</FONT></B>>, shape=oval, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    3 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 3 | MainStart</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Main Script</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    4 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 4 | MainEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">End Main Script</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    5 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 5 | Try</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Try</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    6 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 6 | Finally</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Finally</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    7 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 7 | Catch</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Catch [All]</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 1</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    8 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 8 | Throw</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">throw 'boom'</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    9 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 9 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Write-Output 'handled'</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 1</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    10 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 10 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Write-Output 'cleanup'</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 1</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    11 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 11 | Merge</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Try-End</FONT></B>>, shape=point, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+
+    // Edges
+    1 -> 3;
+    3 -> 5;
+    5 -> 8;
+    8 -> 7 [label="Exception"];
+    7 -> 9;
+    7 -> 6 [label="Uncaught Exception"];
+    9 -> 6;
+    6 -> 10;
+    10 -> 4 [label="Uncaught Exception"];
+    10 -> 11;
+    11 -> 4;
+    4 -> 2;
+}

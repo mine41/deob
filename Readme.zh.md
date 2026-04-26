@@ -155,6 +155,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rebuild-Deobfuscated.p
 | `-DynamicTimeBudgetMs` | `15000` | 单次动态展开预算，单位为毫秒，`0` 表示不限 |
 | `-SafeMode` | `$true` | 是否启用安全保护 |
 | `-PreExecutionGateMode` | `Balanced` | 先审后执行门控：`Disabled` / `Conservative` / `Balanced` / `Aggressive` |
+| `-OptimizationProfile` | `Default` | 行为调优 profile：`Default` / `Cmdline` / `TimeoutCoverage` |
+| `-RunMetadataPath` | 未设置 | 可选；将本次运行摘要写成一份 JSON |
 | `-DryRun` | `$false` | 只分析，不写最终输出 |
 
 常用示例：
@@ -168,7 +170,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rebuild-Deobfuscated.p
 
 # 仅做分析，不写最终输出
 .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -DryRun
+
+# 额外输出一份简要运行元数据
+.\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -RunMetadataPath .\run-meta.json
 ```
+
+`OptimizationProfile` 用来调整整体行为策略：
+
+- `Default`：默认行为。
+- `Cmdline`：更偏向命令行类样本，对部分回写更保守。
+- `TimeoutCoverage`：更强调在预算内完成，允许跳过或浅层处理高开销阶段，以减少超时。
 
 `PreExecutionGateMode` 用来控制“先审后执行”门控的激进程度：
 

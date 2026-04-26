@@ -56,6 +56,11 @@ param(
     [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
     [string]$PreExecutionGateMode = 'Balanced',
 
+    [ValidateSet('Default', 'Cmdline', 'TimeoutCoverage')]
+    [string]$OptimizationProfile = 'Default',
+
+    [string]$RunMetadataPath,
+
     [switch]$DryRun
 )
 
@@ -110,6 +115,27 @@ function ConvertFrom-HostBooleanArgument {
 
 $FullOutput = ConvertFrom-HostBooleanArgument -Value $FullOutput -ParameterName 'FullOutput'
 $SafeMode = ConvertFrom-HostBooleanArgument -Value $SafeMode -ParameterName 'SafeMode'
+$script:IsCmdlineOptimizationProfile = ([string]$OptimizationProfile -eq 'Cmdline')
+$script:IsTimeoutCoverageOptimizationProfile = ([string]$OptimizationProfile -eq 'TimeoutCoverage')
+$effectiveOverlapStrategy = $OverlapStrategy
+$effectiveVariableConflictPolicy = $VariableConflictPolicy
+
+if ($script:IsCmdlineOptimizationProfile) {
+    if (-not $PSBoundParameters.ContainsKey('OverlapStrategy') -and $effectiveOverlapStrategy -eq 'Inner') {
+        $effectiveOverlapStrategy = 'Outer'
+    }
+    if (-not $PSBoundParameters.ContainsKey('VariableConflictPolicy') -and $effectiveVariableConflictPolicy -eq 'last') {
+        $effectiveVariableConflictPolicy = 'skip'
+    }
+}
+
+function Test-IsCmdlineOptimizationProfile {
+    return [bool]$script:IsCmdlineOptimizationProfile
+}
+
+function Test-IsTimeoutCoverageOptimizationProfile {
+    return [bool]$script:IsTimeoutCoverageOptimizationProfile
+}
 
 function New-SkipRecord {
     param(
@@ -167,6 +193,145 @@ function Get-RemainingTimeBudgetMs {
     $remaining = [int]($BudgetMs - $Stopwatch.ElapsedMilliseconds)
     if ($remaining -lt 0) { return 0 }
     return $remaining
+}
+
+function Get-OptimizationProfileSettings {
+    param(
+        [ValidateSet('Default', 'Cmdline', 'TimeoutCoverage')]
+        [string]$Profile,
+        [int]$RequestedMaxRounds
+    )
+
+    switch ($Profile) {
+        'TimeoutCoverage' {
+            return [PSCustomObject]@{
+                Profile                    = $Profile
+                EffectiveMaxRounds         = [Math]::Max($RequestedMaxRounds, 1)
+                FinalizationReserveMs      = 0
+                StaticBudgetCapMs          = 0
+                ShallowDynamicBudgetMs     = 2000
+                ShallowMaxIterations       = 250
+                ShallowMaxTotalNodes       = 8000
+                NearBudgetWindowMs         = 30000
+                ShallowTextLength          = 16384
+                SkipCfgTextLength          = 32768
+                ShallowLargeArrayCount     = 512
+                SkipCfgLargeArrayCount     = 2048
+                ShallowAstNodeCount        = 1200
+                SkipCfgAstNodeCount        = 3500
+                MaterializedPayloadRounds  = [Math]::Max($RequestedMaxRounds, 1)
+            }
+        }
+        default {
+            return [PSCustomObject]@{
+                Profile                    = $Profile
+                EffectiveMaxRounds         = [Math]::Max($RequestedMaxRounds, 1)
+                FinalizationReserveMs      = 0
+                StaticBudgetCapMs          = 0
+                ShallowDynamicBudgetMs     = 0
+                ShallowMaxIterations       = 0
+                ShallowMaxTotalNodes       = 0
+                NearBudgetWindowMs         = 0
+                ShallowTextLength          = 0
+                SkipCfgTextLength          = 0
+                ShallowLargeArrayCount     = 0
+                SkipCfgLargeArrayCount     = 0
+                ShallowAstNodeCount        = 0
+                SkipCfgAstNodeCount        = 0
+                MaterializedPayloadRounds  = [Math]::Max($RequestedMaxRounds, 1)
+            }
+        }
+    }
+}
+
+function Get-OptimizationProfileRoundPlan {
+    param(
+        [Parameter(Mandatory)]
+        $ProfileSettings,
+        [AllowNull()]$GateDecision = $null,
+        [int]$RemainingGlobalBudgetMs,
+        [int]$Round,
+        [bool]$IsMaterializedPayloadRound = $false
+    )
+
+    $plan = [ordered]@{
+        RoundMode             = 'default'
+        SkipCfgTraversal      = $false
+        SkipWholeScriptDynamic = $false
+        SkipStaticEval        = $false
+        StopAfterThisRound    = $false
+        DynamicTimeBudgetMs   = $null
+        MaxIterations         = $null
+        MaxTotalNodes         = $null
+        Reason                = $null
+    }
+
+    if ($null -eq $ProfileSettings -or [string]$ProfileSettings.Profile -ne 'TimeoutCoverage') {
+        return [PSCustomObject]$plan
+    }
+
+    $metrics = if ($GateDecision -and $GateDecision.PSObject.Properties['Metrics']) { $GateDecision.Metrics } else { $null }
+    $textLength = if ($metrics -and $metrics.PSObject.Properties['TextLength']) { [int]$metrics.TextLength } else { 0 }
+    $largeArrayCount = if ($metrics -and $metrics.PSObject.Properties['LargeArrayElementCount']) { [int]$metrics.LargeArrayElementCount } else { 0 }
+    $astNodeCount = if ($metrics -and $metrics.PSObject.Properties['AstNodeCount']) { [int]$metrics.AstNodeCount } else { 0 }
+    $compressedLoaderHit = if ($metrics -and $metrics.PSObject.Properties['CompressedLoaderHit']) { [bool]$metrics.CompressedLoaderHit } else { $false }
+    $dynamicTokenCount = if ($metrics -and $metrics.PSObject.Properties['DynamicTokenCount']) { [int]$metrics.DynamicTokenCount } else { 0 }
+
+    $isNearBudget = ($RemainingGlobalBudgetMs -gt 0 -and $RemainingGlobalBudgetMs -le [int]$ProfileSettings.NearBudgetWindowMs)
+    $isVeryLarge = (
+        $textLength -ge [int]$ProfileSettings.SkipCfgTextLength -or
+        $largeArrayCount -ge [int]$ProfileSettings.SkipCfgLargeArrayCount -or
+        $astNodeCount -ge [int]$ProfileSettings.SkipCfgAstNodeCount
+    )
+    $isShallow = (
+        $textLength -ge [int]$ProfileSettings.ShallowTextLength -or
+        $largeArrayCount -ge [int]$ProfileSettings.ShallowLargeArrayCount -or
+        $astNodeCount -ge [int]$ProfileSettings.ShallowAstNodeCount -or
+        $dynamicTokenCount -ge 8 -or
+        $compressedLoaderHit -or
+        $isNearBudget
+    )
+
+    if ($RemainingGlobalBudgetMs -gt 0 -and $RemainingGlobalBudgetMs -le ([int]$ProfileSettings.FinalizationReserveMs + 5000)) {
+        $plan.RoundMode = 'text_only'
+        $plan.SkipCfgTraversal = $true
+        $plan.SkipWholeScriptDynamic = $true
+        $plan.SkipStaticEval = $true
+        $plan.StopAfterThisRound = $true
+        $plan.Reason = 'near_finalization_reserve'
+        return [PSCustomObject]$plan
+    }
+
+    if ($isVeryLarge) {
+        $plan.RoundMode = 'text_only'
+        $plan.SkipCfgTraversal = $true
+        $plan.SkipWholeScriptDynamic = $true
+        $plan.SkipStaticEval = $true
+        $plan.StopAfterThisRound = $true
+        $plan.Reason = 'very_large_script'
+        return [PSCustomObject]$plan
+    }
+
+    if ($isShallow -or $Round -gt 1) {
+        $plan.RoundMode = 'shallow'
+        $plan.SkipWholeScriptDynamic = $true
+        $plan.SkipStaticEval = $true
+        $plan.DynamicTimeBudgetMs = [int]$ProfileSettings.ShallowDynamicBudgetMs
+        $plan.MaxIterations = [int]$ProfileSettings.ShallowMaxIterations
+        $plan.MaxTotalNodes = [int]$ProfileSettings.ShallowMaxTotalNodes
+        $plan.Reason = if ($isNearBudget) { 'near_budget_window' } elseif ($compressedLoaderHit) { 'compressed_loader' } else { 'large_or_late_round' }
+    }
+
+    $allowedRounds = if ($IsMaterializedPayloadRound) {
+        [Math]::Max([int]$ProfileSettings.MaterializedPayloadRounds, 1)
+    } else {
+        [int]$ProfileSettings.EffectiveMaxRounds
+    }
+    if ($Round -ge $allowedRounds) {
+        $plan.StopAfterThisRound = $true
+    }
+
+    return [PSCustomObject]$plan
 }
 
 function Get-EffectiveRoundExecutionLimits {
@@ -364,6 +529,26 @@ function Test-PipelineAutomaticVariableAst {
     return ($name -ieq '_' -or $name -ieq 'PSItem')
 }
 
+function Test-IsSensitiveCommandNameForContext {
+    param([AllowNull()][string]$CommandName)
+
+    if ([string]::IsNullOrWhiteSpace($CommandName)) {
+        return $false
+    }
+
+    return ($CommandName -match '^(?i:invoke-expression|iex|start-process|saps|invoke-webrequest|iwr|invoke-restmethod|irm|nslookup|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?)$')
+}
+
+function Test-IsSensitiveMemberNameForContext {
+    param([AllowNull()][string]$MemberName)
+
+    if ([string]::IsNullOrWhiteSpace($MemberName)) {
+        return $false
+    }
+
+    return ($MemberName -match '^(?i:DownloadString|DownloadFile|Start|Invoke|CopyHere)$')
+}
+
 function Get-ReplacementContextInfoFromScriptText {
     param([Parameter(Mandatory)][string]$ScriptText)
 
@@ -376,6 +561,7 @@ function Get-ReplacementContextInfoFromScriptText {
         CommandTargetAssignmentRanges = @()
         PipelineVariableRanges = @()
         PipelineSensitiveExpressionRanges = @()
+        SensitiveArgumentRanges = @()
     }
 
     if ([string]::IsNullOrWhiteSpace($ScriptText)) {
@@ -459,12 +645,14 @@ function Get-ReplacementContextInfoFromScriptText {
     $commandTargetAssignmentRanges = [System.Collections.Generic.List[object]]::new()
     $pipelineVariableRanges = [System.Collections.Generic.List[object]]::new()
     $pipelineSensitiveExpressionRanges = [System.Collections.Generic.List[object]]::new()
+    $sensitiveArgumentRanges = [System.Collections.Generic.List[object]]::new()
     $commandNameRangeSeen = @{}
     $dynamicPayloadRangeSeen = @{}
     $memberNameRangeSeen = @{}
     $commandTargetAssignmentRangeSeen = @{}
     $pipelineVariableRangeSeen = @{}
     $pipelineSensitiveExpressionRangeSeen = @{}
+    $sensitiveArgumentRangeSeen = @{}
     $commandTargetVariableNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
     $commandAsts = @($ast.FindAll({
@@ -534,6 +722,22 @@ function Get-ReplacementContextInfoFromScriptText {
                 break
             }
         }
+
+        if (Test-IsSensitiveCommandNameForContext -CommandName $cmdName) {
+            for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+                $elem = $cmdAst.CommandElements[$i]
+                if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                    if ($elem.Argument -and $elem.Argument.Extent) {
+                        Add-UniqueContextRange -SeenMap $sensitiveArgumentRangeSeen -List $sensitiveArgumentRanges -StartOffset $elem.Argument.Extent.StartOffset -EndOffset $elem.Argument.Extent.EndOffset
+                    }
+                    continue
+                }
+
+                if ($elem -and $elem.Extent) {
+                    Add-UniqueContextRange -SeenMap $sensitiveArgumentRangeSeen -List $sensitiveArgumentRanges -StartOffset $elem.Extent.StartOffset -EndOffset $elem.Extent.EndOffset
+                }
+            }
+        }
     }
 
     $memberAsts = @($ast.FindAll({
@@ -544,6 +748,15 @@ function Get-ReplacementContextInfoFromScriptText {
     foreach ($memberAst in $memberAsts) {
         if (-not $memberAst.Member -or -not $memberAst.Member.Extent) { continue }
         Add-UniqueContextRange -SeenMap $memberNameRangeSeen -List $memberNameRanges -StartOffset $memberAst.Member.Extent.StartOffset -EndOffset $memberAst.Member.Extent.EndOffset
+
+        if (($memberAst -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) -and
+            (Test-IsSensitiveMemberNameForContext -MemberName ([string]$memberAst.Member.Extent.Text))) {
+            foreach ($argAst in @($memberAst.Arguments)) {
+                if ($argAst -and $argAst.Extent) {
+                    Add-UniqueContextRange -SeenMap $sensitiveArgumentRangeSeen -List $sensitiveArgumentRanges -StartOffset $argAst.Extent.StartOffset -EndOffset $argAst.Extent.EndOffset
+                }
+            }
+        }
     }
 
     if ($commandTargetVariableNames.Count -gt 0) {
@@ -602,6 +815,7 @@ function Get-ReplacementContextInfoFromScriptText {
     $result.CommandTargetAssignmentRanges = @($commandTargetAssignmentRanges)
     $result.PipelineVariableRanges = @($pipelineVariableRanges)
     $result.PipelineSensitiveExpressionRanges = @($pipelineSensitiveExpressionRanges)
+    $result.SensitiveArgumentRanges = @($sensitiveArgumentRanges)
     return $result
 }
 
@@ -1078,6 +1292,57 @@ function Test-ValidCommandNameReplacement {
     return ($null -ne (Get-Command -Name $text -ErrorAction SilentlyContinue | Select-Object -First 1))
 }
 
+function Get-CmdlineProfileVariableReadGuardDecision {
+    param(
+        $Candidate,
+        $ContextInfo
+    )
+
+    if (-not (Test-IsCmdlineOptimizationProfile)) { return $null }
+    if (-not $Candidate) { return $null }
+    if (-not $Candidate.PSObject.Properties['SourceKind'] -or [string]$Candidate.SourceKind -ne 'VariableRead') { return $null }
+
+    $start = if ($Candidate.PSObject.Properties['StartOffset']) { [int]$Candidate.StartOffset } else { $null }
+    $end = if ($Candidate.PSObject.Properties['EndOffset']) { [int]$Candidate.EndOffset } else { $null }
+    if ($null -eq $start -or $null -eq $end) { return $null }
+
+    $original = if ($Candidate.PSObject.Properties['Original']) { [string]$Candidate.Original } else { '' }
+    $observedValueCount = if ($Candidate.PSObject.Properties['ObservedValueCount']) { [int]$Candidate.ObservedValueCount } else { 1 }
+    $isValueChanged = ($Candidate.PSObject.Properties['IsValueChanged'] -and [bool]$Candidate.IsValueChanged)
+
+    if ($isValueChanged -or $observedValueCount -gt 1) {
+        return [PSCustomObject]@{
+            Reason  = 'cmdline_variable_multi_value_protected'
+            Message = 'Cmdline profile 下变量读取出现多值观测，默认不做 last/定值化回写'
+        }
+    }
+
+    if ($original -match '^\s*\$(?i:env:[A-Za-z_][A-Za-z0-9_]*|PSScriptRoot|PSCommandPath|MyInvocation|PID|Args|Input|PSItem|_)\s*$') {
+        return [PSCustomObject]@{
+            Reason  = 'cmdline_variable_runtime_scoped'
+            Message = 'Cmdline profile 下环境/自动变量不直接定值化回写'
+        }
+    }
+
+    if ($ContextInfo) {
+        if (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $ContextInfo.SensitiveArgumentRanges) {
+            return [PSCustomObject]@{
+                Reason  = 'cmdline_sensitive_argument_protected'
+                Message = 'Cmdline profile 下敏感调用参数中的变量读取不直接回写，避免把运行时输入固化'
+            }
+        }
+
+        if (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $ContextInfo.DynamicPayloadRanges) {
+            return [PSCustomObject]@{
+                Reason  = 'cmdline_dynamic_payload_variable_protected'
+                Message = 'Cmdline profile 下动态 payload 范围内的变量读取不直接回写'
+            }
+        }
+    }
+
+    return $null
+}
+
 function Filter-ReplacementCandidatesByContext {
     param(
         [AllowEmptyCollection()][array]$Candidates,
@@ -1136,6 +1401,12 @@ function Filter-ReplacementCandidatesByContext {
 
         if ($sourceKind -eq 'VariableRead' -and $withinPipelineVariable) {
             $skipped += New-SkipRecord -Reason 'pipeline_variable_protected' -Message '脚本块中的管道变量读取不做自动回填，避免把 $_/$PSItem 固化成单次观测值' -Item $cand
+            continue
+        }
+
+        $cmdlineVariableGuard = Get-CmdlineProfileVariableReadGuardDecision -Candidate $cand -ContextInfo $contextInfo
+        if ($cmdlineVariableGuard) {
+            $skipped += New-SkipRecord -Reason ([string]$cmdlineVariableGuard.Reason) -Message ([string]$cmdlineVariableGuard.Message) -Item $cand
             continue
         }
 
@@ -2921,6 +3192,38 @@ function Test-IsCallDepthOverflowException {
     }
 
     return $false
+}
+
+function Get-ErrorSummaryText {
+    param(
+        $ErrorObject,
+        [string]$DefaultMessage = 'unknown error'
+    )
+
+    if ($null -eq $ErrorObject) {
+        return $DefaultMessage
+    }
+
+    $message = $null
+    if ($ErrorObject -is [System.Management.Automation.ErrorRecord]) {
+        if ($ErrorObject.Exception -and -not [string]::IsNullOrWhiteSpace([string]$ErrorObject.Exception.Message)) {
+            $message = [string]$ErrorObject.Exception.Message
+        } else {
+            $message = [string]$ErrorObject
+        }
+    } elseif ($ErrorObject -is [System.Exception]) {
+        $message = [string]$ErrorObject.Message
+    } elseif ($ErrorObject.PSObject.Properties['Exception'] -and $ErrorObject.Exception -and -not [string]::IsNullOrWhiteSpace([string]$ErrorObject.Exception.Message)) {
+        $message = [string]$ErrorObject.Exception.Message
+    } else {
+        $message = [string]$ErrorObject
+    }
+
+    if ([string]::IsNullOrWhiteSpace($message)) {
+        $message = $DefaultMessage
+    }
+
+    return (($message -replace '[\r\n]+', ' ').Trim())
 }
 
 function Try-Resolve-WholeScriptStaticCompressedLoaderPayloadInfo {
@@ -5037,7 +5340,20 @@ function Resolve-StaticAstValue {
                 $values = @()
                 $usedFallback = $false
                 foreach ($statement in $statements) {
-                    $statementResult = Invoke-WholeScriptStaticStatement -Statement $statement -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                    try {
+                        $statementResult = Invoke-WholeScriptStaticStatement -Statement $statement -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                    } catch {
+                        if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                            throw
+                        }
+
+                        $statementResult = [PSCustomObject]@{
+                            Success           = $false
+                            OutputItems       = @()
+                            UsedEmptyFallback = $usedFallback
+                            Message           = ('静态子表达式因调用深度溢出已跳过: ' + (Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'call depth overflow'))
+                        }
+                    }
                     if (-not $statementResult.Success) {
                         $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$statementResult.UsedEmptyFallback); Reason = 'subexpression_child'; Message = $statementResult.Message }
                         break
@@ -5082,7 +5398,20 @@ function Resolve-StaticAstValue {
                 $values = @()
                 $usedFallback = $false
                 foreach ($statement in $statements) {
-                    $statementResult = Invoke-WholeScriptStaticStatement -Statement $statement -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                    try {
+                        $statementResult = Invoke-WholeScriptStaticStatement -Statement $statement -Context $Context -AllowEmptyFallback:$AllowEmptyFallback -Depth ($Depth + 1)
+                    } catch {
+                        if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                            throw
+                        }
+
+                        $statementResult = [PSCustomObject]@{
+                            Success           = $false
+                            OutputItems       = @()
+                            UsedEmptyFallback = $usedFallback
+                            Message           = ('静态数组表达式因调用深度溢出已跳过: ' + (Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'call depth overflow'))
+                        }
+                    }
                     if (-not $statementResult.Success) {
                         $result = [PSCustomObject]@{ Success = $false; Value = $null; UsedEmptyFallback = ($usedFallback -or [bool]$statementResult.UsedEmptyFallback); Reason = 'array_expression_child'; Message = $statementResult.Message }
                         break
@@ -5239,22 +5568,39 @@ function Get-ReplacementCandidatePriority {
     $materializationKind = if ($Candidate.PSObject.Properties['MaterializationKind']) { [string]$Candidate.MaterializationKind } else { $null }
     $protectsInner = ($Candidate.PSObject.Properties['ProtectsInnerCandidates'] -and [bool]$Candidate.ProtectsInnerCandidates)
     $wholeScriptMaterialized = ($Candidate.PSObject.Properties['WholeScriptMaterialized'] -and [bool]$Candidate.WholeScriptMaterialized)
+    $isCmdline = Test-IsCmdlineOptimizationProfile
     if ($wholeScriptMaterialized) {
+        if ($isCmdline) { return 650 }
         return 520
     }
     if ($sourceKind -eq 'DynamicInvoke') {
-        if ($protectsInner -and -not [string]::IsNullOrWhiteSpace($materializationKind)) { return 460 }
-        if ($protectsInner) { return 440 }
+        if ($protectsInner -and -not [string]::IsNullOrWhiteSpace($materializationKind)) {
+            if ($isCmdline) { return 540 }
+            return 460
+        }
+        if ($protectsInner) {
+            if ($isCmdline) { return 520 }
+            return 440
+        }
         return 400
     }
-    if ($sourceKind -eq 'LoaderMaterialized') { return 430 }
+    if ($sourceKind -eq 'LoaderMaterialized') {
+        if ($isCmdline) { return 500 }
+        return 430
+    }
     if ($sourceKind -eq 'FunctionResult') {
-        if ($protectsInner) { return 420 }
+        if ($protectsInner) {
+            if ($isCmdline) { return 470 }
+            return 420
+        }
         return 390
     }
     if ($sourceKind -eq 'SensitiveSink') { return 385 }
     if ($sourceKind -eq 'LiteralizedCommand') { return 380 }
-    if ($sourceKind -eq 'VariableRead') { return 350 }
+    if ($sourceKind -eq 'VariableRead') {
+        if ($isCmdline) { return 220 }
+        return 350
+    }
     if ($sourceKind -eq 'Static') {
         if ($Candidate.PSObject.Properties['UsedEmptyFallback'] -and [bool]$Candidate.UsedEmptyFallback) { return 100 }
         return 200
@@ -6598,6 +6944,10 @@ function Get-ReplacementsFromResolvableResults {
                 UsedEmptyFallback = $false
                 ResultType  = $null
                 Executed    = $true
+                VariableName = $varName
+                IsSimpleVariable = $true
+                IsValueChanged = ($uniqueValues.Count -ne 1)
+                ObservedValueCount = [int]$uniqueValues.Count
             }
 
             if ($conflictRegions.ContainsKey($key)) {
@@ -9777,7 +10127,20 @@ function Initialize-WholeScriptStaticAssignments {
         $progress = $false
         $nextPending = @()
         foreach ($statement in @($pending)) {
-            $statementResult = Invoke-WholeScriptStaticStatement -Statement $statement -Context $Context -AllowEmptyFallback:$false
+            try {
+                $statementResult = Invoke-WholeScriptStaticStatement -Statement $statement -Context $Context -AllowEmptyFallback:$false
+            } catch {
+                if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                    throw
+                }
+
+                $statementResult = [PSCustomObject]@{
+                    Success           = $false
+                    OutputItems       = @()
+                    UsedEmptyFallback = $false
+                    Message           = ('静态初始化语句因调用深度溢出已跳过: ' + (Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'call depth overflow'))
+                }
+            }
             if ($statementResult.Success) {
                 $statementKey = if ($statement -and $statement.Extent) {
                     '{0}:{1}' -f [int]$statement.Extent.StartOffset, [int]$statement.Extent.EndOffset
@@ -10778,6 +11141,109 @@ function Get-StaticSensitiveReplacementTextInfo {
     }
 }
 
+function Test-CmdlineSensitiveReplacementAstShape {
+    param($Ast)
+
+    if ($null -eq $Ast) { return $false }
+    if (-not (Test-IsCmdlineOptimizationProfile)) { return $true }
+
+    if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return $true
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConstantExpressionAst]) {
+        return (($Ast.Value -is [string]) -or ($Ast.Value -is [char]))
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+        return (@($Ast.NestedExpressions).Count -eq 0)
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        $elements = @($Ast.Elements)
+        if ($elements.Count -eq 0) {
+            return $false
+        }
+
+        foreach ($element in $elements) {
+            if (-not (Test-CmdlineSensitiveReplacementAstShape -Ast $element)) {
+                return $false
+            }
+        }
+
+        return $true
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
+        if ($null -eq $expr) {
+            return $false
+        }
+
+        return (Test-CmdlineSensitiveReplacementAstShape -Ast $expr)
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+        $typeName = Get-StaticConvertTypeName -ConvertAst $Ast
+        if ([string]::IsNullOrWhiteSpace($typeName) -or $typeName.ToLowerInvariant() -ne 'string') {
+            return $false
+        }
+
+        return (Test-CmdlineSensitiveReplacementAstShape -Ast $Ast.Child)
+    }
+
+    return $false
+}
+
+function Test-CanRewriteSensitiveTargetInCmdlineProfile {
+    param(
+        $Ast,
+        $ReplacementInfo
+    )
+
+    if (-not (Test-IsCmdlineOptimizationProfile)) { return $true }
+    if ($null -eq $Ast -or $null -eq $ReplacementInfo) { return $false }
+    if ([bool]$ReplacementInfo.UsedEmptyFallback) { return $false }
+
+    return (Test-CmdlineSensitiveReplacementAstShape -Ast $Ast)
+}
+
+function Get-CmdlineSensitiveEvidenceText {
+    param(
+        $Ast,
+        $ReplacementInfo,
+        [bool]$CanRewriteTarget = $true
+    )
+
+    if ($null -eq $ReplacementInfo) { return $null }
+
+    $text = [string]$ReplacementInfo.Text
+    if (-not (Test-IsCmdlineOptimizationProfile)) { return $text }
+    if ($CanRewriteTarget -or -not [bool]$ReplacementInfo.UsedEmptyFallback) { return $text }
+    if ($null -eq $Ast -or -not $Ast.Extent) { return $text }
+
+    if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return [string]$Ast.Value
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+        $raw = [string]$Ast.Extent.Text
+        if ($raw.Length -ge 2) {
+            $first = $raw[0]
+            $last = $raw[$raw.Length - 1]
+            if ((($first -eq "'") -and ($last -eq "'")) -or (($first -eq '"') -and ($last -eq '"'))) {
+                $raw = $raw.Substring(1, $raw.Length - 2)
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($raw)) {
+            return $raw
+        }
+    }
+
+    return $text
+}
+
 function Get-SensitiveCommandArgumentTargets {
     param(
         [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst,
@@ -10946,60 +11412,64 @@ function Get-SensitiveMemberInvocationTargets {
         [Parameter(Mandatory)][hashtable]$Context
     )
 
-    $memberName = Get-StaticMemberNameText -MemberAst $InvokeAst.Member -Context $Context
-    if ([string]::IsNullOrWhiteSpace($memberName)) {
-        $memberName = if ($InvokeAst.Member -and $InvokeAst.Member.Extent) { [string]$InvokeAst.Member.Extent.Text } else { $null }
-    }
-    if ([string]::IsNullOrWhiteSpace($memberName)) {
+    try {
+        $memberName = Get-StaticMemberNameText -MemberAst $InvokeAst.Member -Context $Context
+        if ([string]::IsNullOrWhiteSpace($memberName)) {
+            $memberName = if ($InvokeAst.Member -and $InvokeAst.Member.Extent) { [string]$InvokeAst.Member.Extent.Text } else { $null }
+        }
+        if ([string]::IsNullOrWhiteSpace($memberName)) {
+            return @()
+        }
+
+        $exprText = if ($InvokeAst.Expression -and $InvokeAst.Expression.Extent) { [string]$InvokeAst.Expression.Extent.Text } else { '' }
+        $memberNameLower = $memberName.ToLowerInvariant()
+        $expressionResult = Resolve-StaticAstValue -Ast $InvokeAst.Expression -Context $Context -AllowEmptyFallback:$true
+        $expressionValue = if ($expressionResult.Success) { $expressionResult.Value } else { $null }
+        $modeledType = $null
+        if (Test-StaticPropertyBagValue -Value $expressionValue) {
+            $typeProperty = @($expressionValue.PSObject.Properties.Match('__PsDissectType') | Select-Object -First 1)
+            if ($typeProperty.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$typeProperty[0].Value)) {
+                $modeledType = ([string]$typeProperty[0].Value).ToLowerInvariant()
+            }
+        }
+
+        switch ($memberNameLower) {
+            'create' {
+                if ($exprText -match '(?i)WebRequest|HttpWebRequest' -and $InvokeAst.Arguments.Count -ge 1) {
+                    return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'Url'; SinkType = 'MemberWebRequestCreate' })
+                }
+            }
+            { $_ -in @('downloadstring', 'downloaddata', 'downloadfile', 'openread', 'uploadstring', 'uploaddata', 'navigate', 'navigate2') } {
+                if ($InvokeAst.Arguments.Count -ge 1) {
+                    $sinkType = if ($_ -in @('navigate', 'navigate2')) { 'MemberNavigate' } else { 'MemberDownload' }
+                    return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'Url'; SinkType = $sinkType })
+                }
+            }
+            'run' {
+                if (($modeledType -eq 'wscript.shell' -or $modeledType -eq 'shell.application') -and $InvokeAst.Arguments.Count -ge 1) {
+                    return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'LauncherArgs'; SinkType = 'MemberShellRun' })
+                }
+            }
+            'addscript' {
+                if ($InvokeAst.Arguments.Count -ge 1) {
+                    return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'CommandText'; SinkType = 'MemberAddScript' })
+                }
+            }
+            'setvalue' {
+                if ($InvokeAst.Arguments.Count -ge 1) {
+                    $targets = @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'RegValueName'; SinkType = 'MemberRegistrySetValueName' })
+                    if ($InvokeAst.Arguments.Count -ge 2) {
+                        $targets += [PSCustomObject]@{ Ast = $InvokeAst.Arguments[1]; SinkKind = 'CommandText'; SinkType = 'MemberRegistrySetValueData' }
+                    }
+                    return @($targets)
+                }
+            }
+        }
+
+        return @()
+    } catch {
         return @()
     }
-
-    $exprText = if ($InvokeAst.Expression -and $InvokeAst.Expression.Extent) { [string]$InvokeAst.Expression.Extent.Text } else { '' }
-    $memberNameLower = $memberName.ToLowerInvariant()
-    $expressionResult = Resolve-StaticAstValue -Ast $InvokeAst.Expression -Context $Context -AllowEmptyFallback:$true
-    $expressionValue = if ($expressionResult.Success) { $expressionResult.Value } else { $null }
-    $modeledType = $null
-    if (Test-StaticPropertyBagValue -Value $expressionValue) {
-        $typeProperty = @($expressionValue.PSObject.Properties.Match('__PsDissectType') | Select-Object -First 1)
-        if ($typeProperty.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$typeProperty[0].Value)) {
-            $modeledType = ([string]$typeProperty[0].Value).ToLowerInvariant()
-        }
-    }
-
-    switch ($memberNameLower) {
-        'create' {
-            if ($exprText -match '(?i)WebRequest|HttpWebRequest' -and $InvokeAst.Arguments.Count -ge 1) {
-                return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'Url'; SinkType = 'MemberWebRequestCreate' })
-            }
-        }
-        { $_ -in @('downloadstring', 'downloaddata', 'downloadfile', 'openread', 'uploadstring', 'uploaddata', 'navigate', 'navigate2') } {
-            if ($InvokeAst.Arguments.Count -ge 1) {
-                $sinkType = if ($_ -in @('navigate', 'navigate2')) { 'MemberNavigate' } else { 'MemberDownload' }
-                return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'Url'; SinkType = $sinkType })
-            }
-        }
-        'run' {
-            if (($modeledType -eq 'wscript.shell' -or $modeledType -eq 'shell.application') -and $InvokeAst.Arguments.Count -ge 1) {
-                return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'LauncherArgs'; SinkType = 'MemberShellRun' })
-            }
-        }
-        'addscript' {
-            if ($InvokeAst.Arguments.Count -ge 1) {
-                return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'CommandText'; SinkType = 'MemberAddScript' })
-            }
-        }
-        'setvalue' {
-            if ($InvokeAst.Arguments.Count -ge 1) {
-                $targets = @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'RegValueName'; SinkType = 'MemberRegistrySetValueName' })
-                if ($InvokeAst.Arguments.Count -ge 2) {
-                    $targets += [PSCustomObject]@{ Ast = $InvokeAst.Arguments[1]; SinkKind = 'CommandText'; SinkType = 'MemberRegistrySetValueData' }
-                }
-                return @($targets)
-            }
-        }
-    }
-
-    return @()
 }
 
 function Add-SensitiveEvidenceRecord {
@@ -11236,6 +11706,52 @@ function Append-SensitiveEvidenceCommentBlock {
     return ($ScriptText.TrimEnd() + "`r`n`r`n" + $commentBlock + "`r`n")
 }
 
+function Remove-StandaloneCmdlineNoiseLines {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if (-not (Test-IsCmdlineOptimizationProfile)) {
+        return $ScriptText
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    $lines = [regex]::Split($ScriptText, "`r?`n")
+    $kept = New-Object System.Collections.Generic.List[string]
+
+    foreach ($line in $lines) {
+        $trim = $line.Trim()
+
+        if ([string]::IsNullOrWhiteSpace($trim)) {
+            $kept.Add($line) | Out-Null
+            continue
+        }
+
+        if ($trim -match '^(?:;+\s*)+$') {
+            continue
+        }
+
+        if ($trim -match '^(?:;?\s*(?:\(\[string\]\)\s*)?(?:''(?:[^'']|'''')*''|"(?:[^"]|"")*"))+\s*;?$') {
+            continue
+        }
+
+        $kept.Add($line) | Out-Null
+    }
+
+    $candidate = ($kept.ToArray() -join "`r`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return $ScriptText
+    }
+
+    $check = Test-PowerShellSyntax -ScriptText $candidate
+    if ($check.IsValid) {
+        return ($candidate.TrimEnd() + "`r`n")
+    }
+
+    return $ScriptText
+}
+
 function Invoke-NormalizeSensitiveIndicatorArguments {
     param([Parameter(Mandatory)][string]$ScriptText)
 
@@ -11266,7 +11782,17 @@ function Invoke-NormalizeSensitiveIndicatorArguments {
             $replacementInfo = Get-StaticSensitiveReplacementTextInfo -Ast $TargetAst -Context $ctx -SinkKind $SinkKind
             if ($null -eq $replacementInfo) { return }
 
-            Add-SensitiveEvidenceRecord -EvidenceList $sensitiveEvidence -Kind $SinkKind -Value ([string]$replacementInfo.Text) -Source $SinkType -Stage 'ast_replacement'
+            $canRewriteTarget = Test-CanRewriteSensitiveTargetInCmdlineProfile -Ast $TargetAst -ReplacementInfo $replacementInfo
+            $evidenceText = Get-CmdlineSensitiveEvidenceText -Ast $TargetAst -ReplacementInfo $replacementInfo -CanRewriteTarget $canRewriteTarget
+            if ([string]::IsNullOrWhiteSpace($evidenceText)) {
+                $evidenceText = [string]$replacementInfo.Text
+            }
+            $evidenceStage = if ($canRewriteTarget) { 'ast_replacement' } else { 'ast_preserved' }
+            Add-SensitiveEvidenceRecord -EvidenceList $sensitiveEvidence -Kind $SinkKind -Value ([string]$evidenceText) -Source $SinkType -Stage $evidenceStage
+
+            if (-not $canRewriteTarget) {
+                return
+            }
 
             $start = [int]$TargetAst.Extent.StartOffset
             $end = [int]$TargetAst.Extent.EndOffset
@@ -11294,8 +11820,18 @@ function Invoke-NormalizeSensitiveIndicatorArguments {
                 $n -is [System.Management.Automation.Language.CommandAst]
             }, $true))
         foreach ($cmdAst in $commandAsts) {
-            foreach ($target in @(Get-SensitiveCommandArgumentTargets -CommandAst $cmdAst -Context $ctx)) {
-                & $addReplacement $target.Ast $target.SinkKind $target.SinkType
+            $targets = @()
+            try {
+                $targets = @(Get-SensitiveCommandArgumentTargets -CommandAst $cmdAst -Context $ctx)
+            } catch {
+                $targets = @()
+            }
+
+            foreach ($target in $targets) {
+                try {
+                    & $addReplacement $target.Ast $target.SinkKind $target.SinkType
+                } catch {
+                }
             }
         }
 
@@ -11304,8 +11840,18 @@ function Invoke-NormalizeSensitiveIndicatorArguments {
                 $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]
             }, $true))
         foreach ($invokeAst in $invokeAsts) {
-            foreach ($target in @(Get-SensitiveMemberInvocationTargets -InvokeAst $invokeAst -Context $ctx)) {
-                & $addReplacement $target.Ast $target.SinkKind $target.SinkType
+            $targets = @()
+            try {
+                $targets = @(Get-SensitiveMemberInvocationTargets -InvokeAst $invokeAst -Context $ctx)
+            } catch {
+                $targets = @()
+            }
+
+            foreach ($target in $targets) {
+                try {
+                    & $addReplacement $target.Ast $target.SinkKind $target.SinkType
+                } catch {
+                }
             }
         }
 
@@ -11330,6 +11876,8 @@ function Invoke-NormalizeSensitiveIndicatorArguments {
         }
 
         return (Append-SensitiveEvidenceCommentBlock -ScriptText $ScriptText -Evidence ($sensitiveEvidence.ToArray()))
+    } catch {
+        return $ScriptText
     } finally {
         Remove-Variable -Name __psdissect_sensitive_replacements -Scope Script -ErrorAction SilentlyContinue
         Close-WholeScriptStaticResolutionContext -Context $ctx
@@ -11354,6 +11902,12 @@ function Invoke-NormalizePlainScriptText {
     $check = Test-PowerShellSyntax -ScriptText $formatted
     if ($check.IsValid) {
         $working = $formatted
+    }
+
+    $noiseReduced = Remove-StandaloneCmdlineNoiseLines -ScriptText $working
+    $check = Test-PowerShellSyntax -ScriptText $noiseReduced
+    if ($check.IsValid) {
+        $working = $noiseReduced
     }
 
     return $working
@@ -11775,18 +12329,40 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     )
 
     $working = $ScriptText
+    $fastTimeoutPostProcess = ((Test-IsTimeoutCoverageOptimizationProfile) -and ($working.Length -ge 16384))
+    $maxPasses = if ($fastTimeoutPostProcess) { 1 } else { 8 }
 
-    for ($pass = 0; $pass -lt 8; $pass++) {
+    if ($fastTimeoutPostProcess) {
+        $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
+        $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
+        $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
+
+        $stageStripped = Try-StripDuplicatedStageWrapper -ScriptText $working
+        if (-not [string]::IsNullOrWhiteSpace($stageStripped)) {
+            $working = $stageStripped
+        }
+
+        $fastCheck = Test-PowerShellSyntax -ScriptText $working
+        if ($fastCheck.IsValid) {
+            return $working
+        }
+
+        return $ScriptText
+    }
+
+    for ($pass = 0; $pass -lt $maxPasses; $pass++) {
         $before = Get-NormalizedScriptComparisonText -ScriptText $working
 
         $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
         $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
         $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
-        $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
+        if (-not $fastTimeoutPostProcess) {
+            $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
+        }
 
         while ($true) {
             $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $working
-            if (-not $payloadInfo) {
+            if ((-not $payloadInfo) -and (-not $fastTimeoutPostProcess)) {
                 $payloadInfo = Try-Resolve-WholeScriptStaticPayloadInfoSafe -ScriptText $working -WarningContext 'postprocess' -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $PreExecutionGateCache -SafeMode:$SafeMode
             }
             if (-not $payloadInfo) { break }
@@ -11805,7 +12381,9 @@ function Invoke-PostProcessDeobfuscatedScriptText {
             $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
             $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
             $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
-            $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
+            if (-not $fastTimeoutPostProcess) {
+                $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
+            }
         }
 
         $stageStripped = Try-StripDuplicatedStageWrapper -ScriptText $working
@@ -11828,6 +12406,117 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     return $working
 }
 
+function Ensure-ParentDirectory {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $parent = $null
+    try {
+        $parent = [System.IO.Path]::GetDirectoryName($Path)
+    } catch {
+        $parent = $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($parent)) {
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $parent)) {
+        $null = New-Item -ItemType Directory -Path $parent -Force
+    }
+}
+
+function Move-TemporaryFileIntoPlace {
+    param(
+        [Parameter(Mandatory)][string]$TemporaryPath,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+
+    if (Test-Path -LiteralPath $DestinationPath) {
+        [System.IO.File]::Replace($TemporaryPath, $DestinationPath, $null, $true)
+    } else {
+        [System.IO.File]::Move($TemporaryPath, $DestinationPath)
+    }
+}
+
+function Write-TextFileAtomic {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [AllowEmptyString()][AllowNull()][string]$Content,
+        [int]$RetryCount = 3,
+        [int]$RetryDelayMs = 120
+    )
+
+    Ensure-ParentDirectory -Path $Path
+
+    $directory = [System.IO.Path]::GetDirectoryName($Path)
+    $leafName = [System.IO.Path]::GetFileName($Path)
+    $attempts = [Math]::Max(1, $RetryCount)
+    $lastError = $null
+
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        $tmpPath = [System.IO.Path]::Combine($directory, ("{0}.{1}.tmp" -f $leafName, ([guid]::NewGuid().ToString('N'))))
+        try {
+            $text = if ($null -eq $Content) { '' } else { [string]$Content }
+            [System.IO.File]::WriteAllText($tmpPath, $text, [System.Text.UTF8Encoding]::new($false))
+            Move-TemporaryFileIntoPlace -TemporaryPath $tmpPath -DestinationPath $Path
+            return
+        } catch {
+            $lastError = $_
+            try {
+                if (Test-Path -LiteralPath $tmpPath) {
+                    Remove-Item -LiteralPath $tmpPath -Force -ErrorAction SilentlyContinue
+                }
+            } catch {
+            }
+
+            if ($attempt -lt $attempts) {
+                Start-Sleep -Milliseconds $RetryDelayMs
+            }
+        }
+    }
+
+    throw $lastError
+}
+
+function Copy-FileAtomic {
+    param(
+        [Parameter(Mandatory)][string]$SourcePath,
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [int]$RetryCount = 3,
+        [int]$RetryDelayMs = 120
+    )
+
+    Ensure-ParentDirectory -Path $DestinationPath
+
+    $directory = [System.IO.Path]::GetDirectoryName($DestinationPath)
+    $leafName = [System.IO.Path]::GetFileName($DestinationPath)
+    $attempts = [Math]::Max(1, $RetryCount)
+    $lastError = $null
+
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        $tmpPath = [System.IO.Path]::Combine($directory, ("{0}.{1}.tmp" -f $leafName, ([guid]::NewGuid().ToString('N'))))
+        try {
+            [System.IO.File]::Copy($SourcePath, $tmpPath, $true)
+            Move-TemporaryFileIntoPlace -TemporaryPath $tmpPath -DestinationPath $DestinationPath
+            return
+        } catch {
+            $lastError = $_
+            try {
+                if (Test-Path -LiteralPath $tmpPath) {
+                    Remove-Item -LiteralPath $tmpPath -Force -ErrorAction SilentlyContinue
+                }
+            } catch {
+            }
+
+            if ($attempt -lt $attempts) {
+                Start-Sleep -Milliseconds $RetryDelayMs
+            }
+        }
+    }
+
+    throw $lastError
+}
+
 function Write-JsonFile {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -11835,7 +12524,7 @@ function Write-JsonFile {
     )
 
     $json = $Object | ConvertTo-Json -Depth 10
-    Set-Content -LiteralPath $Path -Value $json -Encoding UTF8
+    Write-TextFileAtomic -Path $Path -Content $json
 }
 
 function New-CfgFromText {
@@ -11875,6 +12564,9 @@ if ([string]::IsNullOrWhiteSpace($OutPath)) {
 }
 
 $OutPath = [System.IO.Path]::GetFullPath($OutPath)
+if (-not [string]::IsNullOrWhiteSpace($RunMetadataPath)) {
+    $RunMetadataPath = [System.IO.Path]::GetFullPath($RunMetadataPath)
+}
 
 if ($FullOutput) {
     if ([string]::IsNullOrWhiteSpace($WorkDir)) {
@@ -11901,6 +12593,10 @@ if (-not (Test-Path -LiteralPath $execPath)) { throw "缺少文件: $execPath" }
 
 $hostInfo = Get-PowerShellHostInfo
 $hostDisplay = Format-PowerShellHostInfo -HostInfo $hostInfo
+$profileSettings = Get-OptimizationProfileSettings -Profile $OptimizationProfile -RequestedMaxRounds $MaxRounds
+$effectiveMaxRounds = [int]$profileSettings.EffectiveMaxRounds
+$profileChangedExecutionPlan = ($effectiveMaxRounds -ne $MaxRounds)
+$completionKind = 'full'
 
 Write-Host "=== 重建解混淆脚本（递归迭代）===" -ForegroundColor Cyan
 Write-Host "Host       : $hostDisplay" -ForegroundColor Gray
@@ -11911,12 +12607,20 @@ Write-Host "FullOutput : $FullOutput" -ForegroundColor Gray
 if ($FullOutput) {
     Write-Host "WorkDir    : $WorkDir" -ForegroundColor Gray
 }
-Write-Host "Strategy   : $OverlapStrategy" -ForegroundColor Gray
-Write-Host "VarPolicy  : $VariableConflictPolicy" -ForegroundColor Gray
+Write-Host "Profile    : $OptimizationProfile" -ForegroundColor Gray
+Write-Host "Strategy   : $effectiveOverlapStrategy" -ForegroundColor Gray
+Write-Host "VarPolicy  : $effectiveVariableConflictPolicy" -ForegroundColor Gray
 Write-Host "SafeMode   : $SafeMode" -ForegroundColor Gray
 Write-Host "GateMode   : $PreExecutionGateMode" -ForegroundColor Gray
-Write-Host "MaxRounds  : $MaxRounds" -ForegroundColor Gray
+if ($effectiveMaxRounds -ne $MaxRounds) {
+    Write-Host ("MaxRounds  : {0} (requested {1})" -f $effectiveMaxRounds, $MaxRounds) -ForegroundColor Gray
+} else {
+    Write-Host "MaxRounds  : $MaxRounds" -ForegroundColor Gray
+}
 Write-Host "TimeBudget : Global=${GlobalTimeBudgetMs}ms Dynamic=${DynamicTimeBudgetMs}ms" -ForegroundColor Gray
+if ([int]$profileSettings.FinalizationReserveMs -gt 0) {
+    Write-Host ("FinalizeReserve : {0}ms" -f $profileSettings.FinalizationReserveMs) -ForegroundColor Gray
+}
 Write-Host "DryRun     : $DryRun" -ForegroundColor Gray
 Write-Host ""
 
@@ -11933,11 +12637,14 @@ $globalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $currentRoundIsMaterializedPayload = $false
 $preExecutionGateCache = @{}
 
-for ($round = 1; $round -le $MaxRounds; $round++) {
+for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
     $remainingGlobalBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
-    if ($GlobalTimeBudgetMs -gt 0 -and $remainingGlobalBudgetMs -le 0) {
+    if ($GlobalTimeBudgetMs -gt 0 -and $remainingGlobalBudgetMs -le [int]$profileSettings.FinalizationReserveMs) {
         $terminatedBy = 'global_time_budget'
         $finalRound = [Math]::Max(0, $round - 1)
+        if (Test-IsTimeoutCoverageOptimizationProfile) {
+            $completionKind = 'budget_partial'
+        }
         break
     }
 
@@ -11948,6 +12655,10 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     $roundReportPath = $null
     $roundCfgDotPath = $null
     $roundCfgPngPath = $null
+    $cfg = $null
+    $ctx = $null
+    $remainingStaticBudgetMs = $null
+    $roundExecutionPlan = $null
 
         if ($FullOutput) {
             $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
@@ -11958,13 +12669,13 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         $roundCfgPngPath = [System.IO.Path]::ChangeExtension($roundCfgDotPath, '.png')
 
             Copy-Item -LiteralPath $currentPath -Destination $roundInPath -Force
-            Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $MaxRounds) -ForegroundColor Yellow
+            Write-Host ("[Round {0}/{1}] 分析+执行..." -f $round, $effectiveMaxRounds) -ForegroundColor Yellow
 
             $rawRoundText = Get-RawScriptTextFromFile -Path $roundInPath
             $roundParseInfo = Get-ScriptParseInfo -ScriptText $rawRoundText
             if (-not $roundParseInfo.IsValid) {
                 $fallbackText = Get-BestEffortParseFallbackScriptText -ScriptText $rawRoundText -ParseError $roundParseInfo.FirstError
-                Set-Content -LiteralPath $roundOutPath -Value $fallbackText -Encoding UTF8
+                Write-TextFileAtomic -Path $roundOutPath -Content $fallbackText
 
                 if ($FullOutput) {
                     $report = [ordered]@{
@@ -11994,10 +12705,23 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
             $roundGate = Get-PreExecutionGateDecision -Scope 'Round' -ScriptText $rawRoundText -ParseInfo $roundParseInfo -Mode $PreExecutionGateMode -SafeMode:$SafeMode -Cache $preExecutionGateCache
             $effectiveRoundLimits = Get-EffectiveRoundExecutionLimits -BaseDynamicTimeBudgetMs $DynamicTimeBudgetMs -BaseMaxIterations $MaxIterations -BaseMaxTotalNodes $MaxTotalNodes -GateDecision $roundGate
+            $roundExecutionPlan = Get-OptimizationProfileRoundPlan -ProfileSettings $profileSettings -GateDecision $roundGate -RemainingGlobalBudgetMs $remainingGlobalBudgetMs -Round $round -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
+            if ($roundExecutionPlan.RoundMode -ne 'default' -or $roundExecutionPlan.StopAfterThisRound) {
+                $profileChangedExecutionPlan = $true
+            }
+            if ($roundExecutionPlan.DynamicTimeBudgetMs -gt 0) {
+                $effectiveRoundLimits.DynamicTimeBudgetMs = if ($effectiveRoundLimits.DynamicTimeBudgetMs -le 0) { [int]$roundExecutionPlan.DynamicTimeBudgetMs } else { [Math]::Min([int]$effectiveRoundLimits.DynamicTimeBudgetMs, [int]$roundExecutionPlan.DynamicTimeBudgetMs) }
+            }
+            if ($roundExecutionPlan.MaxIterations -gt 0) {
+                $effectiveRoundLimits.MaxIterations = [Math]::Min([int]$effectiveRoundLimits.MaxIterations, [int]$roundExecutionPlan.MaxIterations)
+            }
+            if ($roundExecutionPlan.MaxTotalNodes -gt 0) {
+                $effectiveRoundLimits.MaxTotalNodes = [Math]::Min([int]$effectiveRoundLimits.MaxTotalNodes, [int]$roundExecutionPlan.MaxTotalNodes)
+            }
 
             if ([string]$roundGate.Decision -eq 'Stop') {
                 $stoppedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $rawRoundText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
-                Set-Content -LiteralPath $roundOutPath -Value $stoppedText -Encoding UTF8
+                Write-TextFileAtomic -Path $roundOutPath -Content $stoppedText
 
                 if ($FullOutput) {
                     $report = [ordered]@{
@@ -12039,7 +12763,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             }
 
             if ($roundStop -and $roundStop.ShouldStop) {
-                Set-Content -LiteralPath $roundOutPath -Value $rawRoundText -Encoding UTF8
+                Write-TextFileAtomic -Path $roundOutPath -Content $rawRoundText
 
                 if ($FullOutput) {
                     $report = [ordered]@{
@@ -12074,44 +12798,96 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 break
             }
 
-            $cfg = Get-ScriptControlFlow -ScriptPath $roundInPath
-            if (-not $cfg) {
-                $fallbackText = Get-BestEffortParseFallbackScriptText -ScriptText $rawRoundText -ParseError 'CFG generation failed'
-                Set-Content -LiteralPath $roundOutPath -Value $fallbackText -Encoding UTF8
+            $ctx = $null
+            if ($roundExecutionPlan.SkipCfgTraversal) {
+                $scriptText = $rawRoundText
+                $currentText = $scriptText
+            } else {
+                $cfg = $null
+                $cfgError = $null
+                try {
+                    $cfg = Get-ScriptControlFlow -ScriptPath $roundInPath
+                } catch {
+                    $cfgError = Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'CFG generation failed'
+                }
+                if (-not $cfg) {
+                    $fallbackText = if ($roundParseInfo.IsValid) { $rawRoundText } else { Get-BestEffortParseFallbackScriptText -ScriptText $rawRoundText -ParseError 'CFG generation failed' }
+                    Write-TextFileAtomic -Path $roundOutPath -Content $fallbackText
 
-                if ($FullOutput) {
-                    $report = [ordered]@{
-                        Round              = $round
-                        RoundLabel         = $roundLabel
-                        InputPath          = $roundInPath
-                        OutputPath         = $roundOutPath
-                        ExecutionLog       = $roundLogPath
-                        CfgDotPath         = $roundCfgDotPath
-                        CfgPngPath         = $roundCfgPngPath
-                        SafeMode           = $SafeMode
-                        TerminatedBy       = 'cfg_generation_failed'
-                        ParseError         = $roundParseInfo.FirstError
-                        FinalSyntaxValid   = $false
-                        FinalOutputSource  = 'rebuilt_output'
-                        Timestamp          = (Get-Date).ToString('o')
+                    if ($FullOutput) {
+                        $report = [ordered]@{
+                            Round              = $round
+                            RoundLabel         = $roundLabel
+                            InputPath          = $roundInPath
+                            OutputPath         = $roundOutPath
+                            ExecutionLog       = $roundLogPath
+                            CfgDotPath         = $roundCfgDotPath
+                            CfgPngPath         = $roundCfgPngPath
+                            SafeMode           = $SafeMode
+                            TerminatedBy       = 'cfg_generation_failed'
+                            CfgError           = $cfgError
+                            ParseError         = $roundParseInfo.FirstError
+                            FinalSyntaxValid   = [bool]$roundParseInfo.IsValid
+                            FinalOutputSource  = 'rebuilt_output'
+                            Timestamp          = (Get-Date).ToString('o')
+                        }
+                        Write-JsonFile -Path $roundReportPath -Object $report
                     }
-                    Write-JsonFile -Path $roundReportPath -Object $report
+
+                    $currentText = $fallbackText
+                    $finalRound = $round
+                    $finalRoundOutPath = $roundOutPath
+                    if ($roundParseInfo.IsValid) {
+                        $lastValidRoundOutPath = $roundOutPath
+                        $lastValidText = $fallbackText
+                    }
+                    $terminatedBy = 'cfg_generation_failed'
+                    break
                 }
 
-                $currentText = $fallbackText
-                $finalRound = $round
-                $finalRoundOutPath = $roundOutPath
-                $terminatedBy = 'cfg_generation_failed'
-                break
+                $cfgTraversalError = $null
+                try {
+                    $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
+                } catch {
+                    $cfgTraversalError = Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'CFG traversal failed'
+                }
+                if ($null -eq $ctx) {
+                    Write-TextFileAtomic -Path $roundOutPath -Content $rawRoundText
+
+                    if ($FullOutput) {
+                        $report = [ordered]@{
+                            Round              = $round
+                            RoundLabel         = $roundLabel
+                            InputPath          = $roundInPath
+                            OutputPath         = $roundOutPath
+                            ExecutionLog       = $roundLogPath
+                            CfgDotPath         = $roundCfgDotPath
+                            CfgPngPath         = $roundCfgPngPath
+                            SafeMode           = $SafeMode
+                            TerminatedBy       = 'cfg_traversal_failed'
+                            TraversalError     = $cfgTraversalError
+                            FinalSyntaxValid   = $true
+                            FinalOutputSource  = 'rebuilt_output'
+                            Timestamp          = (Get-Date).ToString('o')
+                        }
+                        Write-JsonFile -Path $roundReportPath -Object $report
+                    }
+
+                    $currentText = $rawRoundText
+                    $finalRound = $round
+                    $finalRoundOutPath = $roundOutPath
+                    $lastValidRoundOutPath = $roundOutPath
+                    $lastValidText = $rawRoundText
+                    $terminatedBy = 'cfg_traversal_failed'
+                    break
+                }
+                $ctx.PreExecutionGateMode = $PreExecutionGateMode
+                $ctx.PreExecutionGateCache = $preExecutionGateCache
+                $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+
+                $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
+                $currentText = $scriptText
             }
-
-            $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
-            $ctx.PreExecutionGateMode = $PreExecutionGateMode
-            $ctx.PreExecutionGateCache = $preExecutionGateCache
-            $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
-
-            $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
-        $currentText = $scriptText
     } else {
         # Fast 模式：全程只在内存中迭代
         if ($null -eq $currentText) {
@@ -12119,7 +12895,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             $currentText = Get-FullScriptTextFromFile -Path $currentPath
         }
 
-        Write-Host ("[Round {0}/{1}] 分析+执行 (fast)..." -f $round, $MaxRounds) -ForegroundColor Yellow
+        Write-Host ("[Round {0}/{1}] 分析+执行 (fast)..." -f $round, $effectiveMaxRounds) -ForegroundColor Yellow
 
         $roundParseInfo = Get-ScriptParseInfo -ScriptText $currentText
         if (-not $roundParseInfo.IsValid) {
@@ -12131,6 +12907,19 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
         $roundGate = Get-PreExecutionGateDecision -Scope 'Round' -ScriptText $currentText -ParseInfo $roundParseInfo -Mode $PreExecutionGateMode -SafeMode:$SafeMode -Cache $preExecutionGateCache
         $effectiveRoundLimits = Get-EffectiveRoundExecutionLimits -BaseDynamicTimeBudgetMs $DynamicTimeBudgetMs -BaseMaxIterations $MaxIterations -BaseMaxTotalNodes $MaxTotalNodes -GateDecision $roundGate
+        $roundExecutionPlan = Get-OptimizationProfileRoundPlan -ProfileSettings $profileSettings -GateDecision $roundGate -RemainingGlobalBudgetMs $remainingGlobalBudgetMs -Round $round -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
+        if ($roundExecutionPlan.RoundMode -ne 'default' -or $roundExecutionPlan.StopAfterThisRound) {
+            $profileChangedExecutionPlan = $true
+        }
+        if ($roundExecutionPlan.DynamicTimeBudgetMs -gt 0) {
+            $effectiveRoundLimits.DynamicTimeBudgetMs = if ($effectiveRoundLimits.DynamicTimeBudgetMs -le 0) { [int]$roundExecutionPlan.DynamicTimeBudgetMs } else { [Math]::Min([int]$effectiveRoundLimits.DynamicTimeBudgetMs, [int]$roundExecutionPlan.DynamicTimeBudgetMs) }
+        }
+        if ($roundExecutionPlan.MaxIterations -gt 0) {
+            $effectiveRoundLimits.MaxIterations = [Math]::Min([int]$effectiveRoundLimits.MaxIterations, [int]$roundExecutionPlan.MaxIterations)
+        }
+        if ($roundExecutionPlan.MaxTotalNodes -gt 0) {
+            $effectiveRoundLimits.MaxTotalNodes = [Math]::Min([int]$effectiveRoundLimits.MaxTotalNodes, [int]$roundExecutionPlan.MaxTotalNodes)
+        }
         if ([string]$roundGate.Decision -eq 'Stop') {
             $currentText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $currentText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
             $finalRound = $round
@@ -12151,25 +12940,47 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             break
         }
 
-        $cfg = New-CfgFromText -ScriptText $currentText
-        if (-not $cfg) {
-            $currentText = Get-BestEffortParseFallbackScriptText -ScriptText $currentText -ParseError 'CFG generation failed'
-            $finalRound = $round
-            $terminatedBy = 'cfg_generation_failed'
-            break
-        }
+        $ctx = $null
+        if (-not $roundExecutionPlan.SkipCfgTraversal) {
+            $cfg = $null
+            $cfgError = $null
+            try {
+                $cfg = New-CfgFromText -ScriptText $currentText
+            } catch {
+                $cfgError = Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'CFG generation failed'
+            }
+            if (-not $cfg) {
+                if (-not $roundParseInfo.IsValid) {
+                    $currentText = Get-BestEffortParseFallbackScriptText -ScriptText $currentText -ParseError 'CFG generation failed'
+                }
+                $finalRound = $round
+                $terminatedBy = 'cfg_generation_failed'
+                break
+            }
 
-        # fast mode：禁用 execution.log（避免文件 IO）
-        $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
-        $ctx.PreExecutionGateMode = $PreExecutionGateMode
-        $ctx.PreExecutionGateCache = $preExecutionGateCache
-        $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+            # fast mode：禁用 execution.log（避免文件 IO）
+            try {
+                $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
+            } catch {
+                $ctx = $null
+            }
+            if ($null -eq $ctx) {
+                $finalRound = $round
+                $terminatedBy = 'cfg_traversal_failed'
+                break
+            }
+            $ctx.PreExecutionGateMode = $PreExecutionGateMode
+            $ctx.PreExecutionGateCache = $preExecutionGateCache
+            $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+        }
 
         $scriptText = $currentText
     }
 
+    $roundBaselineSyntax = Test-PowerShellSyntax -ScriptText $scriptText
     $earlyPostProcessedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $scriptText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
     $earlyPostProcessChanged = ((Get-NormalizedScriptComparisonText -ScriptText $earlyPostProcessedText) -ne (Get-NormalizedScriptComparisonText -ScriptText $scriptText))
+    $skipNextRoundPayloadProbe = ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and ([bool]$roundExecutionPlan.StopAfterThisRound -or [bool]$roundExecutionPlan.SkipCfgTraversal))
 
     if ($earlyPostProcessChanged) {
         $candidates = @()
@@ -12177,8 +12988,18 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         $selected = @()
         $newText = $earlyPostProcessedText
         $postProcessChanged = $true
-        $nextRoundMaterializedPayload = Get-NextRoundMaterializedPayloadInfo -Selected $selected -PrePostProcessText $newText
-        if (-not [bool]$nextRoundMaterializedPayload.IsMaterializedPayload) {
+        if ($skipNextRoundPayloadProbe) {
+            $nextRoundMaterializedPayload = [PSCustomObject]@{
+                IsMaterializedPayload = $false
+                Reason                = if ($roundExecutionPlan -and -not [string]::IsNullOrWhiteSpace([string]$roundExecutionPlan.Reason)) { [string]$roundExecutionPlan.Reason } else { 'timeout_profile_skip_next_round_probe' }
+                FromDynamicInvoke     = $false
+                FromHostWrapperDecode = $false
+            }
+        } else {
+            $nextRoundMaterializedPayload = Get-NextRoundMaterializedPayloadInfo -Selected $selected -PrePostProcessText $newText
+        }
+
+        if ((-not $skipNextRoundPayloadProbe) -and (-not [bool]$nextRoundMaterializedPayload.IsMaterializedPayload)) {
             $prePostProcessPayload = Resolve-WholeScriptHostPayloadInfo -ScriptText $scriptText
             if (-not $prePostProcessPayload) {
                 $prePostProcessPayload = Try-Resolve-WholeScriptStaticCompressedLoaderPayloadInfo -ScriptText $scriptText
@@ -12200,11 +13021,23 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 }
             }
         }
+    } elseif ($null -eq $ctx) {
+        $candidates = @()
+        $skipped = @()
+        $selected = @()
+        $newText = $scriptText
+        $postProcessChanged = $false
+        $nextRoundMaterializedPayload = [PSCustomObject]@{
+            IsMaterializedPayload = $false
+            Reason                = if ($roundExecutionPlan -and -not [string]::IsNullOrWhiteSpace([string]$roundExecutionPlan.Reason)) { [string]$roundExecutionPlan.Reason } else { 'profile_text_only' }
+            FromDynamicInvoke     = $false
+            FromHostWrapperDecode = $false
+        }
     } else {
-        $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $VariableConflictPolicy
+        $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $effectiveVariableConflictPolicy
         $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
         $functionResults = Get-FunctionInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
-        if ($roundGate -and [bool]$roundGate.SkipWholeScriptDynamic) {
+        if (($roundGate -and [bool]$roundGate.SkipWholeScriptDynamic) -or ($roundExecutionPlan -and [bool]$roundExecutionPlan.SkipWholeScriptDynamic)) {
             $wholeScriptDynamic = [PSCustomObject]@{
                 Candidates = @()
                 Skipped    = @(New-SkipRecord -Reason 'whole_script_dynamic_pre_execution_gate' -Message '本轮命中 shallow gate，跳过 whole-script dynamic loader 展开。' -Item $null)
@@ -12215,7 +13048,10 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
         $sensitive = Get-SensitiveSinkReplacementCandidates -Context $ctx -ScriptText $scriptText
         $remainingStaticBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
-        if ($roundGate -and [bool]$roundGate.SkipStaticEval) {
+        if ([int]$profileSettings.StaticBudgetCapMs -gt 0 -and $remainingStaticBudgetMs -gt 0) {
+            $remainingStaticBudgetMs = [Math]::Min([int]$remainingStaticBudgetMs, [int]$profileSettings.StaticBudgetCapMs)
+        }
+        if (($roundGate -and [bool]$roundGate.SkipStaticEval) -or ($roundExecutionPlan -and [bool]$roundExecutionPlan.SkipStaticEval)) {
             $static = [PSCustomObject]@{
                 Candidates = @()
                 Skipped    = @(New-SkipRecord -Reason 'static_pre_execution_gate' -Message '本轮命中 shallow gate，跳过静态求值。' -Item $null)
@@ -12253,7 +13089,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             $skipped += New-SkipRecord -Reason 'static_low_confidence' -Message '低置信静态候选默认不自动应用' -Item $cand
         }
 
-        $sel = Select-NonOverlappingReplacements -Candidates $autoCandidates -Strategy $OverlapStrategy
+        $sel = Select-NonOverlappingReplacements -Candidates $autoCandidates -Strategy $effectiveOverlapStrategy
         $selected = @($sel.Selected)
         $skipped += @($sel.Skipped)
 
@@ -12267,11 +13103,30 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         if ($postProcessChanged) {
             $newText = $postProcessedText
         }
-        $nextRoundMaterializedPayload = Get-NextRoundMaterializedPayloadInfo -Selected $selected -PrePostProcessText $newText
-        if ($syntaxGuard.BaselineIsValid) {
-            $roundSyntax = Test-PowerShellSyntax -ScriptText $newText
-            if (-not $roundSyntax.IsValid) {
-                throw "语法保护失败：替换后脚本不可解析。Error=$($roundSyntax.FirstError)"
+        if ($skipNextRoundPayloadProbe) {
+            $nextRoundMaterializedPayload = [PSCustomObject]@{
+                IsMaterializedPayload = $false
+                Reason                = if ($roundExecutionPlan -and -not [string]::IsNullOrWhiteSpace([string]$roundExecutionPlan.Reason)) { [string]$roundExecutionPlan.Reason } else { 'timeout_profile_skip_next_round_probe' }
+                FromDynamicInvoke     = $false
+                FromHostWrapperDecode = $false
+            }
+        } else {
+            $nextRoundMaterializedPayload = Get-NextRoundMaterializedPayloadInfo -Selected $selected -PrePostProcessText $newText
+        }
+    }
+
+    if ($roundBaselineSyntax.IsValid) {
+        $roundSyntax = Test-PowerShellSyntax -ScriptText $newText
+        if (-not $roundSyntax.IsValid) {
+            $skipped += New-SkipRecord -Reason 'round_syntax_guard_reverted' -Message ("替换后脚本不可解析，已回退到本轮输入。Error=" + $roundSyntax.FirstError) -Item $null
+            $selected = @()
+            $newText = $scriptText
+            $postProcessChanged = $false
+            $nextRoundMaterializedPayload = [PSCustomObject]@{
+                IsMaterializedPayload = $false
+                Reason                = 'syntax_guard_reverted'
+                FromDynamicInvoke     = $false
+                FromHostWrapperDecode = $false
             }
         }
     }
@@ -12281,6 +13136,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
     # 无替换：本轮不落盘任何 round 产物，直接收敛退出
     if ($selected.Count -eq 0 -and -not $postProcessChanged) {
         $noReplacementReason = Get-NoReplacementTerminationReason -CandidateCount $candidates.Count -Skipped $skipped
+        $noReplacementTerminatedBy = if ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and ($roundExecutionPlan.StopAfterThisRound -or $roundExecutionPlan.SkipCfgTraversal)) { 'stable_output' } else { 'no_replacements' }
         Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
 
         if ($FullOutput) {
@@ -12297,7 +13153,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
                 GateDecision    = if ($roundGate) { $roundGate.Decision } else { $null }
                 GateScore       = if ($roundGate) { $roundGate.Score } else { $null }
                 GateReasons     = if ($roundGate) { @($roundGate.Reasons) } else { @() }
-                TerminatedBy    = 'no_replacements'
+                TerminatedBy    = $noReplacementTerminatedBy
                 NoReplacementReason = $noReplacementReason
                 CandidateCount  = $candidates.Count
                 SelectedCount   = 0
@@ -12319,7 +13175,10 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         }
 
         $finalRound = $round
-        $terminatedBy = 'no_replacements'
+        $terminatedBy = $noReplacementTerminatedBy
+        if ($terminatedBy -eq 'stable_output') {
+            $completionKind = 'budget_partial'
+        }
         break
     }
 
@@ -12334,10 +13193,12 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
         }
         $appliedNodeIds = @($appliedNodeIds | Sort-Object -Unique)
 
-        try {
-            Export-CfgToDot -finalCFG $cfg -outputPath $roundCfgDotPath -AppliedNodeIds $appliedNodeIds | Out-Null
-        } catch {
-            Write-Warning "导出 CFG 失败: $_"
+        if ($null -ne $cfg) {
+            try {
+                Export-CfgToDot -finalCFG $cfg -outputPath $roundCfgDotPath -AppliedNodeIds $appliedNodeIds | Out-Null
+            } catch {
+                Write-Warning "导出 CFG 失败: $_"
+            }
         }
 
         # 生成 report（尽量轻量，保留 offset 和预览）
@@ -12383,24 +13244,26 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
             ExecutionLog    = $roundLogPath
             CfgDotPath      = $roundCfgDotPath
             CfgPngPath      = $roundCfgPngPath
-            HostInfo        = $ctx.HostInfo
+            HostInfo        = if ($ctx -and $ctx.PSObject.Properties['HostInfo']) { $ctx.HostInfo } else { $null }
             SafeMode        = $SafeMode
             GateMode        = $PreExecutionGateMode
             GateDecision    = if ($roundGate) { $roundGate.Decision } else { $null }
             GateScore       = if ($roundGate) { $roundGate.Score } else { $null }
             GateReasons     = if ($roundGate) { @($roundGate.Reasons) } else { @() }
-            OverlapStrategy = $OverlapStrategy
-            VariableConflictPolicy = $VariableConflictPolicy
+            OverlapStrategy = $effectiveOverlapStrategy
+            VariableConflictPolicy = $effectiveVariableConflictPolicy
             MaxIterations   = $effectiveRoundLimits.MaxIterations
             MaxTotalNodes   = $effectiveRoundLimits.MaxTotalNodes
             GlobalTimeBudgetMs = $GlobalTimeBudgetMs
             DynamicTimeBudgetMs = $effectiveRoundLimits.DynamicTimeBudgetMs
-            ExecutionStopReason = if ($ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
+            ExecutionStopReason = if ($ctx -and $ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
             InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
             PreTraversalCheckApplied = [bool]$preTraversalCheck.ShouldCheck
             PreTraversalCheckReason = $preTraversalCheck.Reason
+            ProfileRoundMode = if ($roundExecutionPlan) { $roundExecutionPlan.RoundMode } else { 'default' }
+            ProfileRoundReason = if ($roundExecutionPlan) { $roundExecutionPlan.Reason } else { $null }
             RemainingGlobalBudgetBeforeStatic = $remainingStaticBudgetMs
-            StaticSkippedByBudget = ($GlobalTimeBudgetMs -gt 0 -and $remainingStaticBudgetMs -le 0)
+            StaticSkippedByBudget = ($null -ne $remainingStaticBudgetMs -and $GlobalTimeBudgetMs -gt 0 -and $remainingStaticBudgetMs -le 0)
             CandidateCount  = $candidates.Count
             DynamicCount    = $dynamicCount
             LiteralizedCommandCount = $literalizedCount
@@ -12422,7 +13285,7 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
         Write-JsonFile -Path $roundReportPath -Object $report
 
-        Set-Content -LiteralPath $roundOutPath -Value $newText -Encoding UTF8
+        Write-TextFileAtomic -Path $roundOutPath -Content $newText
         $lastValidRoundOutPath = $roundOutPath
         $lastValidText = $newText
 
@@ -12447,8 +13310,17 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 
     $finalRound = $round
 
+    if ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and [bool]$roundExecutionPlan.StopAfterThisRound) {
+        $terminatedBy = 'stable_output'
+        $completionKind = 'budget_partial'
+        break
+    }
+
     if (($GlobalTimeBudgetMs -gt 0 -and $globalStopwatch.ElapsedMilliseconds -ge $GlobalTimeBudgetMs) -or ($ctx -and $ctx.ContainsKey('StopReason') -and [string]$ctx.StopReason -eq 'GlobalTimeBudgetExceeded')) {
         $terminatedBy = 'global_time_budget'
+        if (Test-IsTimeoutCoverageOptimizationProfile) {
+            $completionKind = 'budget_partial'
+        }
         break
     }
 
@@ -12463,15 +13335,22 @@ for ($round = 1; $round -le $MaxRounds; $round++) {
 }
 
 if ($FullOutput -and -not $finalRoundOutPath) {
-    if ($terminatedBy -eq 'global_time_budget') {
-        $finalRoundOutPath = $currentPath
-    } else {
-    throw "未产生任何轮次输出，无法生成最终脚本。"
+    foreach ($candidatePath in @($lastValidRoundOutPath, $currentPath, $scriptFullPath)) {
+        if (-not [string]::IsNullOrWhiteSpace($candidatePath) -and (Test-Path -LiteralPath $candidatePath)) {
+            $finalRoundOutPath = $candidatePath
+            break
+        }
     }
 }
 
 if ($null -eq $terminatedBy) {
     $terminatedBy = 'max_rounds'
+}
+
+if ((Test-IsTimeoutCoverageOptimizationProfile) -and $completionKind -ne 'budget_partial') {
+    if ($profileChangedExecutionPlan -or $terminatedBy -in @('global_time_budget', 'stable_output') -or $effectiveMaxRounds -lt $MaxRounds) {
+        $completionKind = 'budget_partial'
+    }
 }
 
 $finalOutputPathToCopy = $null
@@ -12536,7 +13415,49 @@ if ($FullOutput) {
 }
 
 if (-not $finalSyntaxValid) {
-    throw '最终输出语法仍无效，且无法回退到语法有效版本。'
+    if ($FullOutput) {
+        foreach ($candidatePath in @($finalRoundOutPath, $lastValidRoundOutPath, $currentPath, $scriptFullPath)) {
+            if ([string]::IsNullOrWhiteSpace($candidatePath) -or -not (Test-Path -LiteralPath $candidatePath)) {
+                continue
+            }
+
+            $candidateInfo = Test-FileSyntaxInfo -Path $candidatePath
+            if (-not $candidateInfo.Exists) {
+                continue
+            }
+
+            $finalOutputPathToCopy = $candidatePath
+            $finalOutputText = $candidateInfo.Text
+            $finalOutputSource = 'best_effort_invalid'
+            $finalSyntaxFallbackUsed = $true
+            break
+        }
+    } else {
+        $bestEffortInputText = Get-FullScriptTextFromFile -Path $scriptFullPath
+        foreach ($candidateText in @($currentText, $lastValidText, $bestEffortInputText)) {
+            if ($null -eq $candidateText) {
+                continue
+            }
+
+            $candidateString = [string]$candidateText
+            if ([string]::IsNullOrWhiteSpace($candidateString)) {
+                continue
+            }
+
+            $finalOutputText = $candidateString
+            $finalOutputSource = 'best_effort_invalid'
+            $finalSyntaxFallbackUsed = $true
+            break
+        }
+    }
+}
+
+if ($FullOutput -and [string]::IsNullOrWhiteSpace($finalOutputPathToCopy)) {
+    throw '最终输出文件未生成。'
+}
+
+if (-not $FullOutput -and $null -eq $finalOutputText) {
+    throw '最终输出文本未生成。'
 }
 
 if (-not $DryRun) {
@@ -12546,14 +13467,40 @@ if (-not $DryRun) {
     }
 
     if ($FullOutput) {
-        Copy-Item -LiteralPath $finalOutputPathToCopy -Destination $OutPath -Force
+        Copy-FileAtomic -SourcePath $finalOutputPathToCopy -DestinationPath $OutPath
     } else {
-        Set-Content -LiteralPath $OutPath -Value $finalOutputText -Encoding UTF8
+        Write-TextFileAtomic -Path $OutPath -Content $finalOutputText
     }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($RunMetadataPath)) {
+    $runMetadataDir = [System.IO.Path]::GetDirectoryName($RunMetadataPath)
+    if (-not [string]::IsNullOrWhiteSpace($runMetadataDir) -and -not (Test-Path -LiteralPath $runMetadataDir)) {
+        $null = New-Item -ItemType Directory -Path $runMetadataDir -Force
+    }
+
+    $runMetadata = [ordered]@{
+        Profile                 = $OptimizationProfile
+        CompletionKind          = $completionKind
+        TerminatedBy            = $terminatedBy
+        FinalOutputSource       = $finalOutputSource
+        FinalSyntaxValid        = $finalSyntaxValid
+        FinalSyntaxFallbackUsed = $finalSyntaxFallbackUsed
+        FinalRound              = $finalRound
+        RequestedMaxRounds      = $MaxRounds
+        EffectiveMaxRounds      = $effectiveMaxRounds
+        GlobalTimeBudgetMs      = $GlobalTimeBudgetMs
+        DynamicTimeBudgetMs     = $DynamicTimeBudgetMs
+        FinalizationReserveMs   = $profileSettings.FinalizationReserveMs
+        ProfileChangedExecutionPlan = $profileChangedExecutionPlan
+        Timestamp               = (Get-Date).ToString('o')
+    }
+    Write-JsonFile -Path $RunMetadataPath -Object $runMetadata
 }
 
 Write-Host "=== 完成 ===" -ForegroundColor Green
 Write-Host ("TerminatedBy : {0}" -f $terminatedBy) -ForegroundColor Gray
+Write-Host ("Completion   : {0}" -f $completionKind) -ForegroundColor Gray
 Write-Host ("FinalRound   : {0}" -f $finalRound) -ForegroundColor Gray
 if ($FullOutput) {
     Write-Host ("FinalWorkOut : {0}" -f $finalRoundOutPath) -ForegroundColor Gray

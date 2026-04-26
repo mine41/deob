@@ -1,0 +1,67 @@
+[19:32:21.747] === CFG 调试会话开始 ===
+[19:32:21.756] Host: Core 7.5.5 [pwsh]
+[19:32:21.756] HostExe: C:\Program Files\PowerShell\7\pwsh.exe
+[19:32:21.757] MaxIterations: 200, MaxTotalNodes: 2000
+[19:32:21.757] TimeBudget: Global=15000ms, Dynamic=5000ms
+[19:32:21.762] SafeMode: True
+[19:32:21.762] 
+[19:32:21.763] === 初始化子图映射 ===
+[19:32:21.766]   [INIT] Total functions: 0, ScriptBlocks: 0
+[19:32:21.782] 
+[19:32:21.828] --- Node 1 [Start] ---
+[19:32:21.828]   Code: Script Start
+[19:32:21.841]   Status: SKIP
+[19:32:21.894] --- Node 3 [MainStart] ---
+[19:32:21.895]   Code: Main Script
+[19:32:21.896]   Status: SKIP
+[19:32:21.899] --- Node 5 [AssignmentStatementAst] ---
+[19:32:21.899]   Code: $code = '$message = ''dynamic''; Write-Output $message'
+[19:32:22.052]   Status: OK
+[19:32:22.053]   VarsWritten:
+[19:32:22.108] [LogMessageEvalError] The term 'Format-VariableValue' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+[19:32:22.122] --- Node 6 [PipelineElement] ---
+[19:32:22.123]   Code: iex $code
+[19:32:22.202]   [CMDNAME] Recorded (BuiltinAlias): iex -> Invoke-Expression
+[19:32:22.203]   [DYNAMIC] Dynamic invoke detected: Invoke-Expression
+[19:32:22.251]   [DYNAMIC] Type: IEX
+[19:32:22.256]   [DYNAMIC] Code to execute: $message = 'dynamic'; Write-Output $message
+[19:32:22.419]   [DYNAMIC] Created subgraph: _dyn_5c147fd3 (Nodes 7-8)
+[19:32:22.420]   [DYNAMIC] Node text replaced: & $_dyn_5c147fd3
+[19:32:22.466]   [SCOPE] Push: ScriptBlock '_dyn_5c147fd3' (prefix=_sc_2ecd5d72_, returnTo=4, endNode=8)
+[19:32:22.468]   [BLOCK] Entering ScriptBlock '_dyn_5c147fd3' at Node 7
+[19:32:22.469]   Status: SKIP
+[19:32:22.469]   Action: CallScriptBlock
+[19:32:22.469]   Target: _dyn_5c147fd3
+[19:32:22.469]   [JUMP] Jumping to Node 7
+[19:32:22.487] --- Node 7 [BlockStart] ---
+[19:32:22.488]   Code: DynamicBlock _dyn_5c147fd3
+[19:32:22.488]   Status: SKIP
+[19:32:22.491] --- Node 9 [AssignmentStatementAst] ---
+[19:32:22.491]   Code: $message = 'dynamic'
+[19:32:22.517]   Status: OK
+[19:32:22.517]   VarsWritten:
+[19:32:22.536] [LogMessageEvalError] The term 'Format-VariableValue' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+[19:32:22.539] --- Node 10 [PipelineElement] ---
+[19:32:22.539]   Code: Write-Output $message
+[19:32:22.581]   Status: OK
+[19:32:22.582]   VarsRead:
+[19:32:22.603] [LogMessageEvalError] The term 'Format-VariableValue' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+[19:32:22.624] [LogMessageEvalError] The term 'Format-VariableValue' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+[19:32:22.630] --- Node 8 [BlockEnd] ---
+[19:32:22.631]   Code: End DynamicBlock _dyn_5c147fd3
+[19:32:22.638]   [SCOPE] Pop: ScriptBlock '_dyn_5c147fd3' (returnTo=4)
+[19:32:22.640]   [RETURN] Returning from ScriptBlock '_dyn_5c147fd3' to Node 4
+[19:32:22.645] --- Node 4 [MainEnd] ---
+[19:32:22.646]   Code: End Main Script
+[19:32:22.647]   Status: SKIP
+[19:32:22.650] === 执行结束 ===
+[19:32:22.654] 
+[19:32:22.654] === 执行统计 ===
+[19:32:22.654] Total visits: 8
+[19:32:22.655] Unique nodes: 8
+[19:32:22.656] StopReason: EndNode
+[19:32:22.657] Failures: 0

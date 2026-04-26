@@ -263,6 +263,68 @@ function New-ExecutionContext {
     }
 }
 
+function Get-ProcessDescendantIds {
+    param([int]$RootProcessId)
+
+    if ($RootProcessId -le 0) {
+        return @()
+    }
+
+    $descendants = New-Object 'System.Collections.Generic.List[int]'
+    $visited = New-Object 'System.Collections.Generic.HashSet[int]'
+    $pending = New-Object 'System.Collections.Generic.Queue[int]'
+    $pending.Enqueue($RootProcessId)
+    $visited.Add($RootProcessId) | Out-Null
+
+    while ($pending.Count -gt 0) {
+        $currentPid = $pending.Dequeue()
+        $children = @()
+        try {
+            $children = @(Get-CimInstance -ClassName Win32_Process -Filter ("ParentProcessId = {0}" -f $currentPid) -ErrorAction Stop | ForEach-Object {
+                try { [int]$_.ProcessId } catch { $null }
+            })
+        } catch {
+            $children = @()
+        }
+
+        foreach ($childPid in $children) {
+            if ($null -eq $childPid) { continue }
+            if ($visited.Add([int]$childPid)) {
+                $descendants.Add([int]$childPid) | Out-Null
+                $pending.Enqueue([int]$childPid)
+            }
+        }
+    }
+
+    return @($descendants.ToArray())
+}
+
+function Stop-ProcessTreeById {
+    param(
+        [int]$RootProcessId,
+        [switch]$IncludeRoot
+    )
+
+    if ($RootProcessId -le 0) {
+        return
+    }
+
+    $targets = New-Object 'System.Collections.Generic.List[int]'
+    foreach ($childPid in @(Get-ProcessDescendantIds -RootProcessId $RootProcessId)) {
+        $targets.Add([int]$childPid) | Out-Null
+    }
+    if ($IncludeRoot) {
+        $targets.Add([int]$RootProcessId) | Out-Null
+    }
+
+    foreach ($targetPid in @($targets.ToArray() | Sort-Object -Descending -Unique)) {
+        try {
+            Stop-Process -Id $targetPid -Force -ErrorAction Stop
+        } catch {
+        }
+    }
+}
+
 function Add-CFGVisitedNodeCount {
     param(
         [hashtable]$Context,
@@ -405,8 +467,6 @@ try {
     $psi.WorkingDirectory = $tempRoot
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
 
     $process = $null
     try {
@@ -422,8 +482,8 @@ try {
 
         $completed = $process.WaitForExit($TimeoutMs)
         if (-not $completed) {
-            try { $process.Kill() } catch { }
-            try { $process.WaitForExit() } catch { }
+            Stop-ProcessTreeById -RootProcessId $process.Id -IncludeRoot
+            try { $null = $process.WaitForExit(5000) } catch { }
             return @{
                 Success = $false
                 Error   = "Execution timeout after ${TimeoutMs}ms"
@@ -432,15 +492,13 @@ try {
             }
         }
 
-        $stdoutText = $process.StandardOutput.ReadToEnd()
-        $stderrText = $process.StandardError.ReadToEnd()
         if ($process.ExitCode -ne 0) {
             $errorText = $null
             if (Test-Path -LiteralPath $errorPath) {
                 $errorText = [System.IO.File]::ReadAllText($errorPath, [System.Text.Encoding]::UTF8)
             }
             if ([string]::IsNullOrWhiteSpace($errorText)) {
-                $errorText = if (-not [string]::IsNullOrWhiteSpace($stderrText)) { $stderrText } elseif (-not [string]::IsNullOrWhiteSpace($stdoutText)) { $stdoutText } else { "Subprocess exited with code $($process.ExitCode)" }
+                $errorText = "Subprocess exited with code $($process.ExitCode)"
             }
             return @{
                 Success = $false
@@ -481,6 +539,13 @@ try {
         }
     } finally {
         if ($process) {
+            try {
+                if (-not $process.HasExited) {
+                    Stop-ProcessTreeById -RootProcessId $process.Id -IncludeRoot
+                    $null = $process.WaitForExit(2000)
+                }
+            } catch {
+            }
             $process.Dispose()
         }
 
@@ -496,6 +561,48 @@ try {
 }
 
 # 在执行上下文中执行代码（可选子进程硬超时后端）
+function Get-ExecutionContextEffectiveTimeoutMs {
+    param(
+        [hashtable]$ExecContext,
+        [int]$RequestedTimeoutMs
+    )
+
+    $effectiveTimeoutMs = $RequestedTimeoutMs
+    if ($effectiveTimeoutMs -le 0) {
+        $effectiveTimeoutMs = 0
+    }
+
+    if ($null -eq $ExecContext -or -not $ExecContext.ContainsKey('GlobalTimeBudgetMs') -or -not $ExecContext.ContainsKey('ExecutionStopwatch')) {
+        if ($effectiveTimeoutMs -le 0) { return $null }
+        return [Math]::Max(1, [int]$effectiveTimeoutMs)
+    }
+
+    $budgetMs = 0
+    try { $budgetMs = [int]$ExecContext.GlobalTimeBudgetMs } catch { $budgetMs = 0 }
+    $stopwatch = $ExecContext.ExecutionStopwatch
+    if ($budgetMs -le 0 -or $null -eq $stopwatch) {
+        if ($effectiveTimeoutMs -le 0) { return $null }
+        return [Math]::Max(1, [int]$effectiveTimeoutMs)
+    }
+
+    $remainingMs = $budgetMs
+    try {
+        $remainingMs = [int]([Math]::Floor([double]$budgetMs - [double]$stopwatch.ElapsedMilliseconds))
+    } catch {
+        $remainingMs = $budgetMs
+    }
+
+    if ($remainingMs -le 0) {
+        return 0
+    }
+
+    if ($effectiveTimeoutMs -le 0) {
+        return [Math]::Max(1, $remainingMs)
+    }
+
+    return [Math]::Max(1, [Math]::Min([int]$effectiveTimeoutMs, [int]$remainingMs))
+}
+
 function Invoke-InContext {
     param(
         [hashtable]$ExecContext,
@@ -510,8 +617,19 @@ function Invoke-InContext {
         'Runspace'
     }
 
+    $effectiveTimeoutMs = Get-ExecutionContextEffectiveTimeoutMs -ExecContext $ExecContext -RequestedTimeoutMs $TimeoutMs
+    if ($null -ne $effectiveTimeoutMs -and $effectiveTimeoutMs -le 0) {
+        return @{
+            Success    = $false
+            Error      = 'Execution timeout after global budget exhausted'
+            Result     = $null
+            Timeout    = $true
+            StopReason = 'GlobalTimeBudgetExceeded'
+        }
+    }
+
     if ($backend -eq 'SubprocessReplay') {
-        return (Invoke-InSubprocessReplayContext -ExecContext $ExecContext -Code $Code -TimeoutMs $TimeoutMs -PersistOnSuccess:$PersistOnSuccess)
+        return (Invoke-InSubprocessReplayContext -ExecContext $ExecContext -Code $Code -TimeoutMs $effectiveTimeoutMs -PersistOnSuccess:$PersistOnSuccess)
     }
 
     try {
@@ -521,16 +639,17 @@ function Invoke-InContext {
 
         # 异步调用，带超时
         $asyncResult = $ps.BeginInvoke()
-        $completed = $asyncResult.AsyncWaitHandle.WaitOne($TimeoutMs)
+        $completed = $asyncResult.AsyncWaitHandle.WaitOne($effectiveTimeoutMs)
 
         if (-not $completed) {
             # 超时 - 停止执行
             $ps.Stop()
             return @{
                 Success = $false
-                Error   = "Execution timeout after ${TimeoutMs}ms"
+                Error   = "Execution timeout after ${effectiveTimeoutMs}ms"
                 Result  = $null
                 Timeout = $true
+                StopReason = 'ExecutionTimeout'
             }
         }
 
@@ -4919,6 +5038,8 @@ function Invoke-NodeDirect {
         Result   = $execResult.Result
         Error    = $execResult.Error
         Action   = "Execute"
+        Timeout  = if ($execResult.PSObject.Properties['Timeout']) { [bool]$execResult.Timeout } else { $false }
+        StopReason = if ($execResult.PSObject.Properties['StopReason']) { $execResult.StopReason } else { $null }
     }
 }
 
@@ -11439,6 +11560,8 @@ function Invoke-CFGTraversal {
         ExecutionStopwatch        = [System.Diagnostics.Stopwatch]::StartNew()
         DynamicBudgetStopwatch    = [System.Diagnostics.Stopwatch]::new()
     }
+    $context.ExecContext.GlobalTimeBudgetMs = $GlobalTimeBudgetMs
+    $context.ExecContext.ExecutionStopwatch = $context.ExecutionStopwatch
 
     Ensure-CFGExecutionNodeShapes -CFG $CFG
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
@@ -11627,6 +11750,8 @@ function New-CFGExecutionSession {
         ExecutionStopwatch        = [System.Diagnostics.Stopwatch]::StartNew()
         DynamicBudgetStopwatch    = [System.Diagnostics.Stopwatch]::new()
     }
+    $context.ExecContext.GlobalTimeBudgetMs = $GlobalTimeBudgetMs
+    $context.ExecContext.ExecutionStopwatch = $context.ExecutionStopwatch
 
     Ensure-CFGExecutionNodeShapes -CFG $CFG
     Write-ExecutionLog -Context $context -Message "=== CFG 调试会话开始 ==="

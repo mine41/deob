@@ -1,0 +1,52 @@
+digraph G {
+    rankdir=TB;
+    node [
+        fontname="Consolas"
+        shape=box
+        width=0
+        height=0
+        margin="0.2,0.1"
+        fontsize=10
+    ];
+    edge [fontname="Arial", arrowhead=vee, fontsize=9];
+
+    // Nodes
+    1 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 1 | Start</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Script Start</FONT></B>>, shape=oval, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    2 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 2 | End</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Script End</FONT></B>>, shape=oval, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    3 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 3 | MainStart</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Main Script</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    4 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 4 | MainEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">End Main Script</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    5 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 5 | AssignmentStatementAst</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$kind = 'b'</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    6 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 6 | SwitchStart</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">switch ($kind)</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    7 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 7 | SwitchInit</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$__sw_6eba9aa6dc9a = @($kind); $__sw_6eba9aa6dc9a_idx = 0</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    8 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 8 | SwitchCondition</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">[bool]($__sw_6eba9aa6dc9a_idx -lt $__sw_6eba9aa6dc9a.Count)</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    9 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 9 | SwitchEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">End Switch</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    10 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 10 | SwitchBind</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$__sw_6eba9aa6dc9a_current = $__sw_6eba9aa6dc9a[$__sw_6eba9aa6dc9a_idx]</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    11 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 11 | SwitchIter</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$__sw_6eba9aa6dc9a_idx++</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    12 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 12 | CaseCondition</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">[bool]($__sw_6eba9aa6dc9a_current -eq 'a')</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    13 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 13 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Write-Output 'alpha'</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 1</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    14 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 14 | CaseCondition</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">[bool]($__sw_6eba9aa6dc9a_current -eq 'b')</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    15 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 15 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Write-Output 'beta'</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 1</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    16 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 16 | Default</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Default</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    17 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 17 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Write-Output 'other'</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 1</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+
+    // Edges
+    1 -> 3;
+    3 -> 5;
+    5 -> 6;
+    6 -> 7;
+    7 -> 8;
+    8 -> 9 [label="False"];
+    8 -> 10 [label="True"];
+    11 -> 8;
+    10 -> 12;
+    12 -> 13 [label="True"];
+    12 -> 14 [label="False"];
+    13 -> 14;
+    14 -> 15 [label="True"];
+    14 -> 16 [label="False"];
+    16 -> 17;
+    15 -> 11;
+    17 -> 11;
+    9 -> 4;
+    4 -> 2;
+}

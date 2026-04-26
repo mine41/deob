@@ -155,6 +155,8 @@ Notes:
 | `-DynamicTimeBudgetMs` | `15000` | Time budget for one dynamic expansion in milliseconds. `0` means unlimited. |
 | `-SafeMode` | `$true` | Whether to keep safety protections enabled |
 | `-PreExecutionGateMode` | `Balanced` | Complexity-aware pre-execution gate: `Disabled` / `Conservative` / `Balanced` / `Aggressive` |
+| `-OptimizationProfile` | `Default` | Behavior-tuning profile: `Default` / `Cmdline` / `TimeoutCoverage` |
+| `-RunMetadataPath` | unset | Optional JSON summary output path for run metadata |
 | `-DryRun` | `$false` | Analyze only, do not write the final output |
 
 Common examples:
@@ -168,7 +170,16 @@ Common examples:
 
 # Analysis only, no final output file
 .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -DryRun
+
+# Also write a compact run summary JSON
+.\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -RunMetadataPath .\run-meta.json
 ```
+
+Optimization profiles:
+
+- `Default`: standard behavior.
+- `Cmdline`: tuned for command-line style samples and more conservative about some rewrites.
+- `TimeoutCoverage`: prioritizes finishing within budget and reducing timeouts, even if some expensive stages are skipped or made shallow.
 
 Pre-execution gate modes:
 
