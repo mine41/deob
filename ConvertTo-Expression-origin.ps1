@@ -1,14 +1,14 @@
 <#PSScriptInfo
 .VERSION 3.4.0
 .GUID 5f167621-6abe-4153-a26c-f643e1716720
-.AUTHOR Ronald Bode (iRon)
+.AUTHOR
 .DESCRIPTION This cmdlet is deprecated, a replacement might be found in the ObjectGraphTools module.
 .COMPANYNAME
 .COPYRIGHT
 .TAGS PSON PowerShell Object Notation Expression Serialize Stringify
-.LICENSE https://github.com/iRon7/ConvertTo-Expression/LICENSE.txt
-.PROJECTURI https://github.com/iRon7/ObjectGraphTools
-.ICON https://raw.githubusercontent.com/iRon7/ConvertTo-Expression/master/ConvertTo-Expression.png
+.LICENSE
+.PROJECTURI
+.ICON
 .EXTERNALMODULEDEPENDENCIES
 .REQUIREDSCRIPTS
 .EXTERNALSCRIPTDEPENDENCIES

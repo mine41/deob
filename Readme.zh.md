@@ -1,6 +1,8 @@
-# README
+# PSDissect: A CFG-Guided, Semantics-Preserving Interactive Deobfuscation Framework for PowerShell Scripts
 
-这是一个面向 PowerShell 脚本的解混淆工具集。日常使用只需要记住 3 个入口：
+PSDissect 是一个面向 PowerShell 脚本的研究型解混淆工具集，用于分析混淆脚本和动态生成脚本。它结合了 CFG 引导的多轮重建、交互式调试和轮次级回放，尽可能在保持可执行语义的前提下恢复更可读的脚本内容。
+
+日常使用只需要记住 3 个入口：
 
 | 脚本 | 用途 |
 | --- | --- |

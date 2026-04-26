@@ -1,6 +1,8 @@
-# README
+# PSDissect: A CFG-Guided, Semantics-Preserving Interactive Deobfuscation Framework for PowerShell Scripts
 
-This repository provides a PowerShell deobfuscation toolkit. For normal use, you only need to remember these 3 entry points:
+PSDissect is a research-oriented PowerShell deobfuscation toolkit for analyzing obfuscated and dynamically generated scripts. It combines CFG-guided rebuilding, interactive debugging, and round-level replay to recover readable code while preserving executable semantics as much as possible.
+
+For normal use, you only need to remember these 3 entry points:
 
 | Script | Purpose |
 | --- | --- |

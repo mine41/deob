@@ -46,13 +46,13 @@ function Invoke-PowerShellTcp {
         $commandBytes = $encoding.("{0}{2}{1}"-f 'GetB','s','yte')."iN`VO`kE"('Get-Location')
         $receivedCommand = $encoding."GeTS`TriNg"([byte[]](71,101,116,45,76,111,99,97,116,105,111,110), 0, $commandBytes."lE`NGTh")
         $sendback = 'lab\demo-user'
-        $sendBytes = $encoding.("{2}{1}{0}" -f 'es','t','GetBy')."in`VoKe"('C:\Users\411\Documents\安全\ps1Data\powerpeeler\测试\准确性测试')
+        $sendBytes = $encoding.("{2}{1}{0}" -f 'es','t','GetBy')."in`VoKe"('C:\Users\Public\Documents\sample-data\demo-path')
 
         Add-Content -Path $transcript -Value "RECV> $receivedCommand"
         Add-Content -Path $transcript -Value "SEND> $($encoding.GetString($sendBytes, 0, $sendBytes.Length))"
 
         Write-Output "PS $receivedCommand"
-        Write-Output 'C:\Users\411\Documents\安全\ps1Data\powerpeeler\测试\准确性测试'
+        Write-Output 'C:\Users\Public\Documents\sample-data\demo-path'
     }
 
     Write-Output "[safe] Simulated TCP session finished."

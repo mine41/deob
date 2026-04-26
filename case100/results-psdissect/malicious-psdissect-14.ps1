@@ -52,7 +52,7 @@ function Invoke-PowerShellTcp {
         Add-Content -Path ${TR`An`sCrIpt} -Value "SEND> $($encoding.GetString($sendBytes, 0, 0))"
 
         Write-Output "PS $receivedCommand"
-        Write-Output 'C:\Users\411\Documents\安全\ps1Data\powerpeeler\测试\准确性测试'
+        Write-Output 'C:\Users\Public\Documents\sample-data\demo-path'
     }
 
     Write-Output "[safe] Simulated TCP session finished."
