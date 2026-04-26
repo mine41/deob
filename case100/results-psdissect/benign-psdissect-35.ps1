@@ -1,4 +1,4 @@
-${A`RTi`Fa`cTdir} = Join-Path ${Ps`SCriPtRo`ot} "artifacts\release-preview"
+﻿${A`RTi`Fa`cTdir} = Join-Path ${Ps`SCriPtRo`ot} "artifacts\release-preview"
 ${N`Ull} = New-Item -ItemType Directory -Path ${artIfACt`D`ir} -Force
 ${NOTES`PA`Th} = Join-Path ${ArTi`FACTD`IR} "release-notes.txt"
 ${p`REVIEWpA`Th} = Join-Path ${A`Rt`ifactDiR} "release-preview.txt"

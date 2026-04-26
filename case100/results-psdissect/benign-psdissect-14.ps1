@@ -1,4 +1,4 @@
-${aR`T`I`FActdIR} = Join-Path ${p`sSCrIPt`R`o`OT} "artifacts\settings"
+﻿${aR`T`I`FActdIR} = Join-Path ${p`sSCrIPt`R`o`OT} "artifacts\settings"
 if (-not (Test-Path -LiteralPath ${A`R`T`iFacTDIr})) {
     ${N`ULl} = New-Item -ItemType DIrEctoRY -Path ${arTI`F`A`ctDir} -Force
 }

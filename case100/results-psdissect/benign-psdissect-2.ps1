@@ -1,4 +1,4 @@
-$artifactDir = Join-Path $PSScriptRoot "artifacts\tasks"
+﻿$artifactDir = Join-Path $PSScriptRoot "artifacts\tasks"
 if (-not (Test-Path -LiteralPath $artifactDir)) {
     $null = New-Item -ItemType Directory -Path $artifactDir -Force
 }

@@ -1,16 +1,17 @@
 ﻿<#
 .SYNOPSIS
-  基于 CFG 遍历执行结果（ResolvableResults）对脚本做片段回写，输出重建后的“解混淆脚本”。
+  Rebuild a deobfuscated PowerShell script from CFG execution results.
 
 .DESCRIPTION
-  支持多轮迭代：每一轮都重新生成 CFG 并执行，再把可确定的可还原表达式替换回脚本；
-  直到某一轮 applied replacements = 0（收敛）或达到 MaxRounds。
+  The script iteratively regenerates the CFG, executes it, and writes resolved
+  fragments back into the source until no more replacements are applied or the
+  maximum round count is reached.
 
-  约束（v1）：
-  - 仅使用 ResolvableResults（不使用变量读取、也不使用内联函数调用结果）；
-  - 遇到 __BLOCKED_PLACEHOLDER__ 一律跳过；
-  - 同一源码片段若出现多个不同值则跳过；
-  - 重叠/嵌套替换片段通过 -OverlapStrategy 控制（Outer/Inner）。
+  Current rebuilding rules:
+  - Use ResolvableResults as the primary replacement source.
+  - Skip __BLOCKED_PLACEHOLDER__ values.
+  - Skip a source fragment when conflicting replacements are observed.
+  - Resolve overlapping or nested replacements through -OverlapStrategy.
 
 .EXAMPLE
   powershell.exe .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1
@@ -28,16 +29,11 @@ param(
 
     [string]$WorkDir,
 
-    # 是否输出完整解混淆过程（每轮 in/out/log/report + CFG dot/png）。
-    # 关闭时：只输出最终重建脚本（最快，不落盘任何过程文件）。
     [object]$FullOutput = $true,
 
     [ValidateSet('Outer', 'Inner')]
     [string]$OverlapStrategy = 'Inner',
 
-    # 变量读取同位置出现多值时的处理策略：
-    # - skip: 直接跳过
-    # - last: 采用最后一次可用简单值
     [ValidateSet('skip', 'last')]
     [string]$VariableConflictPolicy = 'skip',
 
@@ -429,12 +425,10 @@ function Test-SimpleVariableReplacementLiteral {
 
     if ([string]::IsNullOrWhiteSpace($Replacement)) { return $false }
 
-    # 集合/复杂对象字面量默认不做变量位替换（例如 @(...), @{...}, {...}）
     if ($Replacement -match '^\s*@\(') { return $false }
     if ($Replacement -match '^\s*@\{') { return $false }
     if ($Replacement -match '^\s*\{')  { return $false }
 
-    # 其余视为简单字面量（字符串、数字、布尔、枚举/类型转换等）
     return $true
 }
 
@@ -460,7 +454,6 @@ function Get-VariableAccessKindMapFromScriptText {
     $map = @{}
     if ([string]::IsNullOrWhiteSpace($ScriptText)) { return $map }
 
-    # 依赖 Generate-CFG.ps1 中的 Get-VariableAccessKind；若不可用则降级为“不做上下文过滤”。
     if (-not (Get-Command Get-VariableAccessKind -ErrorAction SilentlyContinue)) {
         return $map
     }
@@ -507,7 +500,6 @@ function Get-VariableAccessKindMapFromScriptText {
             continue
         }
 
-        # 同 offset 若出现多种判定，优先采用更严格的非 Read 判定。
         if ($map[$key] -eq 'Read' -and $kind -ne 'Read') {
             $map[$key] = $kind
         }
@@ -1447,7 +1439,6 @@ function Filter-ReplacementCandidatesByContext {
 function Get-FullScriptTextFromFile {
     param([Parameter(Mandatory)][string]$Path)
 
-    # 使用 Parser.ParseFile 同一路径读取脚本文本，可最大程度保证 offset 与 AST 一致
     $ast = Get-Ast $Path
     if (-not $ast -or -not $ast.Extent -or -not $ast.Extent.StartScriptPosition) {
         throw "无法解析脚本获取全文: $Path"
@@ -5048,22 +5039,17 @@ function Invoke-StaticConvertOperator {
     }
 }
 
-# 辅助函数：尝试解码 powershell/pwsh -EncodedCommand 调用
-# 如果是 EncodedCommand 调用，返回解码信息；否则返回 $null
 function Try-DecodeEncodedCommand {
     param(
         [Parameter(Mandatory=$true)]
         [System.Management.Automation.Language.CommandAst]$CommandAst
     )
 
-    # 获取命令名
     $cmdName = $CommandAst.GetCommandName()
-    # 支持完整路径和简单命令名
     if ($cmdName -notmatch '(?i)(^|[/\\])(powershell|pwsh)(\.exe)?$') {
         return $null
     }
 
-    # 遍历参数查找 -EncodedCommand 或 -enc
     $elements = $CommandAst.CommandElements
     for ($i = 1; $i -lt $elements.Count; $i++) {
         $elem = $elements[$i]
@@ -5072,7 +5058,6 @@ function Try-DecodeEncodedCommand {
             $paramInfo = Resolve-PowerShellHostLooseParameterInfo -ParameterName ([string]$elem.ParameterName)
 
             if ($paramInfo -and $paramInfo.DynamicType -eq 'EncodedCommand') {
-                # 获取下一个元素（Base64 字符串）
                 $valueElem = $null
                 if ($elem.Argument) {
                     $valueElem = $elem.Argument
@@ -5083,7 +5068,6 @@ function Try-DecodeEncodedCommand {
                 if ($null -ne $valueElem) {
                     $base64String = $null
 
-                    # 提取 Base64 字符串
                     if ($valueElem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
                         $base64String = $valueElem.Value
                     } elseif ($valueElem -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
@@ -5092,15 +5076,10 @@ function Try-DecodeEncodedCommand {
 
                     if ($base64String) {
                         try {
-                            # 解码 Base64
                             $bytes = [Convert]::FromBase64String($base64String)
 
-                            # PowerShell 的 -EncodedCommand 使用 Unicode (UTF-16LE) 编码
                             $decoded = [Text.Encoding]::Unicode.GetString($bytes)
 
-                            # 构造替换后的命令文本
-                            # 将 -EncodedCommand <base64> 统一替换为 -Command @'... '@，
-                            # 避免双引号/可扩展字符串带来的提前变量插值问题。
                             $replacementText = ConvertTo-CanonicalPowerShellHostCommandText -CommandAst $CommandAst -PayloadText $decoded
 
                             return @{
@@ -6553,8 +6532,6 @@ function Get-StaticReplacementCandidates {
         }
         $nodeId = [int]$node.Id
 
-        # 注意：静态求值不应该受节点访问状态影响
-        # 即使节点被执行过，静态可解析的表达式仍然应该被处理
 
         foreach ($r in @($node.Resolvables)) {
             if (Test-StaticEvalBudgetExceeded -Context $Context) {
@@ -6719,7 +6696,6 @@ function Get-ReplacementsFromResolvableResults {
         }
     }
 
-    # 同一片段（Start/End）可能被多个节点记录；若 replacement 不一致则判为冲突并跳过
     $regionMap = @{}          # key -> candidate
     $conflictRegions = @{}    # key -> @{ Replacements = @() }
 
@@ -6765,15 +6741,11 @@ function Get-ReplacementsFromResolvableResults {
 
         $replacement = [string]$uniqueValues[0]
 
-        # 违禁命令占位符：跳过
         if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
             $skipped += New-SkipRecord -Reason 'blocked' -Message '值为占位符，跳过替换' -Item $baseItem
             continue
         }
 
-        # $null 替换默认跳过：
-        # 许多调用（如 [array]::Reverse($a)）通过副作用修改变量但返回 $null，
-        # 若直接回写为 $null 会丢失原脚本语义。
         if ($replacement -eq '$null') {
             $skipped += New-SkipRecord -Reason 'null_replacement' -Message 'replacement 为 $null，默认跳过以避免破坏副作用语句' -Item $baseItem
             continue
@@ -6827,12 +6799,10 @@ function Get-ReplacementsFromResolvableResults {
 
         $existing = $regionMap[$key]
         if ($existing.Replacement -eq $cand.Replacement) {
-            # 同区间同 replacement：去重即可
             $skipped += New-SkipRecord -Reason 'duplicate' -Message "同区间重复记录，已去重: [$start-$end]" -Item $cand
             continue
         }
 
-        # 同区间不同 replacement：判冲突，移除已有并跳过两者
         $conflictRegions[$key] = @{
             Replacements = @($existing.Replacement, $cand.Replacement)
         }
@@ -6841,8 +6811,6 @@ function Get-ReplacementsFromResolvableResults {
         $skipped += New-SkipRecord -Reason 'conflict_same_range' -Message "同区间出现不同 replacement，跳过: [$start-$end]" -Item $cand
     }
 
-    # 额外候选：变量读取结果（简单类型），并处理“同位置多值变化”。
-    # 变量位点必须是纯 Read 上下文；ReadWrite（例如 $x++、$x+=1）一律跳过。
     $varAccessKindMap = Get-VariableAccessKindMapFromScriptText -ScriptText $ScriptText
     if ($Context.VariableReadResults) {
         foreach ($rec in $Context.VariableReadResults.Values) {
@@ -7056,7 +7024,6 @@ function Apply-ReplacementsToText {
         return $Text
     }
 
-    # 从后往前替换，避免 offset 失效
     $ordered = $Replacements | Sort-Object StartOffset -Descending
     $result = $Text
 
@@ -7168,7 +7135,6 @@ function Ensure-SyntaxSafeReplacements {
         }
     }
 
-    # 优先尝试单独保留“整段物化”候选，避免它被局部 wrapper/碎片拖累。
     if (-not $check.IsValid -and $effective.Count -gt 0) {
         $wholeScriptKeepers = @($effective | Where-Object {
             $_ -and $_.PSObject.Properties['WholeScriptMaterialized'] -and [bool]$_.WholeScriptMaterialized
@@ -7189,7 +7155,6 @@ function Ensure-SyntaxSafeReplacements {
         }
     }
 
-    # 第一阶段：优先移除容易打碎语法的低优先级片段。
     foreach ($dropType in @('VarRead', 'Inline', 'CommandName', 'Binary')) {
         if ($check.IsValid) { break }
 
@@ -7204,7 +7169,6 @@ function Ensure-SyntaxSafeReplacements {
         $check = Invoke-SyntaxCheckWithReplacements -SourceText $ScriptText -Replacements $effective
     }
 
-    # 第二阶段：若存在高优先级整段候选，优先保留它们，丢弃其余碎片候选。
     if (-not $check.IsValid -and $effective.Count -gt 0) {
         $highPriority = @($effective | Where-Object { (Get-ReplacementCandidatePriority -Candidate $_) -ge 430 })
         if ($highPriority.Count -gt 0) {
@@ -7229,7 +7193,6 @@ function Ensure-SyntaxSafeReplacements {
         }
     }
 
-    # 第三阶段：若仍不合法，按“低优先级、小跨度优先”继续移除，直到可解析或清空。
     if (-not $check.IsValid -and $effective.Count -gt 0) {
         $ordered = @($effective | Sort-Object @{ Expression = { Get-SyntaxGuardDropPriority -Candidate $_ } }, @{ Expression = { [int]($_.EndOffset - $_.StartOffset) } }, StartOffset)
         foreach ($cand in $ordered) {
@@ -7245,7 +7208,6 @@ function Ensure-SyntaxSafeReplacements {
         }
     }
 
-    # 最终兜底：若仍不合法，清空全部替换，确保输出至少保持原始可解析性。
     if (-not $check.IsValid -and $effective.Count -gt 0) {
         foreach ($left in @($effective)) {
             $skipped += New-SkipRecord -Reason 'syntax_guard_fallback' -Message '替换后仍语法错误，清空全部替换' -Item $left
@@ -12539,7 +12501,6 @@ function New-CfgFromText {
         throw "脚本解析失败: $($errors[0].Message)"
     }
 
-    # 复刻 Get-ScriptControlFlow 的 CFG 初始化（但不依赖文件路径）
     $cfg = @{
         Nodes = @()
         Edges = @()
@@ -12552,7 +12513,6 @@ function New-CfgFromText {
     return $cfg
 }
 
-# ========== 主流程 ==========
 
 $scriptFullPath = (Resolve-Path -LiteralPath $ScriptPath).ProviderPath
 $script:__psdissect_current_input_path = $scriptFullPath
@@ -12578,7 +12538,6 @@ if ($FullOutput) {
         $null = New-Item -ItemType Directory -Path $WorkDir -Force
     }
 } else {
-    # Fast 模式：不创建 workdir，不落盘过程文件
     $WorkDir = $null
 }
 
@@ -12889,9 +12848,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 $currentText = $scriptText
             }
     } else {
-        # Fast 模式：全程只在内存中迭代
         if ($null -eq $currentText) {
-            # 第一次读取：用 ParseFile 获取同一份“解析视角”的全文，最大限度避免 offset 偏差
             $currentText = Get-FullScriptTextFromFile -Path $currentPath
         }
 
@@ -12958,7 +12915,6 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 break
             }
 
-            # fast mode：禁用 execution.log（避免文件 IO）
             try {
                 $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
             } catch {
@@ -13133,7 +13089,6 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
     $appliedCount = $selected.Count + $(if ($postProcessChanged) { 1 } else { 0 })
 
-    # 无替换：本轮不落盘任何 round 产物，直接收敛退出
     if ($selected.Count -eq 0 -and -not $postProcessChanged) {
         $noReplacementReason = Get-NoReplacementTerminationReason -CandidateCount $candidates.Count -Skipped $skipped
         $noReplacementTerminatedBy = if ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and ($roundExecutionPlan.StopAfterThisRound -or $roundExecutionPlan.SkipCfgTraversal)) { 'stable_output' } else { 'no_replacements' }
@@ -13166,7 +13121,6 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
             Write-Host "  no replacements in this round, artifacts skipped." -ForegroundColor DarkGray
 
-            # 如果前面没有任何 round out，则最终输出回退到当前输入脚本
             if (-not $finalRoundOutPath) {
                 $finalRoundOutPath = $currentPath
             }
@@ -13183,7 +13137,6 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
     }
 
     if ($FullOutput) {
-        # 执行后导出 CFG（包含动态插入节点），并仅高亮“本轮实际应用替换”的节点
         $appliedNodeIds = @()
         foreach ($a in $selected) {
             if ($null -eq $a -or $null -eq $a.NodeId) { continue }
@@ -13201,7 +13154,6 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             }
         }
 
-        # 生成 report（尽量轻量，保留 offset 和预览）
         $skipReasonCounts = @{}
         foreach ($s in $skipped) {
             if (-not $skipReasonCounts.ContainsKey($s.Reason)) { $skipReasonCounts[$s.Reason] = 0 }
@@ -13324,12 +13276,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         break
     }
 
-    # 下一轮输入
     if ($FullOutput) {
-        # 下一轮输入 = 本轮输出文件
         $currentPath = $finalRoundOutPath
     } else {
-        # fast：继续使用内存脚本文本
         $currentPath = $scriptFullPath
     }
 }

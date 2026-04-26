@@ -1,4 +1,4 @@
-function Download-Execute-PS {
+﻿function Download-Execute-PS {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]

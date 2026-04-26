@@ -1,4 +1,4 @@
-${a`RtifaCt`D`IR} = Join-Path ${pSSc`R`i`pt`RooT} "artifacts\greeting"
+﻿${a`RtifaCt`D`IR} = Join-Path ${pSSc`R`i`pt`RooT} "artifacts\greeting"
 if (-not (Test-Path -LiteralPath ${ARTIfac`TD`Ir})) {
     ${NU`Ll} = New-Item -ItemType dIREcTOrY -Path ${AR`Tif`Ac`TdIr} -Force
 }

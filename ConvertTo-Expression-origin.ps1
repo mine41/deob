@@ -165,7 +165,7 @@ using namespace System.Management.Automation
 
 
 function ConvertTo-Expression {
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Scope = 'Function')] # https://github.com/PowerShell/PSScriptAnalyzer/issues/1472
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Scope = 'Function')] # analyzer compatibility note
 [CmdletBinding()][OutputType([scriptblock])] param(
     [Parameter(ValueFromPipeLine = $True)][Alias('InputObject')] $Object,
     [int]$Depth = 9,

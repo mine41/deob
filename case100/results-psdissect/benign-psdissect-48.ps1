@@ -1,2 +1,2 @@
-Write-Host [char]'''status-ok[char]'''
+﻿Write-Host [char]'''status-ok[char]'''
 

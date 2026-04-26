@@ -1,4 +1,4 @@
-${artIfa`c`TDir} = Join-Path ${pSSCRIP`Tr`o`OT} "artifacts\logs"
+﻿${artIfa`c`TDir} = Join-Path ${pSSCRIP`Tr`o`OT} "artifacts\logs"
 if (-not (Test-Path -LiteralPath ${Ar`TIfa`CTDIr})) {
     ${Nu`lL} = New-Item -ItemType D`IR`ectoRy -Path ${arT`IFAct`Dir} -Force
 }

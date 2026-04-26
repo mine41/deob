@@ -1,4 +1,4 @@
-function iNvOke-SsIDEXFiL {
+﻿function iNvOke-SsIDEXFiL {
     [CmdletBinding()]
     param(
         [switch]$ExfilOnly,

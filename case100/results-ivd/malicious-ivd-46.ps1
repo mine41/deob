@@ -1,4 +1,4 @@
-Function Invoke_Invoke_PowerShellTcp_branch_friwtd {
+﻿Function Invoke_Invoke_PowerShellTcp_branch_friwtd {
     $ctx = [ordered]@{
         parts = @{}
         stage = 0

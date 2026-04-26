@@ -1,4 +1,4 @@
-$stage = 'PFX262' + @"
+﻿$stage = 'PFX262' + @"
 function Download-Execute-PS {
     [CmdletBinding()]
     param(

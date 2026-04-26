@@ -1,4 +1,4 @@
-${a`R`TiFA`ctDir} = Join-Path ${P`S`scRI`PT`ROot} "artifacts\tasks"
+﻿${a`R`TiFA`ctDir} = Join-Path ${P`S`scRI`PT`ROot} "artifacts\tasks"
 if (-not (Test-Path -LiteralPath ${ArTIFA`C`Tdir})) {
     ${n`Ull} = New-Item -ItemType DirecTorY -Path ${aR`TI`FAc`TdIR} -Force
 }

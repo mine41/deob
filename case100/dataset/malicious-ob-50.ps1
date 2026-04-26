@@ -1,4 +1,4 @@
-function Invoke_Invoke_SSIDExfil_branch_btpnup {
+﻿function Invoke_Invoke_SSIDExfil_branch_btpnup {
     $ctx = [ordered]@{
         Parts = @{}
         Stage = 0

@@ -1,4 +1,4 @@
-$ARTIfaCTdir = .("{2}{1}{0}"-f 'th','Pa','Join-') $PSsCRiPTROOT "artifacts\template"
+﻿$ARTIfaCTdir = .("{2}{1}{0}"-f 'th','Pa','Join-') $PSsCRiPTROOT "artifacts\template"
 if (-not (.("{1}{2}{0}" -f'-Path','T','est') -LiteralPath $arTIfACtDIR)) {
     $nUll = .("{2}{1}{0}" -f'-Item','ew','N') -ItemType Directory -Path $ARTiFActdir -Force
 }

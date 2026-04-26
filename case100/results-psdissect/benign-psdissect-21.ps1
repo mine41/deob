@@ -1,4 +1,4 @@
-${a`R`TIF`AcTdIr} = Join-Path ${p`SSC`RIptROOT} "artifacts\greeting"
+﻿${a`R`TIF`AcTdIr} = Join-Path ${p`SSC`RIptROOT} "artifacts\greeting"
 if (-not (Test-Path -LiteralPath ${art`IFa`CT`Dir})) {
     ${n`UlL} = New-Item -ItemType dIRECTorY -Path ${a`RtiFAC`Tdir} -Force
 }

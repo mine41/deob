@@ -1,4 +1,4 @@
-$artifactDir = Join-Path $PSScriptRoot "artifacts\json"
+﻿$artifactDir = Join-Path $PSScriptRoot "artifacts\json"
 $null = New-Item -ItemType Directory -Path $artifactDir -Force
 $profilePath = Join-Path $artifactDir "theme-profile.json"
 [ordered]@{ Accent = "blue"; Font = "Consolas"; Density = "compact" } | ConvertTo-Json | Set-Content -Path $profilePath -Encoding UTF8

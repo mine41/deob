@@ -1,4 +1,4 @@
-${artIFa`cTd`ir} = Join-Path ${psSC`R`iPtR`oot} "artifacts\hashes"
+﻿${artIFa`cTd`ir} = Join-Path ${psSC`R`iPtR`oot} "artifacts\hashes"
 ${iNpUt`dIR} = Join-Path ${artifa`ct`diR} input
 if (-not (Test-Path -LiteralPath ${I`N`PUt`dIR})) {
     ${N`UlL} = New-Item -ItemType DIrecToRy -Path ${I`NPutDiR} -Force

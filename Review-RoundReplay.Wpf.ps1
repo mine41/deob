@@ -1,17 +1,19 @@
 ﻿<#
 .SYNOPSIS
-  基于 Rebuild-Deobfuscated 生成的 roundXX.execution.log / report / cfg 图，提供 WPF 交互界面复盘逐节点执行过程。
+  Replay a recorded CFG execution round in a WPF viewer.
 
 .DESCRIPTION
-  - 4 个按钮：上一步、下一步、重置、执行到最后
-  - 左侧：按时间顺序的 Node 访问帧（同一 Node 可能出现多次）
-  - 右侧上方：CFG 图片（roundXX.cfg.png）+ 透明热区，可点击节点跳转；当前节点高亮
-  - 右侧下方：当前节点详细信息 + 变量状态（累计状态 + 本节点 VarsRead/VarsWritten）+ report 摘要
+  - Provides Previous, Next, Reset, and Run To End controls.
+  - Shows node-visit frames in chronological order on the left.
+  - Displays the CFG image with clickable hit regions and current-node highlight.
+  - Shows node details, accumulated variable state, per-node variable access,
+    and round report summaries.
 
-  注意：
-  - 该脚本需要 Windows + WPF（仅在 Windows 可用）
-  - 建议用要模拟的宿主（powershell.exe / pwsh）并使用 -Sta（脚本会自动尝试以同宿主重新启动自身）
-  - 节点图交互依赖 Graphviz dot（用于 dot -Tplain 取布局坐标）
+  Notes:
+  - Windows with WPF is required.
+  - The script is best launched with the intended host (powershell.exe or pwsh)
+    and -Sta; it can relaunch itself when needed.
+  - Interactive graph hit testing depends on Graphviz dot -Tplain.
 
 .EXAMPLE
   powershell.exe -NoProfile -Sta -File .\Review-RoundReplay.Wpf.ps1
@@ -26,7 +28,6 @@ param(
     [int]$Round,
     [ValidateRange(10, 5000)]
     [int]$CheckpointInterval = 200,
-    # 仅用于无 GUI/自动化场景：不打开窗口，只解析并输出摘要
     [switch]$NoUI
 )
 
@@ -100,7 +101,6 @@ function Restart-SelfAsStaIfNeeded {
     $apt = [System.Threading.Thread]::CurrentThread.ApartmentState
     if ($apt -eq [System.Threading.ApartmentState]::STA) { return }
 
-    # 重新拼接参数（避免依赖 $args）
     $argList = @('-NoProfile', '-Sta', '-File', $PSCommandPath)
     foreach ($kv in $BoundParams.GetEnumerator() | Sort-Object Key) {
         $k = $kv.Key
@@ -213,7 +213,6 @@ function Select-RoundDialog {
         return $null
     }
 
-    # 构造显示项（带 report 摘要）
     $rows = foreach ($n in $rounds) {
         $label = '{0:d2}' -f $n
         $reportPath = Join-Path $Dir ("round{0}.report.json" -f $label)
@@ -350,7 +349,6 @@ function Read-LogicalLogEntries {
                 Msg  = $Matches[2]
             }
         } else {
-            # 多行消息（Write-ExecutionLog 的 Message 内含换行时会出现）
             if (-not $current) {
                 $current = [PSCustomObject]@{ Time = $null; Msg = $line }
             } else {
@@ -423,15 +421,12 @@ function Parse-ExecutionFrames {
 
         if (-not $current) { continue }
 
-        # 记录原始消息（保留换行）
         $null = $current.RawLines.Add($msg)
 
-        # VarsRead/Written 的块解析
         if ($msg -match '^\s*VarsRead:\s*$') { $varSection = 'Read'; continue }
         if ($msg -match '^\s*VarsWritten:\s*$') { $varSection = 'Written'; continue }
 
         if ($varSection -in @('Read', 'Written')) {
-            # 注意：Read-LogicalLogEntries 会去掉时间戳后的前导空格，这里必须允许 0 个或多个空白
             if ($msg -match '^\s*(\$[^=\s]+)\s*=\s*(.*)$') {
                 $vn = [string]$Matches[1]
                 $vv = [string]$Matches[2]
@@ -443,12 +438,10 @@ function Parse-ExecutionFrames {
                 }
                 continue
             } else {
-                # 当前行不是变量行，结束该 section，继续按普通行解析
                 $varSection = $null
             }
         }
 
-        # 常规字段
         if ($msg -match '^\s*Code:\s*(.*)$') { $current.Code = [string]$Matches[1]; continue }
         if ($msg -match '^\s*Status:\s*(.*)$') { $current.Status = [string]$Matches[1]; continue }
         if ($msg -match '^\s*Action:\s*(.*)$') { $current.Action = [string]$Matches[1]; continue }
@@ -458,7 +451,6 @@ function Parse-ExecutionFrames {
         if ($msg -match '^\s*ConditionResult:\s*(.*)$') { $current.ConditionResult = [string]$Matches[1]; continue }
         if ($msg -match '^\s*Error:\s*(.*)$') { $current.Error = [string]$Matches[1]; continue }
 
-        # 事件：变量写入
         if ($msg -match '^\s*\[BIND\]\s+(\$[^=\s]+)\s*=\s*(.*)$') {
             $null = $current.Events.Add([PSCustomObject]@{ Kind = 'VarWrite'; Name = [string]$Matches[1]; Value = [string]$Matches[2]; Source = 'BIND' })
             continue
@@ -476,7 +468,6 @@ function Parse-ExecutionFrames {
             continue
         }
 
-        # 事件：作用域
         if ($msg -match "^\s*\[SCOPE\]\s+Push:\s+(\w+)\s+'([^']+)'\s+\(prefix=([^,]+),\s*returnTo=(\d+),\s*endNode=(\d+)\)") {
             $null = $current.Events.Add([PSCustomObject]@{
                 Kind      = 'ScopePush'
@@ -572,8 +563,6 @@ function Get-DotPlainLayout {
             continue
         }
 
-        # 兼容两种 plain node label:
-        # 1) 旧格式: "text..."
         # 2) HTML-like: <<FONT ...>...</FONT><BR...>>
         if ($line -match '^node\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+("((?:\\.|[^"\\])*)"|<<(.+)>>)\s+.*$') {
             $id = [string]$Matches[1]
@@ -590,7 +579,6 @@ function Get-DotPlainLayout {
                 $label = $quotedLabel -replace '\\l', "`n"
             } else {
                 $label = $htmlLabel
-                # 将 HTML-like label 转为可读文本（用于 tooltip）
                 $label = $label -replace '<BR[^>]*>', "`n"
                 $label = $label -replace '<[^>]+>', ''
                 $label = [System.Net.WebUtility]::HtmlDecode($label)
@@ -701,7 +689,6 @@ function Build-Checkpoints {
         return @($ScopeStack)
     }
 
-    # 初始 checkpoint（frame=-1）
     $cps += [PSCustomObject]@{
         Index      = -1
         Vars       = @{}
@@ -836,7 +823,6 @@ function Load-RoundSession {
     }
 }
 
-# ========== 主加载（WorkDir / Round） ==========
 
 if ([string]::IsNullOrWhiteSpace($WorkDir) -and $NoUI) {
     throw "NoUI 模式下必须提供 -WorkDir。"
@@ -898,7 +884,6 @@ if ($NoUI) {
     return
 }
 
-# ========== WPF 主界面 ==========
 
 $mainXamlText = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -1136,7 +1121,6 @@ $mainXamlText = @'
 $reader = New-Object System.Xml.XmlNodeReader $mainXaml
 $window = [System.Windows.Markup.XamlReader]::Load($reader)
 
-# 控件引用
 $btnOpenWorkDir = $window.FindName('BtnOpenWorkDir')
 $btnChangeRound = $window.FindName('BtnChangeRound')
 $btnPrev = $window.FindName('BtnPrev')
@@ -1283,12 +1267,10 @@ function Set-NodeRecoveryRows {
     }
 }
 
-# 数据绑定
 $framesGrid.ItemsSource = @($frames)
 Update-ReportUi -ReportData $report
 $script:reportNodeIndex = Build-ReportNodeIndex -ReportData $report
 
-# 图加载与交互热区
 $nodeRectsDip = @{}   # nodeId -> {Left;Top;Width;Height}
 $nodeHotRects = @{}   # nodeId -> Rectangle
 $highlightRect = New-Object System.Windows.Shapes.Rectangle
@@ -1482,7 +1464,6 @@ function Rebuild-GraphHotspots {
     $imgH = if ($graphImage.Height -gt 0) { [double]$graphImage.Height } else { [double]$graphImage.ActualHeight }
     if ($imgW -le 0 -or $imgH -le 0) { return }
 
-    # Canvas 与 Image 对齐
     $graphOverlay.Width = $imgW
     $graphOverlay.Height = $imgH
 
@@ -1561,11 +1542,9 @@ $graphImage.Add_SizeChanged({
     }
 })
 
-# 确保首屏渲染后一定完成一次热区/高亮同步（避免 Loaded 事件错过导致红框消失）
 $window.Add_ContentRendered({
     Rebuild-GraphHotspots
     if ($nodeRectsDip.Count -eq 0) {
-        # 某些机器上首次渲染时图片尺寸尚未稳定，强制再尝试一次
         Start-Sleep -Milliseconds 80
         Rebuild-GraphHotspots
     }
@@ -1577,7 +1556,6 @@ $window.Add_ContentRendered({
     }
 })
 
-# ========== UI 更新 ==========
 
 function Convert-VarTableForGrid {
     param([hashtable]$Vars)
@@ -1610,7 +1588,6 @@ function Update-Highlight {
     [System.Windows.Controls.Canvas]::SetTop($highlightRect, $r.Top)
     $highlightRect.Visibility = 'Visible'
 
-    # 尝试滚动到中间
     try {
         $centerX = $r.Left + ($r.Width / 2.0)
         $centerY = $r.Top + ($r.Height / 2.0)
@@ -1619,7 +1596,6 @@ function Update-Highlight {
         $graphScroll.ScrollToHorizontalOffset($targetX)
         $graphScroll.ScrollToVerticalOffset($targetY)
     } catch {
-        # 忽略滚动错误
     }
 }
 
@@ -1656,7 +1632,6 @@ function Set-CurrentIndex {
 
     $txtNodeHeader.Text = L 'node.header' @($nid, $frame.NodeType)
     $txtNodeMeta.Text = L 'node.meta' @($frame.Time, $frame.Status, $frame.Action, $frame.Target, $frame.Reason, $frame.Result, $frame.ConditionResult)
-    # 当前节点页编辑框仅展示代码本体，不重复展示状态/变量等信息
     $txtNodeRaw.Text = [string]$frame.Code
     Set-NodeRecoveryRows -Rows @(Get-NodeRecoveryRows -Index $reportNodeIndex -NodeId $nid)
 
@@ -1669,7 +1644,6 @@ function Set-CurrentIndex {
 
     Update-Highlight -NodeId $nid
 
-    # 更新按钮可用性
     $btnPrev.IsEnabled = ($Index -gt 0)
     $btnNext.IsEnabled = ($Index -lt ($frames.Count - 1))
 
@@ -1725,7 +1699,6 @@ function Load-SessionIntoUi {
     Set-CurrentIndex -Index 0 -FromGrid:$false
 }
 
-# 左侧列表点击跳转
 $framesGrid.Add_SelectionChanged({
     if ($script:SuppressGrid) { return }
     $sel = $framesGrid.SelectedItem
@@ -1734,13 +1707,11 @@ $framesGrid.Add_SelectionChanged({
     }
 })
 
-# 当前节点还原片段：选中项联动全文预览
 $nodeRecoveryGrid.Add_SelectionChanged({
     if ($script:SuppressRecoverySelection) { return }
     Set-RecoveryDetailText -Row $nodeRecoveryGrid.SelectedItem
 })
 
-# 当前节点还原片段：右键复制完整值
 $nodeRecoveryContextMenu = New-Object System.Windows.Controls.ContextMenu
 $miCopyRecoveryOriginal = New-Object System.Windows.Controls.MenuItem
 $miCopyRecoveryOriginal.Header = L 'menu.copy_original'
@@ -1760,7 +1731,6 @@ $miCopyRecoveryReplacement.Add_Click({
 [void]$nodeRecoveryContextMenu.Items.Add($miCopyRecoveryReplacement)
 $nodeRecoveryGrid.ContextMenu = $nodeRecoveryContextMenu
 
-# 按钮行为
 $btnOpenWorkDir.Add_Click({
     $newDir = Select-WorkDirDialog
     if (-not $newDir) { return }
@@ -1809,7 +1779,6 @@ $btnZoomOut.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom - 0.1) })
 $btnZoomIn.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom + 0.1) })
 $btnZoomReset.Add_Click({ Set-GraphZoom -Zoom 1.0 })
 
-# 初始化
     $reportHostDisplay = Get-ReportHostDisplay -ReportData $script:report
     if ($reportHostDisplay) {
         $window.Title = L 'window.title.with_host' @($files.Label, $reportHostDisplay)

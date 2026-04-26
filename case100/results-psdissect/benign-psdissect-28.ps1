@@ -1,4 +1,4 @@
-${arTIFaC`T`d`ir} = Join-Path ${p`SsCr`i`PtRoOt} "artifacts\build-steps"
+﻿${arTIFaC`T`d`ir} = Join-Path ${p`SsCr`i`PtRoOt} "artifacts\build-steps"
 ${Nu`LL} = New-Item -ItemType Directory -Path ${aRTI`F`A`ctDIR} -Force
 ${step`SP`Ath} = Join-Path ${A`RTifA`Ctd`IR} "build-steps.txt"
 @("restore", "build", "test", "package", "publish") | Set-Content -Path ${S`TepS`Path} -Encoding UTF8

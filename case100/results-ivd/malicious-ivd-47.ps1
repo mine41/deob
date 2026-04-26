@@ -1,4 +1,4 @@
-Function Invoke_Invoke_SSIDExfil_statebag_harcvu {
+﻿Function Invoke_Invoke_SSIDExfil_statebag_harcvu {
     $ctx = [ordered]@{
         parts = @{}
         key = 63

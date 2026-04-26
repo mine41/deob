@@ -1,4 +1,4 @@
-$artifactDir = Join-Path $PSScriptRoot "artifacts\release-preview"
+﻿$artifactDir = Join-Path $PSScriptRoot "artifacts\release-preview"
 $null = New-Item -ItemType Directory -Path $artifactDir -Force
 $notesPath = Join-Path $artifactDir "release-notes.txt"
 $previewPath = Join-Path $artifactDir "release-preview.txt"

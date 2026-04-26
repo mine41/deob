@@ -1,4 +1,4 @@
-$artifactDir = J`OiN-p`ATh $PSScriptRoot "artifacts\template"
+﻿$artifactDir = J`OiN-p`ATh $PSScriptRoot "artifacts\template"
 if (-not (Test-Path -LiteralPath $artifactDir)) {
     $null = N`ew-i`TEm -ItemType ('D'+'irector'+'y') -Path $artifactDir -Force
 }

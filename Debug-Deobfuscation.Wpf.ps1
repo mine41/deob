@@ -1,12 +1,13 @@
 ﻿<#
 .SYNOPSIS
-  交互式调试解混淆模式（单轮）：生成 CFG 后，在 WPF 界面中逐步执行节点。
+  Interactive deobfuscation debugger for a single analysis round.
 
 .DESCRIPTION
-  - 点击“下一步”才真正执行节点；
-  - 支持查看/修改当前变量栈（值按 PowerShell 表达式求值）；
-  - 条件节点可显示“预计下一条边”，用户通过改变量影响分支；
-  - 实时更新可还原片段与重建脚本预览，支持导出 debug.out.ps1。
+  - Nodes execute only when the user advances the session step by step.
+  - The variable stack can be inspected and edited with PowerShell expressions.
+  - Condition nodes can preview the next edge so branch changes are visible.
+  - Replacement candidates and rebuilt-script previews update live, and the
+    current state can be exported as debug.out.ps1.
 #>
 
 [CmdletBinding()]
@@ -1337,9 +1338,6 @@ function Get-ReplacementsFromResolvableResults {
             continue
         }
 
-        # $null 替换默认跳过：
-        # 副作用表达式（例如 [array]::Reverse($a)）常返回 $null，
-        # 若直接替换为 $null 会丢失原有语义。
         if ($replacement -eq '$null') {
             $skipped += New-SkipRecord -Reason 'null_replacement' -Message 'replacement 为 $null，默认跳过' -Item $baseItem
             continue
@@ -2754,7 +2752,6 @@ function Update-PreviewUi {
 
         $newPreview = Build-DebugPreview -Context $script:DebugState.Session.Context -ScriptText $script:DebugState.OriginalText -Strategy $OverlapStrategy -ManualSelection $script:DebugState.UserSelection
 
-        # Debug 行为：简单变量若“从稳定变为已变化”，且当前仍被选中，则自动取消勾选并提示用户。
         $oldChangedMap = @{}
         $oldSelectedMap = @{}
         if ($oldPreview -and $oldPreview.Candidates) {

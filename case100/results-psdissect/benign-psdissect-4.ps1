@@ -1,4 +1,4 @@
-${ar`Ti`FacT`DIR} = Join-Path ${PSs`CRIP`T`RO`Ot} "artifacts\inventory"
+﻿${ar`Ti`FacT`DIR} = Join-Path ${PSs`CRIP`T`RO`Ot} "artifacts\inventory"
 if (-not (Test-Path -LiteralPath ${aRTI`FaC`T`dir})) {
     ${nU`lL} = New-Item -ItemType Directory -Path ${artiFAC`T`dIr} -Force
 }

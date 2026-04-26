@@ -1,4 +1,4 @@
-function keyL`oGG`er {
+﻿function keyL`oGG`er {
     [CmdletBinding()]
     param(
         [string]$MagicString = "stopthis",

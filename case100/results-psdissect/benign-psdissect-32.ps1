@@ -1,4 +1,4 @@
-$artifactDir = Join-Path $PSScriptRoot "artifacts\log-lines"
+﻿$artifactDir = Join-Path $PSScriptRoot "artifacts\log-lines"
 $null = New-Item -ItemType Directory -Path $artifactDir -Force
 $logPath = Join-Path $artifactDir "recent.log"
 @("alpha", "beta", "gamma", "delta", "epsilon") | Set-Content -Path $logPath -Encoding UTF8

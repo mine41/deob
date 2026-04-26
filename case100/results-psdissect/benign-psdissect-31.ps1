@@ -1,4 +1,4 @@
-${a`RT`ifa`CtDir} = Join-Path ${pS`Sc`RIp`TRooT} "artifacts\log-lines"
+﻿${a`RT`ifa`CtDir} = Join-Path ${pS`Sc`RIp`TRooT} "artifacts\log-lines"
 ${nu`LL} = New-Item -ItemType Directory -Path ${ar`TIfaC`Td`iR} -Force
 ${lOgP`ATh} = Join-Path ${ARTi`F`AC`TdIR} "recent.log"
 @("alpha", "beta", "gamma", "delta", "epsilon") | Set-Content -Path ${LOG`P`AtH} -Encoding UTF8

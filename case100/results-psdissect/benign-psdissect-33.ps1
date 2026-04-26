@@ -1,4 +1,4 @@
-${a`RTiF`Act`dIR} = Join-Path ${pSSC`RIptR`oot} "artifacts\queue-preview"
+﻿${a`RTiF`Act`dIR} = Join-Path ${pSSC`RIptR`oot} "artifacts\queue-preview"
 ${NU`ll} = New-Item -ItemType Directory -Path ${ARTi`F`ACt`dIR} -Force
 ${Q`Ue`UEpA`Th} = Join-Path ${Art`IfaCTd`ir} "queue.txt"
 ${PR`E`VI`eWpAth} = Join-Path ${AR`Ti`Factd`Ir} "queue-preview.txt"
