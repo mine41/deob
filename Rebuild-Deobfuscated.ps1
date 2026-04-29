@@ -52,7 +52,7 @@ param(
     [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
     [string]$PreExecutionGateMode = 'Balanced',
 
-    [ValidateSet('Default', 'Cmdline', 'TimeoutCoverage')]
+    [ValidateSet('Default', 'Cmdline', 'AdaptiveCoverage')]
     [string]$OptimizationProfile = 'Default',
 
     [string]$RunMetadataPath,
@@ -112,7 +112,8 @@ function ConvertFrom-HostBooleanArgument {
 $FullOutput = ConvertFrom-HostBooleanArgument -Value $FullOutput -ParameterName 'FullOutput'
 $SafeMode = ConvertFrom-HostBooleanArgument -Value $SafeMode -ParameterName 'SafeMode'
 $script:IsCmdlineOptimizationProfile = ([string]$OptimizationProfile -eq 'Cmdline')
-$script:IsTimeoutCoverageOptimizationProfile = ([string]$OptimizationProfile -eq 'TimeoutCoverage')
+$script:IsAdaptiveCoverageOptimizationProfile = ([string]$OptimizationProfile -eq 'AdaptiveCoverage')
+$script:IsTimeoutCoverageOptimizationProfile = [bool]$script:IsAdaptiveCoverageOptimizationProfile
 $effectiveOverlapStrategy = $OverlapStrategy
 $effectiveVariableConflictPolicy = $VariableConflictPolicy
 
@@ -131,6 +132,38 @@ function Test-IsCmdlineOptimizationProfile {
 
 function Test-IsTimeoutCoverageOptimizationProfile {
     return [bool]$script:IsTimeoutCoverageOptimizationProfile
+}
+
+function Test-IsAdaptiveCoverageOptimizationProfile {
+    return [bool]$script:IsAdaptiveCoverageOptimizationProfile
+}
+
+function Test-UsesFastTimeoutPostProcessProfile {
+    return (Test-IsAdaptiveCoverageOptimizationProfile)
+}
+
+function Get-FastSensitivePassConfig {
+    if (-not (Test-IsAdaptiveCoverageOptimizationProfile)) {
+        return [PSCustomObject]@{
+            Enabled               = $false
+            TriggerTextLength     = 0
+            MaxTargets            = 0
+            MaxAstNodesPerTarget  = 0
+            MaxDepth              = 0
+            MaxResolvedTextLength = 0
+            StaticBudgetMs        = 0
+        }
+    }
+
+    return [PSCustomObject]@{
+        Enabled               = $true
+        TriggerTextLength     = 16384
+        MaxTargets            = 256
+        MaxAstNodesPerTarget  = 128
+        MaxDepth              = 6
+        MaxResolvedTextLength = 8192
+        StaticBudgetMs        = 250
+    }
 }
 
 function New-SkipRecord {
@@ -193,7 +226,7 @@ function Get-RemainingTimeBudgetMs {
 
 function Get-OptimizationProfileSettings {
     param(
-        [ValidateSet('Default', 'Cmdline', 'TimeoutCoverage')]
+        [ValidateSet('Default', 'Cmdline', 'AdaptiveCoverage')]
         [string]$Profile,
         [int]$RequestedMaxRounds
     )
@@ -216,6 +249,31 @@ function Get-OptimizationProfileSettings {
                 ShallowAstNodeCount        = 1200
                 SkipCfgAstNodeCount        = 3500
                 MaterializedPayloadRounds  = [Math]::Max($RequestedMaxRounds, 1)
+                PayloadFollowupDynamicBudgetMs = 0
+                PayloadFollowupMaxIterations   = 0
+                PayloadFollowupMaxTotalNodes   = 0
+            }
+        }
+        'AdaptiveCoverage' {
+            return [PSCustomObject]@{
+                Profile                    = $Profile
+                EffectiveMaxRounds         = [Math]::Max($RequestedMaxRounds, 1)
+                FinalizationReserveMs      = 0
+                StaticBudgetCapMs          = 0
+                ShallowDynamicBudgetMs     = 2000
+                ShallowMaxIterations       = 250
+                ShallowMaxTotalNodes       = 8000
+                NearBudgetWindowMs         = 30000
+                ShallowTextLength          = 16384
+                SkipCfgTextLength          = 32768
+                ShallowLargeArrayCount     = 512
+                SkipCfgLargeArrayCount     = 2048
+                ShallowAstNodeCount        = 1200
+                SkipCfgAstNodeCount        = 3500
+                MaterializedPayloadRounds  = [Math]::Max($RequestedMaxRounds, 1)
+                PayloadFollowupDynamicBudgetMs = 4000
+                PayloadFollowupMaxIterations   = 400
+                PayloadFollowupMaxTotalNodes   = 12000
             }
         }
         default {
@@ -235,6 +293,9 @@ function Get-OptimizationProfileSettings {
                 ShallowAstNodeCount        = 0
                 SkipCfgAstNodeCount        = 0
                 MaterializedPayloadRounds  = [Math]::Max($RequestedMaxRounds, 1)
+                PayloadFollowupDynamicBudgetMs = 0
+                PayloadFollowupMaxIterations   = 0
+                PayloadFollowupMaxTotalNodes   = 0
             }
         }
     }
@@ -262,7 +323,8 @@ function Get-OptimizationProfileRoundPlan {
         Reason                = $null
     }
 
-    if ($null -eq $ProfileSettings -or [string]$ProfileSettings.Profile -ne 'TimeoutCoverage') {
+    $profileName = if ($null -ne $ProfileSettings -and $ProfileSettings.PSObject.Properties['Profile']) { [string]$ProfileSettings.Profile } else { '' }
+    if ($profileName -notin @('TimeoutCoverage', 'AdaptiveCoverage')) {
         return [PSCustomObject]$plan
     }
 
@@ -298,24 +360,55 @@ function Get-OptimizationProfileRoundPlan {
         return [PSCustomObject]$plan
     }
 
-    if ($isVeryLarge) {
-        $plan.RoundMode = 'text_only'
-        $plan.SkipCfgTraversal = $true
-        $plan.SkipWholeScriptDynamic = $true
-        $plan.SkipStaticEval = $true
-        $plan.StopAfterThisRound = $true
-        $plan.Reason = 'very_large_script'
-        return [PSCustomObject]$plan
-    }
+    if ($profileName -eq 'TimeoutCoverage') {
+        if ($isVeryLarge) {
+            $plan.RoundMode = 'text_only'
+            $plan.SkipCfgTraversal = $true
+            $plan.SkipWholeScriptDynamic = $true
+            $plan.SkipStaticEval = $true
+            $plan.StopAfterThisRound = $true
+            $plan.Reason = 'very_large_script'
+            return [PSCustomObject]$plan
+        }
 
-    if ($isShallow -or $Round -gt 1) {
-        $plan.RoundMode = 'shallow'
-        $plan.SkipWholeScriptDynamic = $true
-        $plan.SkipStaticEval = $true
-        $plan.DynamicTimeBudgetMs = [int]$ProfileSettings.ShallowDynamicBudgetMs
-        $plan.MaxIterations = [int]$ProfileSettings.ShallowMaxIterations
-        $plan.MaxTotalNodes = [int]$ProfileSettings.ShallowMaxTotalNodes
-        $plan.Reason = if ($isNearBudget) { 'near_budget_window' } elseif ($compressedLoaderHit) { 'compressed_loader' } else { 'large_or_late_round' }
+        if ($isShallow -or $Round -gt 1) {
+            $plan.RoundMode = 'shallow'
+            $plan.SkipWholeScriptDynamic = $true
+            $plan.SkipStaticEval = $true
+            $plan.DynamicTimeBudgetMs = [int]$ProfileSettings.ShallowDynamicBudgetMs
+            $plan.MaxIterations = [int]$ProfileSettings.ShallowMaxIterations
+            $plan.MaxTotalNodes = [int]$ProfileSettings.ShallowMaxTotalNodes
+            $plan.Reason = if ($isNearBudget) { 'near_budget_window' } elseif ($compressedLoaderHit) { 'compressed_loader' } else { 'large_or_late_round' }
+        }
+    } elseif ($profileName -eq 'AdaptiveCoverage') {
+        if ($IsMaterializedPayloadRound) {
+            $plan.RoundMode = 'payload_followup'
+            $plan.DynamicTimeBudgetMs = [int]$ProfileSettings.PayloadFollowupDynamicBudgetMs
+            $plan.MaxIterations = [int]$ProfileSettings.PayloadFollowupMaxIterations
+            $plan.MaxTotalNodes = [int]$ProfileSettings.PayloadFollowupMaxTotalNodes
+            $plan.StopAfterThisRound = $true
+            $plan.Reason = 'materialized_payload_followup'
+            return [PSCustomObject]$plan
+        }
+
+        if ($isVeryLarge) {
+            $plan.RoundMode = 'text_only'
+            $plan.SkipCfgTraversal = $true
+            $plan.SkipWholeScriptDynamic = $true
+            $plan.SkipStaticEval = $true
+            $plan.Reason = 'very_large_script'
+            return [PSCustomObject]$plan
+        }
+
+        if ($isShallow) {
+            $plan.RoundMode = 'shallow'
+            $plan.SkipWholeScriptDynamic = $true
+            $plan.SkipStaticEval = $true
+            $plan.DynamicTimeBudgetMs = [int]$ProfileSettings.ShallowDynamicBudgetMs
+            $plan.MaxIterations = [int]$ProfileSettings.ShallowMaxIterations
+            $plan.MaxTotalNodes = [int]$ProfileSettings.ShallowMaxTotalNodes
+            $plan.Reason = if ($isNearBudget) { 'near_budget_window' } elseif ($compressedLoaderHit) { 'compressed_loader' } else { 'large_script' }
+        }
     }
 
     $allowedRounds = if ($IsMaterializedPayloadRound) {
@@ -1607,7 +1700,24 @@ function New-StaticModeledObjectValue {
         }
         '^(?:wscript\.shell|shell\.application)$' {
             [ordered]@{
-                __PsDissectType = $normalizedTypeName
+                __PsDissectType = if ($normalizedTypeNameLower -eq 'wscript.shell') { 'WScript.Shell' } else { $normalizedTypeName }
+                SpecialFolders  = [pscustomobject]@{
+                    __PsDissectType = 'WScript.Shell.SpecialFolders'
+                }
+            }
+            break
+        }
+        '^(?:wscript\.shell\.shortcut|iwshshortcut)$' {
+            [ordered]@{
+                __PsDissectType  = 'WScript.Shell.Shortcut'
+                FullName         = $null
+                TargetPath       = $null
+                Arguments        = $null
+                WorkingDirectory = $null
+                IconLocation     = $null
+                Description      = $null
+                WindowStyle      = $null
+                Hotkey           = $null
             }
             break
         }
@@ -1642,6 +1752,34 @@ function New-StaticModeledObjectValue {
     }
 
     return ([pscustomobject]$propertyMap)
+}
+
+function Resolve-StaticSpecialFolderPath {
+    param([AllowNull()][string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return $null
+    }
+
+    switch -Regex ($Name.Trim()) {
+        '^(?i:startup)$' {
+            return '%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\Startup'
+        }
+        '^(?i:desktop)$' {
+            return '%USERPROFILE%\Desktop'
+        }
+        '^(?i:appdata)$' {
+            return '%APPDATA%'
+        }
+        '^(?i:programs)$' {
+            return '%APPDATA%\Microsoft\Windows\Start Menu\Programs'
+        }
+        '^(?i:startmenu)$' {
+            return '%APPDATA%\Microsoft\Windows\Start Menu'
+        }
+    }
+
+    return $null
 }
 
 function Set-StaticMemberAccessValue {
@@ -2253,6 +2391,58 @@ function Resolve-StaticMethodInvocationValue {
         $TargetValue = $TargetValue.BaseObject
     }
 
+    $modeledType = $null
+    if (Test-StaticPropertyBagValue -Value $TargetValue) {
+        $typeProperty = @($TargetValue.PSObject.Properties.Match('__PsDissectType') | Select-Object -First 1)
+        if ($typeProperty.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$typeProperty[0].Value)) {
+            $modeledType = [string]$typeProperty[0].Value
+        }
+    }
+
+    if ($modeledType -match '^(?i:WScript\.Shell\.SpecialFolders)$' -and $MemberName -match '^(?i:Item)$') {
+        if (-not $Arguments -or $Arguments.Count -lt 1) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'SpecialFolders.Item 缺少参数' }
+        }
+
+        $folderPath = Resolve-StaticSpecialFolderPath -Name ([string]$Arguments[0])
+        if ([string]::IsNullOrWhiteSpace($folderPath)) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'SpecialFolders.Item 参数不在静态支持范围内' }
+        }
+
+        return [PSCustomObject]@{
+            Success = $true
+            Value   = $folderPath
+            Message = $null
+        }
+    }
+
+    if ($modeledType -match '^(?i:WScript\.Shell)$' -and $MemberName -match '^(?i:CreateShortcut)$') {
+        if (-not $Arguments -or $Arguments.Count -lt 1) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'CreateShortcut 缺少参数' }
+        }
+
+        $shortcutPath = [string]$Arguments[0]
+        if ([string]::IsNullOrWhiteSpace($shortcutPath)) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'CreateShortcut 路径为空' }
+        }
+
+        $shortcutValue = New-StaticModeledObjectValue -TypeName 'WScript.Shell.Shortcut'
+        if ($null -eq $shortcutValue) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'CreateShortcut modeled object 初始化失败' }
+        }
+
+        $setShortcutPath = Set-StaticMemberAccessValue -TargetValue $shortcutValue -MemberName 'FullName' -MemberValue $shortcutPath
+        if (-not $setShortcutPath.Success) {
+            return [PSCustomObject]@{ Success = $false; Value = $null; Message = $setShortcutPath.Message }
+        }
+
+        return [PSCustomObject]@{
+            Success = $true
+            Value   = $shortcutValue
+            Message = $null
+        }
+    }
+
     switch -Regex ($MemberName) {
         '^(?i:GetString)$' {
             if ($TargetValue -isnot [System.Text.Encoding]) {
@@ -2425,19 +2615,50 @@ function Resolve-StaticTypeMethodInvocationValue {
         }
     }
 
-    if (($TargetType -eq [Convert] -or $TargetType.FullName -eq 'System.Convert') -and $MemberName -match '^(?i:FromBase64String)$') {
-        if (-not $Arguments -or $Arguments.Count -lt 1) {
-            return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Convert::FromBase64String 缺少参数' }
-        }
+    if ($TargetType -eq [Convert] -or $TargetType.FullName -eq 'System.Convert') {
+        if ($MemberName -match '^(?i:FromBase64String)$') {
+            if (-not $Arguments -or $Arguments.Count -lt 1) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Convert::FromBase64String 缺少参数' }
+            }
 
-        try {
+            $bytes = Try-DecodeBase64ToByteArray -Base64String ([string]$Arguments[0])
+            if ($null -eq $bytes) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Convert::FromBase64String 解码失败' }
+            }
+
             return [PSCustomObject]@{
                 Success = $true
-                Value   = [Convert]::FromBase64String([string]$Arguments[0])
+                Value   = $bytes
                 Message = $null
             }
-        } catch {
-            return [PSCustomObject]@{ Success = $false; Value = $null; Message = $_.Exception.Message }
+        }
+
+        if ($MemberName -match '^(?i:FromBase64CharArray)$') {
+            if (-not $Arguments -or $Arguments.Count -lt 1) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Convert::FromBase64CharArray 缺少参数' }
+            }
+
+            $startIndex = 0
+            $length = -1
+            if ($Arguments.Count -ge 3) {
+                try {
+                    $startIndex = [int]$Arguments[1]
+                    $length = [int]$Arguments[2]
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Convert::FromBase64CharArray 参数类型无效' }
+                }
+            }
+
+            $bytes = Try-DecodeBase64CharArrayToByteArray -Value $Arguments[0] -StartIndex $startIndex -Length $length
+            if ($null -eq $bytes) {
+                return [PSCustomObject]@{ Success = $false; Value = $null; Message = 'Convert::FromBase64CharArray 解码失败' }
+            }
+
+            return [PSCustomObject]@{
+                Success = $true
+                Value   = $bytes
+                Message = $null
+            }
         }
     }
 
@@ -2916,11 +3137,138 @@ function Test-PowerShellHostParameterPrefix {
     return $canonical.StartsWith($actual)
 }
 
+function Try-NormalizeBase64String {
+    param(
+        [AllowNull()][string]$Base64String,
+        [bool]$AllowUrlSafe = $true
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Base64String)) {
+        return $null
+    }
+
+    $normalized = ([string]$Base64String).Trim()
+    $normalized = [regex]::Replace($normalized, '\s+', '')
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return $null
+    }
+
+    if ($AllowUrlSafe -and ($normalized.Contains('-') -or $normalized.Contains('_'))) {
+        $normalized = $normalized.Replace('-', '+').Replace('_', '/')
+    }
+
+    if ($normalized -notmatch '^[A-Za-z0-9+/=]+$') {
+        return $null
+    }
+
+    $paddingIndex = $normalized.IndexOf('=')
+    if ($paddingIndex -ge 0) {
+        $trimmedPadding = $normalized.Substring(0, $paddingIndex)
+        $padding = $normalized.Substring($paddingIndex)
+        if ($trimmedPadding.Contains('=') -or $padding -notmatch '^={0,2}$') {
+            return $null
+        }
+    }
+
+    $remainder = $normalized.Length % 4
+    if ($remainder -eq 1) {
+        return $null
+    }
+    if ($remainder -gt 0) {
+        $normalized = $normalized.PadRight($normalized.Length + (4 - $remainder), '=')
+    }
+
+    return $normalized
+}
+
+function Try-DecodeBase64ToByteArray {
+    param(
+        [AllowNull()][string]$Base64String,
+        [bool]$AllowUrlSafe = $true
+    )
+
+    $normalized = Try-NormalizeBase64String -Base64String $Base64String -AllowUrlSafe:$AllowUrlSafe
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return $null
+    }
+
+    try {
+        return [Convert]::FromBase64String($normalized)
+    } catch {
+        return $null
+    }
+}
+
+function Convert-StaticValueToBase64CharArrayText {
+    param(
+        $Value,
+        [int]$StartIndex = 0,
+        [int]$Length = -1
+    )
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $text = $null
+    if ($Value -is [string]) {
+        $text = [string]$Value
+    } elseif ($Value -is [char[]]) {
+        $text = -join $Value
+    } elseif (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
+        try {
+            $chars = @($Value | ForEach-Object { [char]$_ })
+            $text = -join $chars
+        } catch {
+            $text = $null
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    if ($StartIndex -lt 0 -or $StartIndex -gt $text.Length) {
+        return $null
+    }
+
+    $effectiveLength = if ($Length -lt 0) { $text.Length - $StartIndex } else { $Length }
+    if ($effectiveLength -lt 0 -or ($StartIndex + $effectiveLength) -gt $text.Length) {
+        return $null
+    }
+
+    return $text.Substring($StartIndex, $effectiveLength)
+}
+
+function Try-DecodeBase64CharArrayToByteArray {
+    param(
+        $Value,
+        [int]$StartIndex = 0,
+        [int]$Length = -1,
+        [bool]$AllowUrlSafe = $true
+    )
+
+    $text = Convert-StaticValueToBase64CharArrayText -Value $Value -StartIndex $StartIndex -Length $Length
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    return Try-DecodeBase64ToByteArray -Base64String $text -AllowUrlSafe:$AllowUrlSafe
+}
+
 function Try-DecodeEncodedCommandValue {
     param([Parameter(Mandatory)][string]$Base64String)
 
+    $bytes = Try-DecodeBase64ToByteArray -Base64String $Base64String
+    if ($null -eq $bytes -or $bytes.Length -eq 0) {
+        return $null
+    }
+
     try {
-        $bytes = [Convert]::FromBase64String($Base64String)
         return [Text.Encoding]::Unicode.GetString($bytes)
     } catch {
         return $null
@@ -3394,6 +3742,136 @@ function Try-Resolve-WholeScriptStaticPayloadInfoSafe {
     }
 }
 
+function Try-Resolve-GatedRoundSafePayloadInfo {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [AllowNull()][string]$OriginalText = $null,
+        [hashtable]$PreExecutionGateCache = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $inlinePayload = Try-Resolve-WholeScriptInlineFileWritePayloadInfo -ScriptText $ScriptText
+    if ($inlinePayload -and -not [string]::IsNullOrWhiteSpace([string]$inlinePayload.PayloadText)) {
+        return [PSCustomObject]@{
+            PayloadText = [string]$inlinePayload.PayloadText
+            Source      = if ($inlinePayload.PSObject.Properties['DecodeSource']) { [string]$inlinePayload.DecodeSource } else { 'inline_file_write' }
+        }
+    }
+
+    $attempts = @()
+
+    $bootstrapHelperPayload = Try-Resolve-GatedRoundBootstrapHelperPayloadInfo -ScriptText $ScriptText -PreExecutionGateCache $PreExecutionGateCache
+    if ($bootstrapHelperPayload -and -not [string]::IsNullOrWhiteSpace([string]$bootstrapHelperPayload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$bootstrapHelperPayload.PayloadText
+            Source      = if ($bootstrapHelperPayload.PSObject.Properties['Source']) { [string]$bootstrapHelperPayload.Source } else { 'gated_helper_bootstrap' }
+        }
+    }
+
+    $mandatoryBase64Payload = Try-Resolve-WholeScriptMandatoryBase64PayloadInfo -ScriptText $ScriptText
+    if ($mandatoryBase64Payload -and -not [string]::IsNullOrWhiteSpace([string]$mandatoryBase64Payload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$mandatoryBase64Payload.PayloadText
+            Source      = if ($mandatoryBase64Payload.PSObject.Properties['DecodeSource']) { [string]$mandatoryBase64Payload.DecodeSource } else { 'mandatory_base64_payload' }
+        }
+    }
+
+    $compressedLoaderPayload = Try-Resolve-WholeScriptStaticCompressedLoaderPayloadInfo -ScriptText $ScriptText
+    if ($compressedLoaderPayload -and -not [string]::IsNullOrWhiteSpace([string]$compressedLoaderPayload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$compressedLoaderPayload.PayloadText
+            Source      = if ($compressedLoaderPayload.PSObject.Properties['DecodeSource']) { [string]$compressedLoaderPayload.DecodeSource } else { 'static_compressed_loader' }
+        }
+    }
+
+    $hostPayload = Resolve-WholeScriptHostPayloadInfo -ScriptText $ScriptText
+    if ($hostPayload -and -not [string]::IsNullOrWhiteSpace([string]$hostPayload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$hostPayload.PayloadText
+            Source      = if ($hostPayload.PSObject.Properties['DecodeSource']) { [string]$hostPayload.DecodeSource } else { 'host_wrapper_decode' }
+        }
+    }
+
+    $intermediatePrefixPayload = Try-Resolve-GatedRoundIntermediatePrefixPayloadInfo -ScriptText $ScriptText -PreExecutionGateCache $PreExecutionGateCache
+    if ($intermediatePrefixPayload -and -not [string]::IsNullOrWhiteSpace([string]$intermediatePrefixPayload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$intermediatePrefixPayload.PayloadText
+            Source      = if ($intermediatePrefixPayload.PSObject.Properties['Source']) { [string]$intermediatePrefixPayload.Source } else { 'gated_intermediate_prefix_payload' }
+        }
+    }
+
+    $artifactPayload = Try-Resolve-WholeScriptInlineFileWritePayloadInfo -ScriptText $ScriptText
+    if ($artifactPayload -and -not [string]::IsNullOrWhiteSpace([string]$artifactPayload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$artifactPayload.PayloadText
+            Source      = if ($artifactPayload.PSObject.Properties['DecodeSource']) { [string]$artifactPayload.DecodeSource } else { 'inline_file_write' }
+        }
+    }
+
+    try {
+        $staticPayload = Resolve-WholeScriptStaticPayloadInfo -ScriptText $ScriptText -PreExecutionGateMode 'Disabled' -PreExecutionGateCache $PreExecutionGateCache -SafeMode:$false
+    } catch {
+        $staticPayload = $null
+    }
+    if ($staticPayload -and -not [string]::IsNullOrWhiteSpace([string]$staticPayload.PayloadText)) {
+        $attempts += [PSCustomObject]@{
+            PayloadText = [string]$staticPayload.PayloadText
+            Source      = if ($staticPayload.PSObject.Properties['DecodeSource']) { [string]$staticPayload.DecodeSource } else { 'gated_static_payload' }
+        }
+    }
+
+    $comparisonOriginal = if (-not [string]::IsNullOrWhiteSpace($OriginalText)) { [string]$OriginalText } else { [string]$ScriptText }
+    foreach ($attempt in @($attempts)) {
+        if ($null -eq $attempt -or [string]::IsNullOrWhiteSpace([string]$attempt.PayloadText)) {
+            continue
+        }
+
+        if ([string]$attempt.Source -eq 'inline_file_write') {
+            $inlinePayloadText = [string]$attempt.PayloadText
+            if (-not [string]::IsNullOrWhiteSpace($inlinePayloadText) -and (Test-UsefulRecoveredScriptText -Text $inlinePayloadText)) {
+                if (-not [string]::IsNullOrWhiteSpace($comparisonOriginal)) {
+                    $originalNorm = Get-NormalizedScriptComparisonText -ScriptText $comparisonOriginal
+                    $candidateNorm = Get-NormalizedScriptComparisonText -ScriptText $inlinePayloadText
+                    if (-not [string]::IsNullOrWhiteSpace($candidateNorm) -and $candidateNorm -eq $originalNorm) {
+                        continue
+                    }
+                }
+
+                return [PSCustomObject]@{
+                    PayloadText = $inlinePayloadText
+                    Source      = [string]$attempt.Source
+                }
+            }
+        }
+
+        $candidateText = Get-WholeScriptReplacementCandidateText -OriginalText $comparisonOriginal -CandidateText ([string]$attempt.PayloadText)
+        if (-not $candidateText -and $comparisonOriginal -ne $ScriptText) {
+            $candidateText = Get-WholeScriptReplacementCandidateText -OriginalText $ScriptText -CandidateText ([string]$attempt.PayloadText)
+        }
+        if ([string]::IsNullOrWhiteSpace($candidateText)) {
+            continue
+        }
+        if (-not (Test-UsefulRecoveredScriptText -Text $candidateText)) {
+            continue
+        }
+
+        $parse = Get-ScriptParseInfo -ScriptText $candidateText
+        if (-not $parse.IsValid) {
+            continue
+        }
+
+        return [PSCustomObject]@{
+            PayloadText = [string]$candidateText
+            Source      = [string]$attempt.Source
+        }
+    }
+
+    return $null
+}
+
 function Get-BestEffortParseFallbackScriptText {
     param(
         [Parameter(Mandatory)][string]$ScriptText,
@@ -3515,6 +3993,59 @@ function Get-WholeScriptCandidateTopLevelCommandName {
     return [string]$cmdName
 }
 
+function Get-WholeScriptTrailingStatementAnchorsAfterIex {
+    param([AllowNull()][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return @()
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -lt 2) {
+        return @()
+    }
+
+    for ($i = 0; $i -lt ($statements.Count - 1); $i++) {
+        $statement = $statements[$i]
+        if ($null -eq $statement -or -not $statement.Extent) {
+            continue
+        }
+
+        $statementText = [string]$statement.Extent.Text
+        if ([string]::IsNullOrWhiteSpace($statementText) -or
+            $statementText -notmatch '(?i)\b(?:Invoke-Expression|IEX)\b') {
+            continue
+        }
+
+        $anchors = New-Object 'System.Collections.Generic.List[string]'
+        for ($j = $i + 1; $j -lt $statements.Count; $j++) {
+            $tailText = if ($statements[$j] -and $statements[$j].Extent) {
+                ([string]$statements[$j].Extent.Text).Trim()
+            } else {
+                ''
+            }
+
+            if ([string]::IsNullOrWhiteSpace($tailText)) {
+                continue
+            }
+            if ($tailText -match '^(?m)\s*#') {
+                continue
+            }
+
+            $anchors.Add($tailText) | Out-Null
+            if ($anchors.Count -ge 4) {
+                break
+            }
+        }
+
+        if ($anchors.Count -gt 0) {
+            return @($anchors.ToArray())
+        }
+    }
+
+    return @()
+}
+
 function Test-WholeScriptCandidateLooksTruncatedTail {
     param(
         [AllowNull()][string]$OriginalText,
@@ -3529,6 +4060,25 @@ function Test-WholeScriptCandidateLooksTruncatedTail {
     $candidate = ([string]$CandidateText).Trim()
     if ([string]::IsNullOrWhiteSpace($original) -or [string]::IsNullOrWhiteSpace($candidate)) {
         return $false
+    }
+
+    $tailAnchors = @(Get-WholeScriptTrailingStatementAnchorsAfterIex -ScriptText $original)
+    if ($tailAnchors.Count -gt 0) {
+        $candidateNormAll = Get-NormalizedScriptComparisonText -ScriptText $candidate
+        $preservedTail = $false
+        foreach ($anchor in $tailAnchors) {
+            $anchorNorm = Get-NormalizedScriptComparisonText -ScriptText ([string]$anchor)
+            if (-not [string]::IsNullOrWhiteSpace($anchorNorm) -and
+                -not [string]::IsNullOrWhiteSpace($candidateNormAll) -and
+                $candidateNormAll.Contains($anchorNorm)) {
+                $preservedTail = $true
+                break
+            }
+        }
+
+        if (-not $preservedTail) {
+            return $true
+        }
     }
 
     if ($original.Length -lt 120) {
@@ -3929,6 +4479,18 @@ function Resolve-StaticVariableValue {
         'true'  { return [PSCustomObject]@{ Success = $true; Value = $true; UsedEmptyFallback = $false; Reason = $null; Message = $null } }
         'false' { return [PSCustomObject]@{ Success = $true; Value = $false; UsedEmptyFallback = $false; Reason = $null; Message = $null } }
         'null'  { return [PSCustomObject]@{ Success = $true; Value = $null; UsedEmptyFallback = $false; Reason = $null; Message = $null } }
+        'testdrive' {
+            $testDriveRoot = Get-WholeScriptStaticDeterministicTestDrivePath -Context $Context
+            if (-not [string]::IsNullOrWhiteSpace([string]$testDriveRoot)) {
+                return [PSCustomObject]@{
+                    Success           = $true
+                    Value             = [string]$testDriveRoot
+                    UsedEmptyFallback = $false
+                    Reason            = $null
+                    Message           = $null
+                }
+            }
+        }
         'pwd' {
             $pathContext = Get-WholeScriptStaticPathContext -Context $Context
             if ($pathContext -and -not [string]::IsNullOrWhiteSpace([string]$pathContext.CurrentDirectory)) {
@@ -4217,11 +4779,7 @@ function Try-DecodeCompressedScriptTextFromReadToEndAst {
         if ($base64Invoke.Arguments -and $base64Invoke.Arguments.Count -gt 0) {
             $base64String = Try-GetStaticStringValue -Ast $base64Invoke.Arguments[0] -Context $Context
             if (-not [string]::IsNullOrWhiteSpace($base64String)) {
-                try {
-                    $bytes = [Convert]::FromBase64String($base64String)
-                } catch {
-                    $bytes = $null
-                }
+                $bytes = Try-DecodeBase64ToByteArray -Base64String $base64String
 
                 if ($bytes) {
                     $text = Try-DecodeCompressedScriptTextFromByteArray -Bytes $bytes -EncodingName $encodingName
@@ -4400,6 +4958,117 @@ function Get-StaticForEachProjectionInfo {
     return $null
 }
 
+function Register-WholeScriptStaticPureHelperFunction {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Language.FunctionDefinitionAst]$FunctionAst,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$TimeoutMs = 2000
+    )
+
+    if (-not $Context.ExecContext) {
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = '缺少执行上下文' }
+    }
+    if (-not (Test-WholeScriptPureLocalHelperFunctionAllowed -FunctionAst $FunctionAst)) {
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = '函数未通过纯 helper 安全检查' }
+    }
+    if ($null -eq $FunctionAst.Extent -or [string]::IsNullOrWhiteSpace([string]$FunctionAst.Extent.Text)) {
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = '函数定义文本为空' }
+    }
+
+    $helperMap = Get-WholeScriptStaticPureHelperFunctionMap -Context $Context
+    $name = [string]$FunctionAst.Name
+    if ($helperMap.ContainsKey($name)) {
+        return [PSCustomObject]@{ Success = $true; OutputItems = @(); UsedEmptyFallback = $false; Message = $null }
+    }
+
+    $runResult = Invoke-InContext -ExecContext $Context.ExecContext -Code ([string]$FunctionAst.Extent.Text) -TimeoutMs $TimeoutMs -PersistOnSuccess:$true
+    if (-not $runResult.Success) {
+        $message = if ($runResult.PSObject.Properties['Message'] -and -not [string]::IsNullOrWhiteSpace([string]$runResult.Message)) {
+            [string]$runResult.Message
+        } else {
+            '纯 helper 函数注册失败'
+        }
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = $message }
+    }
+
+    $helperMap[$name] = $true
+    return [PSCustomObject]@{ Success = $true; OutputItems = @(); UsedEmptyFallback = $false; Message = $null }
+}
+
+function Test-WholeScriptStaticPureHelperCommandInvocationAllowed {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    if ($null -eq $CommandAst.Extent -or [string]::IsNullOrWhiteSpace([string]$CommandAst.Extent.Text)) {
+        return $false
+    }
+    if ($CommandAst.Redirections -and @($CommandAst.Redirections).Count -gt 0) {
+        return $false
+    }
+
+    $cmdName = Convert-DynamicCommandCandidateToName -Value $CommandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($cmdName)) {
+        return $false
+    }
+
+    $helperMap = Get-WholeScriptStaticPureHelperFunctionMap -Context $Context
+    if ($null -eq $helperMap -or -not $helperMap.ContainsKey($cmdName)) {
+        return $false
+    }
+
+    return (([string]$CommandAst.Extent.Text).Length -le 512)
+}
+
+function Invoke-WholeScriptStaticPureHelperCommand {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$TimeoutMs = 2000
+    )
+
+    if (-not (Test-WholeScriptStaticPureHelperCommandInvocationAllowed -CommandAst $CommandAst -Context $Context)) {
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = '命令不是已注册的纯 helper 调用' }
+    }
+    if (-not $Context.ExecContext) {
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = '缺少执行上下文' }
+    }
+
+    $commandText = [string]$CommandAst.Extent.Text
+    $evalCode = @"
+`$__psdissect_payload = @(& {
+$commandText
+})
+[pscustomobject]@{ Payload = `$__psdissect_payload }
+"@
+
+    $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $evalCode -TimeoutMs $TimeoutMs -PersistOnSuccess:$false
+    if (-not $evalResult.Success -or -not $evalResult.Result -or @($evalResult.Result).Count -eq 0) {
+        $message = if ($evalResult.PSObject.Properties['Message'] -and -not [string]::IsNullOrWhiteSpace([string]$evalResult.Message)) {
+            [string]$evalResult.Message
+        } else {
+            '纯 helper 调用求值失败'
+        }
+        return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = $message }
+    }
+
+    $payloadContainer = @($evalResult.Result)[-1]
+    $payloadItems = @()
+    if ($payloadContainer -and $payloadContainer.PSObject.Properties['Payload']) {
+        $payloadItems = @($payloadContainer.Payload)
+    } else {
+        $payloadItems = @($evalResult.Result)
+    }
+
+    return [PSCustomObject]@{
+        Success           = $true
+        OutputItems       = @($payloadItems)
+        UsedEmptyFallback = $false
+        Message           = $null
+    }
+}
+
 function Invoke-WholeScriptStaticCommand {
     param(
         [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst,
@@ -4418,6 +5087,13 @@ function Invoke-WholeScriptStaticCommand {
 
     $binding = Get-StaticCommandArgumentBinding -CommandAst $CommandAst
 
+    if (Test-WholeScriptStaticPureHelperCommandInvocationAllowed -CommandAst $CommandAst -Context $Context) {
+        $helperCommandResult = Invoke-WholeScriptStaticPureHelperCommand -CommandAst $CommandAst -Context $Context -TimeoutMs 2000
+        if ($helperCommandResult.Success) {
+            return $helperCommandResult
+        }
+    }
+
     if ($cmdName -match '^(?i:new-object)$') {
         $typeName = $null
         if ($binding.Parameters.ContainsKey('typename') -and $binding.Parameters['typename']) {
@@ -4428,8 +5104,13 @@ function Invoke-WholeScriptStaticCommand {
         }
 
         $comObjectName = $null
-        if ($binding.Parameters.ContainsKey('comobject') -and $binding.Parameters['comobject']) {
-            $comObjectName = Try-GetStaticStringValue -Ast $binding.Parameters['comobject'] -Context $Context
+        foreach ($key in @('comobject', 'com')) {
+            if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                $comObjectName = Try-GetStaticStringValue -Ast $binding.Parameters[$key] -Context $Context
+                if (-not [string]::IsNullOrWhiteSpace($comObjectName)) {
+                    break
+                }
+            }
         }
         if ([string]::IsNullOrWhiteSpace($typeName) -and -not [string]::IsNullOrWhiteSpace($comObjectName)) {
             $typeName = $comObjectName
@@ -4554,6 +5235,124 @@ function Invoke-WholeScriptStaticCommand {
                 Success           = $true
                 OutputItems       = @($combinedPath)
                 UsedEmptyFallback = $false
+                Message           = $null
+            }
+        }
+        '^(?i:get-random|random)$' {
+            $inputAst = $null
+            foreach ($key in @('inputobject')) {
+                if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                    $inputAst = $binding.Parameters[$key]
+                    break
+                }
+            }
+            if ($null -eq $inputAst -and $binding.Positional.Count -gt 0) {
+                $firstPositional = $binding.Positional[0]
+                if ($firstPositional -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                    $inputAst = $firstPositional
+                }
+            }
+
+            if ($null -ne $inputAst) {
+                $inputResult = Resolve-StaticAstValue -Ast $inputAst -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $inputResult.Success) {
+                    return [PSCustomObject]@{
+                        Success           = $false
+                        OutputItems       = @()
+                        UsedEmptyFallback = [bool]$inputResult.UsedEmptyFallback
+                        Message           = $inputResult.Message
+                    }
+                }
+
+                $items = @(Convert-StaticValueToPipelineOutputItems -Value $inputResult.Value)
+                if ($items.Count -eq 0) {
+                    return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = [bool]$inputResult.UsedEmptyFallback; Message = 'Get-Random 输入集合为空' }
+                }
+
+                return [PSCustomObject]@{
+                    Success           = $true
+                    OutputItems       = @($items[0])
+                    UsedEmptyFallback = [bool]$inputResult.UsedEmptyFallback
+                    Message           = $null
+                }
+            }
+
+            $minAst = $null
+            foreach ($key in @('minimum', 'min')) {
+                if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                    $minAst = $binding.Parameters[$key]
+                    break
+                }
+            }
+
+            $maxAst = $null
+            foreach ($key in @('maximum', 'max')) {
+                if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                    $maxAst = $binding.Parameters[$key]
+                    break
+                }
+            }
+
+            $minValue = [long]0
+            $usedFallback = $false
+            if ($null -ne $minAst) {
+                $minResult = Resolve-StaticAstValue -Ast $minAst -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $minResult.Success) {
+                    return [PSCustomObject]@{
+                        Success           = $false
+                        OutputItems       = @()
+                        UsedEmptyFallback = [bool]$minResult.UsedEmptyFallback
+                        Message           = $minResult.Message
+                    }
+                }
+                try {
+                    $minValue = [long]$minResult.Value
+                    $usedFallback = ($usedFallback -or [bool]$minResult.UsedEmptyFallback)
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = [bool]$minResult.UsedEmptyFallback; Message = 'Get-Random 最小值无法转换为整数' }
+                }
+            }
+
+            if ($null -ne $maxAst) {
+                $maxResult = Resolve-StaticAstValue -Ast $maxAst -Context $Context -AllowEmptyFallback:$false -Depth ($Depth + 1)
+                if (-not $maxResult.Success) {
+                    return [PSCustomObject]@{
+                        Success           = $false
+                        OutputItems       = @()
+                        UsedEmptyFallback = ($usedFallback -or [bool]$maxResult.UsedEmptyFallback)
+                        Message           = $maxResult.Message
+                    }
+                }
+
+                $maxValue = $null
+                try {
+                    $maxValue = [long]$maxResult.Value
+                    $usedFallback = ($usedFallback -or [bool]$maxResult.UsedEmptyFallback)
+                } catch {
+                    return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = ($usedFallback -or [bool]$maxResult.UsedEmptyFallback); Message = 'Get-Random 最大值无法转换为整数' }
+                }
+
+                if ($maxValue -le $minValue) {
+                    return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $usedFallback; Message = 'Get-Random 最大值必须大于最小值' }
+                }
+
+                $value = $minValue
+                if (($maxValue - $minValue) -gt 1) {
+                    $value = $minValue + [long][Math]::Floor((($maxValue - $minValue) - 1) / 2)
+                }
+
+                return [PSCustomObject]@{
+                    Success           = $true
+                    OutputItems       = @($value)
+                    UsedEmptyFallback = $usedFallback
+                    Message           = $null
+                }
+            }
+
+            return [PSCustomObject]@{
+                Success           = $true
+                OutputItems       = @($minValue)
+                UsedEmptyFallback = $usedFallback
                 Message           = $null
             }
         }
@@ -5076,7 +5875,10 @@ function Try-DecodeEncodedCommand {
 
                     if ($base64String) {
                         try {
-                            $bytes = [Convert]::FromBase64String($base64String)
+                            $bytes = Try-DecodeBase64ToByteArray -Base64String $base64String
+                            if ($null -eq $bytes -or $bytes.Length -eq 0) {
+                                return $null
+                            }
 
                             $decoded = [Text.Encoding]::Unicode.GetString($bytes)
 
@@ -5551,6 +6353,10 @@ function Get-ReplacementCandidatePriority {
     if ($wholeScriptMaterialized) {
         if ($isCmdline) { return 650 }
         return 520
+    }
+    if ($sourceKind -eq 'MandatoryBase64') {
+        if ($isCmdline) { return 490 }
+        return 410
     }
     if ($sourceKind -eq 'DynamicInvoke') {
         if ($protectsInner -and -not [string]::IsNullOrWhiteSpace($materializationKind)) {
@@ -6308,6 +7114,427 @@ function Get-SyntaxAdaptedReplacementCandidate {
     }
 
     return $adapted
+}
+
+function Test-MandatoryBase64ConsumerText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    return ([string]$Text -match '(?i)(EncodedCommand|FromBase64String|FromBase64CharArray)')
+}
+
+function Get-InvokeMemberNameText {
+    param([System.Management.Automation.Language.InvokeMemberExpressionAst]$InvokeAst)
+
+    if ($null -eq $InvokeAst) {
+        return $null
+    }
+
+    if ($InvokeAst.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        return [string]$InvokeAst.Member.Value
+    }
+    if ($InvokeAst.Member -and $InvokeAst.Member.Extent) {
+        return [string]$InvokeAst.Member.Extent.Text
+    }
+
+    return $null
+}
+
+function Test-MandatoryBase64CommandAst {
+    param([System.Management.Automation.Language.CommandAst]$CommandAst)
+
+    if ($null -eq $CommandAst) {
+        return $false
+    }
+
+    $cmdName = Convert-DynamicCommandCandidateToName -Value $CommandAst.GetCommandName()
+    if (-not (Test-PowerShellHostCommandName -CommandName $cmdName)) {
+        return $false
+    }
+
+    foreach ($elem in @($CommandAst.CommandElements)) {
+        if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+            continue
+        }
+
+        $paramInfo = Resolve-PowerShellHostLooseParameterInfo -ParameterName ([string]$elem.ParameterName)
+        if ($paramInfo -and [string]$paramInfo.DynamicType -eq 'EncodedCommand') {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-MandatoryBase64ExpressionAst {
+    param($Ast)
+
+    if ($null -eq $Ast -or -not ($Ast -is [System.Management.Automation.Language.ExpressionAst])) {
+        return $false
+    }
+    if (-not $Ast.Extent) {
+        return $false
+    }
+
+    $extentText = [string]$Ast.Extent.Text
+    if (-not (Test-MandatoryBase64ConsumerText -Text $extentText)) {
+        return $false
+    }
+
+    $base64Invoke = @($Ast.FindAll({
+                param($n)
+                if ($n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+                    return $false
+                }
+
+                $memberName = Get-InvokeMemberNameText -InvokeAst $n
+                return ($memberName -match '^(?i:FromBase64String|FromBase64CharArray)$')
+            }, $true))
+
+    return ($base64Invoke.Count -gt 0)
+}
+
+function Resolve-DirectBase64BytesFromAst {
+    param(
+        $Ast,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    if ($null -eq $Ast) {
+        return $null
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        $innerAst = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
+        if ($innerAst) {
+            return (Resolve-DirectBase64BytesFromAst -Ast $innerAst -Context $Context)
+        }
+    }
+
+    if ($Ast -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        return $null
+    }
+
+    $memberName = Get-InvokeMemberNameText -InvokeAst $Ast
+    if ([string]::IsNullOrWhiteSpace($memberName)) {
+        return $null
+    }
+
+    if ($memberName -match '^(?i:FromBase64String)$') {
+        $base64Text = $null
+        if ($Ast.Arguments -and $Ast.Arguments.Count -gt 0) {
+            $base64Text = Try-GetStaticStringValue -Ast $Ast.Arguments[0] -Context $Context
+        }
+
+        if ([string]::IsNullOrWhiteSpace($base64Text)) {
+            return $null
+        }
+
+        return (Try-DecodeBase64ToByteArray -Base64String $base64Text)
+    }
+
+    if ($memberName -match '^(?i:FromBase64CharArray)$') {
+        if (-not $Ast.Arguments -or $Ast.Arguments.Count -lt 1) {
+            return $null
+        }
+
+        $sourceResolved = Resolve-StaticAstValue -Ast $Ast.Arguments[0] -Context $Context -AllowEmptyFallback:$false
+        if (-not $sourceResolved -or -not $sourceResolved.Success) {
+            return $null
+        }
+
+        $startIndex = 0
+        $length = -1
+        if ($Ast.Arguments.Count -ge 3) {
+            $startResolved = Resolve-StaticAstValue -Ast $Ast.Arguments[1] -Context $Context -AllowEmptyFallback:$false
+            $lengthResolved = Resolve-StaticAstValue -Ast $Ast.Arguments[2] -Context $Context -AllowEmptyFallback:$false
+            if (-not $startResolved.Success -or -not $lengthResolved.Success) {
+                return $null
+            }
+
+            try {
+                $startIndex = [int]$startResolved.Value
+                $length = [int]$lengthResolved.Value
+            } catch {
+                return $null
+            }
+        }
+
+        return (Try-DecodeBase64CharArrayToByteArray -Value $sourceResolved.Value -StartIndex $startIndex -Length $length)
+    }
+
+    return $null
+}
+
+function Resolve-DirectBase64TextFromAst {
+    param(
+        $Ast,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    if ($null -eq $Ast) {
+        return $null
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        $innerAst = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
+        if ($innerAst) {
+            return (Resolve-DirectBase64TextFromAst -Ast $innerAst -Context $Context)
+        }
+    }
+
+    if ($Ast -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        return $null
+    }
+
+    $memberName = Get-InvokeMemberNameText -InvokeAst $Ast
+    if ([string]::IsNullOrWhiteSpace($memberName)) {
+        return $null
+    }
+
+    if ($memberName -match '^(?i:GetString)$') {
+        if (-not $Ast.Arguments -or $Ast.Arguments.Count -lt 1) {
+            return $null
+        }
+
+        $bytes = Resolve-DirectBase64BytesFromAst -Ast $Ast.Arguments[0] -Context $Context
+        if (-not $bytes -or $bytes.Length -eq 0) {
+            return $null
+        }
+
+        $encodingResolved = Resolve-StaticAstValue -Ast $Ast.Expression -Context $Context -AllowEmptyFallback:$false
+        if ($encodingResolved -and $encodingResolved.Success) {
+            $encodingValue = $encodingResolved.Value
+            if ($encodingValue -is [psobject] -and $null -ne $encodingValue.BaseObject -and $encodingValue.BaseObject -ne $encodingValue) {
+                $encodingValue = $encodingValue.BaseObject
+            }
+
+            if ($encodingValue -is [System.Text.Encoding]) {
+                try {
+                    return $encodingValue.GetString($bytes)
+                } catch {
+                }
+            }
+        }
+
+        return (Convert-ByteArrayToLikelyPlainText -Bytes $bytes)
+    }
+
+    if ($memberName -match '^(?i:FromBase64String|FromBase64CharArray)$') {
+        $bytes = Resolve-DirectBase64BytesFromAst -Ast $Ast -Context $Context
+        if ($bytes -and $bytes.Length -gt 0) {
+            return (Convert-ByteArrayToLikelyPlainText -Bytes $bytes)
+        }
+    }
+
+    return $null
+}
+
+function Get-MandatoryBase64ExpressionReplacementText {
+    param(
+        $Ast,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    if (-not (Test-MandatoryBase64ExpressionAst -Ast $Ast)) {
+        return $null
+    }
+
+    $directText = Resolve-DirectBase64TextFromAst -Ast $Ast -Context $Context
+    if (-not [string]::IsNullOrWhiteSpace($directText)) {
+        return (Convert-ReplacementTextToExpressionLiteral -Text $directText)
+    }
+
+    try {
+        $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+    } catch {
+        if (Test-IsCallDepthOverflowException -ErrorObject $_) {
+            return $null
+        }
+        throw
+    }
+
+    if (-not $resolved -or -not $resolved.Success) {
+        return $null
+    }
+
+    $value = $resolved.Value
+    if ($value -is [psobject] -and $null -ne $value.BaseObject -and $value.BaseObject -ne $value) {
+        $value = $value.BaseObject
+    }
+
+    $text = $null
+    if ($value -is [string]) {
+        $text = [string]$value
+    } elseif ($value -is [char]) {
+        $text = [string]$value
+    } elseif ($value -is [char[]]) {
+        $text = -join $value
+    }
+
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    return (Convert-ReplacementTextToExpressionLiteral -Text $text)
+}
+
+function Get-MandatoryBase64ReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $candidates = @()
+    $skipped = @()
+
+    $null = Reset-StaticEvalState -Context $Context -TimeBudgetMs 0
+    $state = Get-StaticEvalState -Context $Context
+    if ($state) {
+        $state.ValueDepthLimit = 96
+        $state.StringCompatDepthLimit = 72
+    }
+
+    $commandAsts = @($parse.Ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.CommandAst] -and (Test-MandatoryBase64CommandAst -CommandAst $n)
+            }, $true))
+
+    foreach ($cmdAst in $commandAsts) {
+        if ($null -eq $cmdAst -or -not $cmdAst.Extent) { continue }
+
+        $start = [int]$cmdAst.Extent.StartOffset
+        $end = [int]$cmdAst.Extent.EndOffset
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'MandatoryBase64'
+            Depth       = $null
+            NodeId      = $null
+        }
+
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_out_of_range' -Message 'Mandatory base64 command offset out of range' -Item $baseItem
+            continue
+        }
+
+        try {
+            $decodedInfo = Try-DecodeEncodedCommand -CommandAst $cmdAst
+        } catch {
+            $decodedInfo = $null
+        }
+        if (-not $decodedInfo -or [string]::IsNullOrWhiteSpace([string]$decodedInfo.ReplacementText)) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_decode_failed' -Message 'EncodedCommand mandatory decode failed' -Item $baseItem
+            continue
+        }
+
+        $replacement = [string]$decodedInfo.ReplacementText
+        $original = $ScriptText.Substring($start, $end - $start)
+        if ($replacement -eq $original) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_no_change' -Message 'EncodedCommand mandatory decode produced no change' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset        = $start
+            EndOffset          = $end
+            Replacement        = $replacement
+            Original           = $original
+            Type               = 'MandatoryBase64'
+            Depth              = $null
+            NodeId             = $null
+            SourceKind         = 'MandatoryBase64'
+            Confidence         = 'High'
+            UsedEmptyFallback  = $false
+            ResultType         = 'EncodedCommandDecoded'
+            Executed           = $false
+            VariableName       = $null
+            IsSimpleVariable   = $false
+            IsValueChanged     = $false
+            ObservedValueCount = 1
+        }
+    }
+
+    $exprAsts = @($parse.Ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.ExpressionAst] -and (Test-MandatoryBase64ExpressionAst -Ast $n)
+            }, $true) | Sort-Object { $_.Extent.StartOffset }, { -($_.Extent.EndOffset - $_.Extent.StartOffset) })
+
+    foreach ($exprAst in $exprAsts) {
+        if ($null -eq $exprAst -or -not $exprAst.Extent) { continue }
+
+        $start = [int]$exprAst.Extent.StartOffset
+        $end = [int]$exprAst.Extent.EndOffset
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'MandatoryBase64'
+            Depth       = $null
+            NodeId      = $null
+        }
+
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_out_of_range' -Message 'Mandatory base64 expression offset out of range' -Item $baseItem
+            continue
+        }
+
+        try {
+            $replacement = Get-MandatoryBase64ExpressionReplacementText -Ast $exprAst -Context $Context
+        } catch {
+            if (Test-IsCallDepthOverflowException -ErrorObject $_) {
+                $replacement = $null
+            } else {
+                throw
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($replacement)) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_non_text' -Message 'Mandatory base64 expression did not resolve to inline text' -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring($start, $end - $start)
+        if ($replacement -eq $original) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_no_change' -Message 'Mandatory base64 expression produced no change' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset        = $start
+            EndOffset          = $end
+            Replacement        = $replacement
+            Original           = $original
+            Type               = 'MandatoryBase64'
+            Depth              = $null
+            NodeId             = $null
+            SourceKind         = 'MandatoryBase64'
+            Confidence         = 'High'
+            UsedEmptyFallback  = $false
+            ResultType         = 'MandatoryBase64Text'
+            Executed           = $false
+            VariableName       = $null
+            IsSimpleVariable   = $false
+            IsValueChanged     = $false
+            ObservedValueCount = 1
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
 }
 
 function Merge-DynamicInvokeReplacementCandidates {
@@ -7285,6 +8512,7 @@ function New-WholeScriptStaticResolutionContext {
         FunctionSubgraphs = @{}
         ScriptBlockSubgraphs = @{}
         ExecContext = $null
+        PureHelperFunctions = @{}
         ScriptPath = if (-not [string]::IsNullOrWhiteSpace([string]$script:__psdissect_current_input_path)) { [string]$script:__psdissect_current_input_path } else { $null }
         PathContext = $null
         ArtifactStore = @{
@@ -7299,8 +8527,22 @@ function New-WholeScriptStaticResolutionContext {
     } catch {
         $ctx.ExecContext = $null
     }
+    Initialize-WholeScriptSpecialVariables -ExecContext $ctx.ExecContext -Context $ctx
 
     return $ctx
+}
+
+function Get-WholeScriptStaticPureHelperFunctionMap {
+    param([hashtable]$Context)
+
+    if ($null -eq $Context) {
+        return $null
+    }
+    if (-not $Context.ContainsKey('PureHelperFunctions') -or $null -eq $Context.PureHelperFunctions) {
+        $Context.PureHelperFunctions = @{}
+    }
+
+    return $Context.PureHelperFunctions
 }
 
 function Close-WholeScriptStaticResolutionContext {
@@ -7385,6 +8627,7 @@ function Get-WholeScriptStaticPathContext {
         ScriptPath       = $null
         ScriptDirectory  = $null
         EnvironmentPaths = @{}
+        TestDriveRoot    = $null
     }
 
     $normalizePath = {
@@ -7508,6 +8751,23 @@ function Get-WholeScriptStaticPathContext {
         & $addEnv 'CD' $pathContext.CurrentDirectory
     }
 
+    $testDriveRoot = $null
+    $tempRoot = $null
+    if ($envMap.ContainsKey('TEMP') -and -not [string]::IsNullOrWhiteSpace([string]$envMap['TEMP'])) {
+        $tempRoot = [string]$envMap['TEMP']
+    } elseif ($envMap.ContainsKey('TMP') -and -not [string]::IsNullOrWhiteSpace([string]$envMap['TMP'])) {
+        $tempRoot = [string]$envMap['TMP']
+    } elseif (-not [string]::IsNullOrWhiteSpace([string]$pathContext.CurrentDirectory)) {
+        $tempRoot = [string]$pathContext.CurrentDirectory
+    }
+    if (-not [string]::IsNullOrWhiteSpace($tempRoot)) {
+        try {
+            $testDriveRoot = [System.IO.Path]::Combine($tempRoot.TrimEnd('\'), 'PSDissect-TestDrive')
+        } catch {
+            $testDriveRoot = ($tempRoot.TrimEnd('\') + '\PSDissect-TestDrive')
+        }
+    }
+    $pathContext.TestDriveRoot = (& $normalizePath $testDriveRoot)
     $pathContext.EnvironmentPaths = $envMap
 
     if ($Context) {
@@ -7657,6 +8917,8 @@ function Resolve-WholeScriptStaticDisplayPath {
         $candidate = $candidate.TrimEnd('\')
     }
 
+    $candidate = Convert-WholeScriptStaticPathToSymbolicRoot -PathText $candidate -Context $Context
+
     return $candidate
 }
 
@@ -7720,6 +8982,150 @@ function Get-WholeScriptStaticArtifactPathInfo {
     }
 }
 
+function Expand-WholeScriptStaticSymbolicPathText {
+    param(
+        [AllowNull()][string]$PathText,
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathText)) {
+        return $null
+    }
+
+    $candidate = ([string]$PathText).Trim().Trim('"', "'", ' ')
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return $null
+    }
+
+    if ($candidate -match '^(?i)\$env:([A-Za-z_][A-Za-z0-9_]*)(?<tail>.*)$') {
+        $root = Resolve-WholeScriptStaticEnvironmentValueText -Name ([string]$Matches[1]) -Context $Context
+        if (-not [string]::IsNullOrWhiteSpace($root)) {
+            $tail = [string]$Matches['tail']
+            return $(if ([string]::IsNullOrWhiteSpace($tail)) {
+                    $root
+                } else {
+                    try {
+                        [System.IO.Path]::Combine($root.TrimEnd('\'), $tail.TrimStart('\'))
+                    } catch {
+                        $root.TrimEnd('\') + '\' + $tail.TrimStart('\')
+                    }
+                })
+        }
+    }
+
+    if ($candidate -match '^(?i)%([^%]+)%(?<tail>.*)$') {
+        $root = Resolve-WholeScriptStaticEnvironmentValueText -Name ([string]$Matches[1]) -Context $Context
+        if (-not [string]::IsNullOrWhiteSpace($root)) {
+            $tail = [string]$Matches['tail']
+            return $(if ([string]::IsNullOrWhiteSpace($tail)) {
+                    $root
+                } else {
+                    try {
+                        [System.IO.Path]::Combine($root.TrimEnd('\'), $tail.TrimStart('\'))
+                    } catch {
+                        $root.TrimEnd('\') + '\' + $tail.TrimStart('\')
+                    }
+                })
+        }
+    }
+
+    return $candidate
+}
+
+function Get-WholeScriptStaticArtifactDisplayVariants {
+    param(
+        [AllowNull()][string]$PathText,
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathText)) {
+        return @()
+    }
+
+    $variants = New-Object 'System.Collections.Generic.List[string]'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $addVariant = {
+        param([AllowNull()][string]$Value)
+        if ([string]::IsNullOrWhiteSpace($Value)) { return }
+        $trimmed = ([string]$Value).Trim().Trim('"', "'", ' ')
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { return }
+        if ($seen.Add($trimmed)) {
+            $variants.Add($trimmed) | Out-Null
+        }
+    }
+
+    $displayPath = Resolve-WholeScriptStaticDisplayPath -PathText $PathText -Context $Context
+    & $addVariant $displayPath
+
+    $expandedPath = Expand-WholeScriptStaticSymbolicPathText -PathText $displayPath -Context $Context
+    if (-not [string]::IsNullOrWhiteSpace($expandedPath)) {
+        $expandedPath = Resolve-WholeScriptStaticDisplayPath -PathText $expandedPath -Context $Context
+        $expandedPath = Expand-WholeScriptStaticSymbolicPathText -PathText $expandedPath -Context $Context
+        & $addVariant $expandedPath
+        & $addVariant (Convert-WholeScriptStaticPathToSymbolicRoot -PathText $expandedPath -Context $Context)
+    }
+
+    return @($variants.ToArray())
+}
+
+function Add-WholeScriptStaticArtifactDisplayVariants {
+    param(
+        [Parameter(Mandatory)]$Record,
+        [string[]]$Variants = @()
+    )
+
+    if ($null -eq $Record) {
+        return
+    }
+
+    if ($null -eq $Record.DisplayVariants) {
+        $Record.DisplayVariants = @()
+    }
+
+    $merged = New-Object 'System.Collections.Generic.List[string]'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($existing in @($Record.DisplayVariants) + @($Variants)) {
+        if ([string]::IsNullOrWhiteSpace([string]$existing)) { continue }
+        $trimmed = ([string]$existing).Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($seen.Add($trimmed)) {
+            $merged.Add($trimmed) | Out-Null
+        }
+    }
+
+    $Record.DisplayVariants = @($merged.ToArray())
+}
+
+function Add-WholeScriptStaticArtifactReferencedPath {
+    param(
+        [Parameter(Mandatory)]$Record,
+        [AllowNull()][string]$PathText,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Record -or [string]::IsNullOrWhiteSpace($PathText)) {
+        return
+    }
+
+    if ($null -eq $Record.ReferencedPaths) {
+        $Record.ReferencedPaths = @()
+    }
+
+    $variants = Get-WholeScriptStaticArtifactDisplayVariants -PathText $PathText -Context $Context
+    $merged = New-Object 'System.Collections.Generic.List[string]'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($existing in @($Record.ReferencedPaths) + @($variants)) {
+        if ([string]::IsNullOrWhiteSpace([string]$existing)) { continue }
+        $trimmed = ([string]$existing).Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($seen.Add($trimmed)) {
+            $merged.Add($trimmed) | Out-Null
+        }
+    }
+
+    $Record.ReferencedPaths = @($merged.ToArray())
+}
+
 function Convert-WholeScriptStaticScalarToText {
     param($Value)
 
@@ -7748,6 +9154,456 @@ function Convert-WholeScriptStaticScalarToText {
         return [string]$Value
     } catch {
         return $null
+    }
+}
+
+function Test-WholeScriptStaticPathLikeText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    $candidate = ([string]$Text).Trim().Trim('"', "'", ' ')
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return $false
+    }
+
+    if (Test-WholeScriptStaticRegistryPath -PathText $candidate) {
+        return $true
+    }
+
+    if ($candidate -match '^(?i:(?:[A-Z]:\\|\\\\[^\\]+\\[^\\]+|%[A-Z0-9_]+%\\|~\\|\.{1,2}\\|\\))') {
+        return $true
+    }
+
+    if ($candidate -match '(?i)(?:\\|/)[^\\/\r\n]+\.(ps1|psm1|psd1|dll|exe|cmd|bat|vbs|js)\b') {
+        return $true
+    }
+
+    return ($candidate -match '(?i)PSDissect-TestDrive')
+}
+
+function Test-WholeScriptStaticPathRewriteTriggerText {
+    param([AllowNull()][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $false
+    }
+
+    return ([string]$ScriptText -match '(?i)\bJoin-Path\b|\bGet-Random\b|\$TestDrive\b|\$PSScriptRoot\b|\$PSCommandPath\b|\.ps(?:1|m1|d1)\b|\b(?:Import-Module|Out-File|Set-Content|Add-Content|New-Item)\b')
+}
+
+function Test-WholeScriptStaticPathRewriteTargetAst {
+    param($Ast)
+
+    if ($null -eq $Ast -or -not $Ast.Extent) {
+        return $false
+    }
+
+    $text = [string]$Ast.Extent.Text
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $false
+    }
+    if ($text.Length -gt 4096) {
+        return $false
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        return $true
+    }
+
+    return ($text -match '(?i)\bJoin-Path\b|\bGet-Random\b|\$TestDrive\b|\$PSScriptRoot\b|\$PSCommandPath\b|\$env:|\$\(|\$[A-Za-z_][\w:]*|\.ps(?:1|m1|d1)\b')
+}
+
+function Get-WholeScriptDirectExecutableStatements {
+    param([Parameter(Mandatory)][System.Management.Automation.Language.ScriptBlockAst]$Ast)
+
+    $statements = New-Object 'System.Collections.Generic.List[object]'
+    $seen = @{}
+
+    $addStatement = {
+        param($Statement)
+
+        if ($null -eq $Statement -or -not $Statement.Extent) {
+            return
+        }
+
+        if (($Statement -isnot [System.Management.Automation.Language.AssignmentStatementAst]) -and
+            ($Statement -isnot [System.Management.Automation.Language.PipelineAst]) -and
+            ($Statement -isnot [System.Management.Automation.Language.CommandAst])) {
+            return
+        }
+
+        if (($Statement -is [System.Management.Automation.Language.PipelineAst]) -or
+            ($Statement -is [System.Management.Automation.Language.CommandAst])) {
+            $nestedScriptBlocks = @($Statement.FindAll({
+                        param($n)
+                        $n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]
+                    }, $true))
+            if ($nestedScriptBlocks.Count -gt 0) {
+                return
+            }
+        }
+
+        $key = Get-ReplacementRangeKey -StartOffset ([int]$Statement.Extent.StartOffset) -EndOffset ([int]$Statement.Extent.EndOffset)
+        if ([string]::IsNullOrWhiteSpace($key) -or $seen.ContainsKey($key)) {
+            return
+        }
+
+        $seen[$key] = $true
+        $statements.Add($Statement) | Out-Null
+    }
+
+    $candidateStatements = @($Ast.FindAll({
+                param($n)
+                if ($null -eq $n) {
+                    return $false
+                }
+
+                if ($n -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    return $true
+                }
+
+                if ($n -is [System.Management.Automation.Language.PipelineAst]) {
+                    return $true
+                }
+
+                return ($n -is [System.Management.Automation.Language.CommandAst] -and
+                    ($n.Parent -isnot [System.Management.Automation.Language.PipelineAst]))
+            }, $true))
+    foreach ($statement in @($candidateStatements)) {
+        & $addStatement $statement
+    }
+
+    return @($statements.ToArray() | Sort-Object { $_.Extent.StartOffset }, { $_.Extent.EndOffset })
+}
+
+function Get-WholeScriptStaticPathRewriteResolvedText {
+    param(
+        $Ast,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$MaxResolvedTextLength = 2048
+    )
+
+    if ($null -eq $Ast) {
+        return $null
+    }
+
+    $pathText = $null
+    try {
+        $pathText = Resolve-WholeScriptStaticArtifactPathTextFromAst -Ast $Ast -Context $Context
+    } catch {
+        if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+            throw
+        }
+        $pathText = $null
+    }
+
+    if (Test-WholeScriptStaticPathLikeText -Text $pathText) {
+        if ($MaxResolvedTextLength -le 0 -or ([string]$pathText).Length -le $MaxResolvedTextLength) {
+            return [string]$pathText
+        }
+    }
+
+    try {
+        $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+    } catch {
+        if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+            throw
+        }
+        return $null
+    }
+
+    if (-not $resolved -or -not $resolved.Success) {
+        return $null
+    }
+
+    $resolvedText = Convert-FastSensitiveResolvedValueToText -Value $resolved.Value -Context $Context -SinkKind 'FilePath' -MaxResolvedTextLength $MaxResolvedTextLength
+    if (-not (Test-WholeScriptStaticPathLikeText -Text $resolvedText)) {
+        return $null
+    }
+
+    return [string]$resolvedText
+}
+
+function Get-WholeScriptStaticPathRewriteCandidates {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if (-not (Test-WholeScriptStaticPathRewriteTriggerText -ScriptText $ScriptText)) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $candidates = @()
+        $state = Get-StaticEvalState -Context $ctx
+        if ($state) {
+            $state.ValueDepthLimit = 64
+            $state.StringCompatDepthLimit = 48
+        }
+        $ctx.SafeMode = $true
+
+        $seenRanges = @{}
+        $directStatements = @(Get-WholeScriptDirectExecutableStatements -Ast $parse.Ast)
+        foreach ($statement in @($directStatements)) {
+            $statementCandidates = New-Object 'System.Collections.Generic.List[object]'
+            $statementSeenRanges = @{}
+            $addCandidateAst = {
+                param($CandidateAst)
+
+                if ($null -eq $CandidateAst -or -not $CandidateAst.Extent) {
+                    return
+                }
+
+                $key = Get-ReplacementRangeKey -StartOffset ([int]$CandidateAst.Extent.StartOffset) -EndOffset ([int]$CandidateAst.Extent.EndOffset)
+                if ([string]::IsNullOrWhiteSpace($key) -or $statementSeenRanges.ContainsKey($key)) {
+                    return
+                }
+
+                $statementSeenRanges[$key] = $true
+                $statementCandidates.Add($CandidateAst) | Out-Null
+            }
+
+            if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst] -and $statement.Right) {
+                & $addCandidateAst $statement.Right
+            }
+
+            $commandAsts = @($statement.FindAll({
+                        param($n)
+                        $n -is [System.Management.Automation.Language.CommandAst]
+                    }, $true))
+            foreach ($commandAst in @($commandAsts)) {
+                $binding = Get-StaticCommandArgumentBinding -CommandAst $commandAst
+                foreach ($entry in @($binding.Parameters.GetEnumerator())) {
+                    if ($entry.Value) {
+                        & $addCandidateAst $entry.Value
+                    }
+                }
+                foreach ($positionalAst in @($binding.Positional)) {
+                    if ($positionalAst) {
+                        & $addCandidateAst $positionalAst
+                    }
+                }
+            }
+
+            foreach ($candidateAst in @($statementCandidates.ToArray() | Sort-Object { $_.Extent.StartOffset }, { -($_.Extent.EndOffset - $_.Extent.StartOffset) })) {
+                if (-not (Test-WholeScriptStaticPathRewriteTargetAst -Ast $candidateAst)) {
+                    continue
+                }
+
+                $start = [int]$candidateAst.Extent.StartOffset
+                $end = [int]$candidateAst.Extent.EndOffset
+                if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+                    continue
+                }
+
+                $rangeKey = Get-ReplacementRangeKey -StartOffset $start -EndOffset $end
+                if ([string]::IsNullOrWhiteSpace($rangeKey) -or $seenRanges.ContainsKey($rangeKey)) {
+                    continue
+                }
+
+                $original = $ScriptText.Substring($start, $end - $start)
+                $resolvedText = Get-WholeScriptStaticPathRewriteResolvedText -Ast $candidateAst -Context $ctx
+                if ([string]::IsNullOrWhiteSpace($resolvedText)) {
+                    continue
+                }
+
+                $replacement = Convert-ReplacementTextToExpressionLiteral -Text $resolvedText
+                if ([string]::IsNullOrWhiteSpace($replacement) -or $replacement -eq $original) {
+                    continue
+                }
+
+                $seenRanges[$rangeKey] = $true
+                $candidates += [PSCustomObject]@{
+                    StartOffset        = $start
+                    EndOffset          = $end
+                    Replacement        = $replacement
+                    Original           = $original
+                    Type               = 'StaticPath'
+                    Depth              = $null
+                    NodeId             = $null
+                    SourceKind         = 'StaticPath'
+                    Confidence         = 'High'
+                    UsedEmptyFallback  = $false
+                    ResultType         = 'PathText'
+                    Executed           = $false
+                    VariableName       = $null
+                    IsSimpleVariable   = $false
+                    IsValueChanged     = $false
+                    ObservedValueCount = 1
+                    ProtectsInnerCandidates = $true
+                }
+            }
+
+            try {
+                [void](Invoke-WholeScriptStaticStatement -Statement $statement -Context $ctx -AllowEmptyFallback:$false)
+            } catch {
+                if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                    throw
+                }
+            }
+        }
+
+        return [PSCustomObject]@{
+            Candidates = @($candidates)
+            Skipped    = @()
+        }
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
+}
+
+function Invoke-WholeScriptStaticPathRewritePass {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if (-not (Test-WholeScriptStaticPathRewriteTriggerText -ScriptText $ScriptText)) {
+        return $ScriptText
+    }
+
+    $candidateInfo = Get-WholeScriptStaticPathRewriteCandidates -ScriptText $ScriptText
+    $candidates = @($candidateInfo.Candidates)
+    if ($candidates.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $selectedInfo = Select-NonOverlappingReplacements -Candidates $candidates -Strategy 'Outer'
+    $selected = @($selectedInfo.Selected)
+    if ($selected.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $syntaxGuard = Ensure-SyntaxSafeReplacements -ScriptText $ScriptText -Selected $selected
+    $selected = @($syntaxGuard.Selected)
+    if ($selected.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $rewritten = Apply-ReplacementsToText -Text $ScriptText -Replacements $selected
+    $check = Test-PowerShellSyntax -ScriptText $rewritten
+    if (-not $check.IsValid) {
+        return $ScriptText
+    }
+
+    return $rewritten
+}
+
+function Invoke-WholeScriptStaticGetContentMaterializationPass {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText) -or
+        $ScriptText -notmatch '(?i)\b(?:Get-Content|gc)\b') {
+        return $ScriptText
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $staticEvalState = Get-StaticEvalState -Context $ctx
+        if ($staticEvalState) {
+            $staticEvalState.ValueDepthLimit = 64
+            $staticEvalState.StringCompatDepthLimit = 48
+        }
+        $ctx.SafeMode = $true
+
+        [void](Initialize-WholeScriptStaticAssignments -Statements $statements -Context $ctx)
+
+        $replacements = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($statement in @($statements)) {
+            $commandAst = Get-WholeScriptSingleCommandAst -Ast $statement
+            if ($commandAst -and $statement -and $statement.Extent) {
+                $commandName = Convert-DynamicCommandCandidateToName -Value $commandAst.GetCommandName()
+                if ($commandName -match '^(?i:Get-Content|gc)$') {
+                    $binding = Get-StaticCommandArgumentBinding -CommandAst $commandAst
+                    $pathAst = $null
+                    foreach ($key in @('path', 'literalpath')) {
+                        if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                            $pathAst = $binding.Parameters[$key]
+                            break
+                        }
+                    }
+                    if ($null -eq $pathAst -and $binding.Positional.Count -gt 0) {
+                        $pathAst = $binding.Positional[0]
+                    }
+
+                    $pathText = Resolve-WholeScriptStaticArtifactPathTextFromAst -Ast $pathAst -Context $ctx
+                    if (-not [string]::IsNullOrWhiteSpace($pathText)) {
+                        $raw = $binding.Parameters.ContainsKey('raw')
+                        $items = Get-WholeScriptStaticFileArtifactOutputItems -Context $ctx -PathText $pathText -Raw:$raw
+                        if ($null -ne $items -and @($items).Count -gt 0) {
+                            $contentText = Convert-WholeScriptStaticOutputItemsToScriptText -Items @($items)
+                            if (-not [string]::IsNullOrWhiteSpace($contentText) -and $contentText.Length -le 32768) {
+                                $evidence = @(Get-WholeScriptSensitiveEvidenceFromText -Text $contentText -Source 'artifact_read' -Stage 'whole_script_artifact_read' -Context $ctx)
+                                $interestingEvidence = @($evidence | Where-Object { [string]$_.Kind -in @('FilePath', 'Url', 'RegKey') })
+                                if ($interestingEvidence.Count -gt 0) {
+                                    $materializedLiteral = Convert-ReplacementTextToExpressionLiteral -Text $contentText
+                                    $replacement = if (-not [string]::IsNullOrWhiteSpace($materializedLiteral)) {
+                                        ([string]$statement.Extent.Text).TrimEnd() + "`r`n" + $materializedLiteral
+                                    } else {
+                                        $null
+                                    }
+                                    if (-not [string]::IsNullOrWhiteSpace($replacement)) {
+                                        $replacements.Add([PSCustomObject]@{
+                                                StartOffset = [int]$statement.Extent.StartOffset
+                                                EndOffset   = [int]$statement.Extent.EndOffset
+                                                Replacement = [string]$replacement
+                                            }) | Out-Null
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            try {
+                [void](Invoke-WholeScriptStaticStatement -Statement $statement -Context $ctx -AllowEmptyFallback:$false)
+            } catch {
+                if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                    throw
+                }
+            }
+        }
+
+        if ($replacements.Count -eq 0) {
+            return $ScriptText
+        }
+
+        $selectedInfo = Select-NonOverlappingReplacements -Candidates @($replacements.ToArray()) -Strategy 'Outer'
+        $selected = @($selectedInfo.Selected)
+        if ($selected.Count -eq 0) {
+            return $ScriptText
+        }
+
+        $rewritten = Apply-ReplacementsToText -Text $ScriptText -Replacements $selected
+        $check = Test-PowerShellSyntax -ScriptText $rewritten
+        if ($check.IsValid) {
+            return $rewritten
+        }
+
+        return $ScriptText
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
     }
 }
 
@@ -7838,14 +9694,18 @@ function Ensure-WholeScriptStaticFileArtifact {
 
     $store = Get-WholeScriptStaticArtifactStore -Context $Context
     $record = if ($store.Files.ContainsKey($pathInfo.CanonicalPath)) { $store.Files[$pathInfo.CanonicalPath] } else { $null }
+    $pathVariants = @(Get-WholeScriptStaticArtifactDisplayVariants -PathText $PathText -Context $Context)
     if ($null -eq $record) {
         $record = [PSCustomObject]@{
             DisplayPath   = $pathInfo.DisplayPath
             CanonicalPath = $pathInfo.CanonicalPath
+            DisplayVariants = @($pathVariants)
             Kind          = $Kind
             Exists        = $true
             ContentText   = ''
             Properties    = @{}
+            ReferencedPaths = @()
+            DerivedEvidence = @()
             IsPowerShell  = (Test-WholeScriptStaticArtifactLooksPowerShell -PathText $pathInfo.DisplayPath -ContentText '')
         }
         $store.Files[$pathInfo.CanonicalPath] = $record
@@ -7857,7 +9717,15 @@ function Ensure-WholeScriptStaticFileArtifact {
         if ($null -eq $record.Properties) {
             $record.Properties = @{}
         }
+        if ($null -eq $record.ReferencedPaths) {
+            $record.ReferencedPaths = @()
+        }
+        if ($null -eq $record.DerivedEvidence) {
+            $record.DerivedEvidence = @()
+        }
     }
+
+    Add-WholeScriptStaticArtifactDisplayVariants -Record $record -Variants $pathVariants
 
     return $record
 }
@@ -8085,7 +9953,7 @@ function Get-WholeScriptStaticFileArtifactPayloadInfo {
         return $null
     }
 
-    $payloadText = Try-NormalizeRecoveredScriptText -Text ([string]$record.ContentText)
+    $payloadText = Try-NormalizeStaticArtifactPayloadText -Text ([string]$record.ContentText)
     if (-not $payloadText) {
         return $null
     }
@@ -8094,6 +9962,282 @@ function Get-WholeScriptStaticFileArtifactPayloadInfo {
         PayloadText  = $payloadText
         DecodeSource = $DecodeSource
         ArtifactPath = [string]$record.DisplayPath
+    }
+}
+
+function Try-NormalizeStaticArtifactPayloadText {
+    param([AllowNull()][string]$Text)
+
+    $rawText = Remove-RecoveredTextTransportArtifacts -Text ([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($rawText)) {
+        return $null
+    }
+
+    $candidate = Invoke-NormalizePlainScriptText -ScriptText $rawText
+    if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-UsefulRecoveredScriptText -Text $candidate)) {
+        return (Get-WholeScriptReplacementCandidateText -OriginalText $rawText -CandidateText $candidate)
+    }
+
+    $payloadText = Try-NormalizeRecoveredScriptText -Text $rawText
+    if ($payloadText) {
+        return $payloadText
+    }
+
+    $lines = @($rawText -split "`r?`n")
+    $maxTrim = [Math]::Min(8, [Math]::Max(0, $lines.Count - 1))
+    for ($skip = 1; $skip -le $maxTrim -and -not $payloadText; $skip++) {
+        $candidateText = (($lines | Select-Object -Skip $skip) -join "`r`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($candidateText)) {
+            break
+        }
+        $candidate = Invoke-NormalizePlainScriptText -ScriptText $candidateText
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-UsefulRecoveredScriptText -Text $candidate)) {
+            $payloadText = Get-WholeScriptReplacementCandidateText -OriginalText $candidateText -CandidateText $candidate
+            if ($payloadText) {
+                break
+            }
+        }
+        $payloadText = Try-NormalizeRecoveredScriptText -Text $candidateText
+    }
+
+    return $payloadText
+}
+
+function Try-Resolve-WholeScriptInlineFileWritePayloadInfo {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [hashtable]$Context = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $patterns = @(
+        '(?is)(?:Set-Content|Add-Content)\s+-Path\s+''(?<path>[^'']+\.ps(?:1|m1|d1))''\s+-Value\s+@''\r?\n(?<content>.*?)\r?\n''@',
+        '(?is)(?:Set-Content|Add-Content)\s+-Path\s+''(?<path>[^'']+\.ps(?:1|m1|d1))''\s+-Value\s+@"\r?\n(?<content>.*?)\r?\n"@',
+        '(?is)(?:Set-Content|Add-Content)\s+-Path\s+"(?<path>[^"]+\.ps(?:1|m1|d1))"\s+-Value\s+@''\r?\n(?<content>.*?)\r?\n''@',
+        '(?is)(?:Set-Content|Add-Content)\s+-Path\s+"(?<path>[^"]+\.ps(?:1|m1|d1))"\s+-Value\s+@"\r?\n(?<content>.*?)\r?\n"@',
+        '(?is)(?:Set-Content|Add-Content)\s+-LiteralPath\s+''(?<path>[^'']+\.ps(?:1|m1|d1))''\s+-Value\s+@''\r?\n(?<content>.*?)\r?\n''@',
+        '(?is)(?:Set-Content|Add-Content)\s+-LiteralPath\s+''(?<path>[^'']+\.ps(?:1|m1|d1))''\s+-Value\s+@"\r?\n(?<content>.*?)\r?\n"@',
+        '(?is)(?:Set-Content|Add-Content)\s+-LiteralPath\s+"(?<path>[^"]+\.ps(?:1|m1|d1))"\s+-Value\s+@''\r?\n(?<content>.*?)\r?\n''@',
+        '(?is)(?:Set-Content|Add-Content)\s+-LiteralPath\s+"(?<path>[^"]+\.ps(?:1|m1|d1))"\s+-Value\s+@"\r?\n(?<content>.*?)\r?\n"@'
+    )
+
+    $sourceEvidence = @(Get-UniqueSensitiveEvidenceRecords -Evidence (Get-WholeScriptSensitiveEvidenceFromText -Text $ScriptText -Source 'inline_file_write_source' -Stage 'whole_script_source' -Context $Context))
+    $sourceFilePathCount = @($sourceEvidence | Where-Object { [string]$_.Kind -eq 'FilePath' }).Count
+    $sourceUrlCount = @($sourceEvidence | Where-Object { [string]$_.Kind -eq 'Url' }).Count
+    $sourceEvidenceScore = (12 * $sourceFilePathCount) + (18 * $sourceUrlCount) + (6 * $sourceEvidence.Count)
+
+    $isLikelyManagedLoaderWrapper = {
+        param([string]$Text)
+
+        if ([string]::IsNullOrWhiteSpace($Text)) {
+            return $false
+        }
+
+        $candidate = Remove-RecoveredTextTransportArtifacts -Text $Text
+        if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate.Length -lt 2048) {
+            return $false
+        }
+
+        $signals = 0
+        if ($candidate -match '(?i)(?:\[Reflection\.Assembly\]|\bAssembly\]|\bAssembly\s*::\s*Load\b)') { $signals++ }
+        if ($candidate -match '(?is)GetType\s*\([^)]*\)\s*\.\s*GetMethod\s*\(\s*[''"]Execute[''"]\s*\)\s*\.\s*Invoke') { $signals++ }
+        if ($candidate -match '(?i)\bGZipStream\b') { $signals++ }
+        if ($candidate -match '(?i)\bFromBase64String\b') { $signals++ }
+        if ($candidate -match '(?i)\bwhile\s*\(\s*\$?true\s*\)') { $signals++ }
+        if ($candidate -match '(?i)\bInvoke-Expression\b|\bIEX\b') { $signals++ }
+        if ($candidate -match '(?i)\bGetMethod\s*\(\s*[''"]Execute[''"]\s*\)') { $signals++ }
+
+        return ($signals -ge 2)
+    }
+
+    $scoreCandidatePayload = {
+        param(
+            [string]$PayloadText,
+            [string]$ArtifactPath
+        )
+
+        $candidateText = Get-WholeScriptReplacementCandidateText -OriginalText $ScriptText -CandidateText $PayloadText
+        if (-not $candidateText) {
+            return $null
+        }
+
+        $candidateEvidence = @(Get-UniqueSensitiveEvidenceRecords -Evidence (Get-WholeScriptSensitiveEvidenceFromText -Text $candidateText -Source 'inline_file_write' -Stage 'whole_script_inline_payload' -Context $Context))
+        $filePathCount = @($candidateEvidence | Where-Object { [string]$_.Kind -eq 'FilePath' }).Count
+        $urlCount = @($candidateEvidence | Where-Object { [string]$_.Kind -eq 'Url' }).Count
+        $regKeyCount = @($candidateEvidence | Where-Object { [string]$_.Kind -eq 'RegKey' }).Count
+        $managedLoader = & $isLikelyManagedLoaderWrapper $candidateText
+
+        $score = Get-RecoveredTextCandidateScore -Text $candidateText
+        $score += (16 * $filePathCount) + (24 * $urlCount) + (10 * $regKeyCount) + (5 * $candidateEvidence.Count)
+        $score += [Math]::Min([int]($candidateText.Length / 256), 160)
+        if ($managedLoader) {
+            $score -= 240
+        }
+
+        return [PSCustomObject]@{
+            PayloadText          = [string]$candidateText
+            DecodeSource         = 'inline_file_write'
+            ArtifactPath         = [string]$ArtifactPath
+            Score                = [int]$score
+            SensitiveEvidence    = $candidateEvidence.Count
+            FilePathCount        = $filePathCount
+            UrlCount             = $urlCount
+            RegKeyCount          = $regKeyCount
+            IsManagedLoaderShell = [bool]$managedLoader
+        }
+    }
+
+    $candidates = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($pattern in $patterns) {
+        foreach ($match in @([regex]::Matches($ScriptText, $pattern))) {
+            $pathText = Unwrap-PowerShellHostLooseToken -TokenText ([string]$match.Groups['path'].Value)
+            if ([string]::IsNullOrWhiteSpace($pathText)) {
+                continue
+            }
+
+            $normalizedPath = Resolve-WholeScriptStaticDisplayPath -PathText $pathText -Context $Context
+            if ([string]::IsNullOrWhiteSpace($normalizedPath) -or $normalizedPath -notmatch '(?i)\.(ps1|psm1|psd1)$') {
+                continue
+            }
+
+            $rawPayloadText = Remove-RecoveredTextTransportArtifacts -Text ([string]$match.Groups['content'].Value)
+            $payloadText = $null
+            if (-not [string]::IsNullOrWhiteSpace($rawPayloadText) -and (Test-UsefulRecoveredScriptText -Text $rawPayloadText)) {
+                $payloadText = $rawPayloadText
+            } else {
+                $payloadText = Try-NormalizeStaticArtifactPayloadText -Text $rawPayloadText
+            }
+            if (-not $payloadText) {
+                continue
+            }
+
+            $scored = & $scoreCandidatePayload $payloadText $normalizedPath
+            if ($scored) {
+                $candidates.Add($scored) | Out-Null
+            }
+        }
+    }
+
+    if ($candidates.Count -eq 0) {
+        return $null
+    }
+
+    $bestCandidate = @(
+        $candidates.ToArray() | Sort-Object -Property `
+            @{ Expression = { [int]$_.Score }; Descending = $true }, `
+            @{ Expression = { [int]$_.SensitiveEvidence }; Descending = $true }, `
+            @{ Expression = { [int]$_.FilePathCount }; Descending = $true }, `
+            @{ Expression = { [int]$_.UrlCount }; Descending = $true }, `
+            @{ Expression = { [int]([string]$_.PayloadText).Length }; Descending = $true }
+    ) | Select-Object -First 1
+    if (-not $bestCandidate) {
+        return $null
+    }
+
+    if ($bestCandidate.IsManagedLoaderShell -and
+        $sourceEvidenceScore -ge 96 -and
+        $bestCandidate.SensitiveEvidence -le [Math]::Max(2, [int][Math]::Floor($sourceEvidence.Count / 4.0)) -and
+        $bestCandidate.Score -lt ($sourceEvidenceScore + 60)) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        PayloadText  = [string]$bestCandidate.PayloadText
+        DecodeSource = 'inline_file_write'
+        ArtifactPath = [string]$bestCandidate.ArtifactPath
+    }
+
+    return $null
+}
+
+function Get-WholeScriptStaticArtifactPayloadInfoFromContext {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [string]$DecodeSource = 'static_artifact_store'
+    )
+
+    $candidatePaths = New-Object 'System.Collections.Generic.List[string]'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    $events = @($Context.ArtifactEvents)
+    [array]::Reverse($events)
+    foreach ($event in @($events)) {
+        if ($null -eq $event) { continue }
+        if ([string]$event.Kind -ne 'File' -or [string]$event.Action -ne 'write') { continue }
+        $pathText = [string]$event.Path
+        if ([string]::IsNullOrWhiteSpace($pathText)) { continue }
+        if ($seen.Add($pathText)) {
+            $candidatePaths.Add($pathText) | Out-Null
+        }
+    }
+
+    $store = Get-WholeScriptStaticArtifactStore -Context $Context
+    foreach ($fileKey in @($store.Files.Keys)) {
+        $record = $store.Files[$fileKey]
+        if ($null -eq $record -or -not $record.Exists) { continue }
+        $pathText = [string]$record.DisplayPath
+        if ([string]::IsNullOrWhiteSpace($pathText)) { continue }
+        if ($seen.Add($pathText)) {
+            $candidatePaths.Add($pathText) | Out-Null
+        }
+    }
+
+    foreach ($pathText in @($candidatePaths.ToArray())) {
+        $payloadInfo = Get-WholeScriptStaticFileArtifactPayloadInfo -Context $Context -PathText $pathText -DecodeSource $DecodeSource
+        if ($payloadInfo -and -not [string]::IsNullOrWhiteSpace([string]$payloadInfo.PayloadText)) {
+            return $payloadInfo
+        }
+    }
+
+    return $null
+}
+
+function Resolve-WholeScriptStaticArtifactPayloadInfoFromScriptText {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [bool]$SafeMode = $true
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $null
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -eq 0) {
+        return $null
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $staticEvalState = Get-StaticEvalState -Context $ctx
+        if ($staticEvalState) {
+            $staticEvalState.ValueDepthLimit = 64
+            $staticEvalState.StringCompatDepthLimit = 48
+        }
+        $ctx.SafeMode = $SafeMode
+
+        [void](Initialize-WholeScriptStaticAssignments -Statements $statements -Context $ctx)
+        foreach ($statement in @($statements)) {
+            try {
+                [void](Invoke-WholeScriptStaticStatement -Statement $statement -Context $ctx -AllowEmptyFallback:$false)
+            } catch {
+                if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                    throw
+                }
+            }
+        }
+
+        return (Get-WholeScriptStaticArtifactPayloadInfoFromContext -Context $ctx -DecodeSource 'static_artifact_store')
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
     }
 }
 
@@ -8730,20 +10874,9 @@ function Get-WholeScriptSensitiveEvidenceFromText {
     }
 
     $evidence = New-Object 'System.Collections.Generic.List[object]'
-    $patterns = @(
-        @{ Kind = 'Url'; Pattern = '(?im)\b(?:https?|ftp)://[^\s''"`<>)]+' },
-        @{ Kind = 'RegKey'; Pattern = '(?im)\b(?:(?:registry::)?(?:hkcu|hklm|hkcr|hku|hkcc):\\[^\r\n''"`<>]+|hkey_(?:current_user|local_machine|classes_root|users|current_config)\\[^\r\n''"`<>]+)' },
-        @{ Kind = 'FilePath'; Pattern = '(?im)(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+|(?:\.{1,2}\\|%[A-Za-z_][A-Za-z0-9_]*%\\|\$env:[A-Za-z_][A-Za-z0-9_]*\\|~\\))[^\r\n''"`<>|]*' }
-    )
-
-    foreach ($entry in $patterns) {
-        foreach ($match in @([regex]::Matches($candidate, $entry.Pattern))) {
-            $value = Remove-RecoveredTextTransportArtifacts -Text ([string]$match.Value)
-            if (-not [string]::IsNullOrWhiteSpace($value) -and
-                (Test-SensitiveLiteralizableText -Text $value -SinkKind ([string]$entry.Kind))) {
-                Add-SensitiveEvidenceRecord -EvidenceList $evidence -Kind ([string]$entry.Kind) -Value $value -Source $Source -Stage $Stage
-            }
-        }
+    foreach ($entry in @(Get-WholeScriptRegexSensitiveEvidenceFromText -Text $candidate -Source $Source -Stage $Stage -Context $Context)) {
+        if ($null -eq $entry) { continue }
+        $evidence.Add($entry) | Out-Null
     }
 
     foreach ($entry in @(Get-WholeScriptStaticArtifactEvidenceFromScriptText -ScriptText $candidate -Source $Source -Stage $Stage -Context $Context)) {
@@ -8753,7 +10886,8 @@ function Get-WholeScriptSensitiveEvidenceFromText {
             -Value ([string]$entry.Value) `
             -Source $(if ($entry.PSObject.Properties['Source']) { [string]$entry.Source } else { $Source }) `
             -Stage $(if ($entry.PSObject.Properties['Stage']) { [string]$entry.Stage } else { $Stage }) `
-            -Confidence $(if ($entry.PSObject.Properties['Confidence']) { [string]$entry.Confidence } else { 'High' })
+            -Confidence $(if ($entry.PSObject.Properties['Confidence']) { [string]$entry.Confidence } else { 'High' }) `
+            -PreserveLiteral $(if ($entry.PSObject.Properties['PreserveLiteral']) { [bool]$entry.PreserveLiteral } else { $false })
     }
 
     return @($evidence.ToArray())
@@ -8823,6 +10957,7 @@ function Get-WholeScriptStaticArtifactEvidenceFromScriptText {
                 Source     = if ($entry.PSObject.Properties['Source'] -and -not [string]::IsNullOrWhiteSpace([string]$entry.Source)) { [string]$entry.Source } else { $Source }
                 Stage      = $Stage
                 Confidence = if ($entry.PSObject.Properties['Confidence']) { [string]$entry.Confidence } else { 'High' }
+                PreserveLiteral = if ($entry.PSObject.Properties['PreserveLiteral']) { [bool]$entry.PreserveLiteral } else { $false }
             }
         }
 
@@ -8949,7 +11084,18 @@ function Test-WholeScriptEvalFallbackCommandAllowed {
     param([string]$CommandName)
 
     if ([string]::IsNullOrWhiteSpace($CommandName)) { return $false }
-    return ($CommandName -match '^(?i:set-variable|sv|new-variable|nv|set-item|si|get-variable|gv|variable|get-item|gi|item|foreach-object|foreach|%|new-object)$')
+    return ($CommandName -match '^(?i:set-variable|sv|new-variable|nv|set-item|si|get-variable|gv|variable|get-item|gi|item|foreach-object|foreach|%|new-object|join-path|get-location|gl|pwd|out-null)$')
+}
+
+function Test-WholeScriptPureLocalHelperCommandAllowed {
+    param([string]$CommandName)
+
+    if ([string]::IsNullOrWhiteSpace($CommandName)) { return $false }
+    if (Test-WholeScriptEvalFallbackCommandAllowed -CommandName $CommandName) {
+        return $true
+    }
+
+    return ($CommandName -match '^(?i:get-random|random)$')
 }
 
 function Test-WholeScriptEvalFallbackMemberAllowed {
@@ -8978,6 +11124,10 @@ function Test-WholeScriptEvalFallbackMemberAllowed {
             if (($targetType -eq [array] -or $targetType.FullName -eq 'System.Array') -and $memberName -match '^(?i:Reverse)$') {
                 return $true
             }
+            if (($targetType -eq [convert] -or $targetType.FullName -eq 'System.Convert') -and
+                $memberName -match '^(?i:FromBase64String|ToBase64String)$') {
+                return $true
+            }
             if ($targetType.FullName -match '^(?i:System\.Text\.Encoding)$' -and $memberName -match '^(?i:UTF8|Unicode|BigEndianUnicode|ASCII|Default|UTF32)$') {
                 return $true
             }
@@ -8985,7 +11135,7 @@ function Test-WholeScriptEvalFallbackMemberAllowed {
             return $false
         }
 
-        return ($memberName -match '^(?i:Replace|Substring|ToString|ToLower|ToUpper|Trim|TrimEnd|Split|ToCharArray|GetBytes|GetString|ReadToEnd|Read|Write|Flush|Close|Dispose|TransformFinalBlock|CreateDecryptor|CreateEncryptor|Clear)$')
+        return ($memberName -match '^(?i:Replace|Substring|ToString|ToLower|ToUpper|Trim|TrimEnd|Split|ToCharArray|GetBytes|GetString|ReadToEnd|Read|Write|Seek|Invoke|Flush|Close|Dispose|TransformFinalBlock|CreateDecryptor|CreateEncryptor|Clear)$')
     }
 
     if ($Ast -is [System.Management.Automation.Language.MemberExpressionAst] -and $Ast.Static) {
@@ -8996,7 +11146,9 @@ function Test-WholeScriptEvalFallbackMemberAllowed {
         $targetType = Resolve-StaticTypeFromTypeExpressionAst -TypeExpressionAst $Ast.Expression
         if ($null -eq $targetType) { return $false }
         return ($targetType -eq [string] -or $targetType -eq [regex] -or $targetType -eq [array] -or
-            $targetType.FullName -in @('System.String', 'System.Text.RegularExpressions.Regex', 'System.Array'))
+            $targetType.FullName -in @('System.String', 'System.Text.RegularExpressions.Regex', 'System.Array') -or
+            ($targetType.FullName -eq 'System.Text.Encoding') -or
+            ($targetType.IsEnum -and $targetType.FullName -match '^(?i:System\.Security\.Cryptography\.)'))
     }
 
     return $true
@@ -9024,7 +11176,8 @@ function Test-WholeScriptLocalHelperNameAllowed {
     param([string]$Name)
 
     if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
-    return ($Name -match '(?i)(decode|decrypt|unwrap|inflate|expand|unpack|join|build|compose|recover|derive|byte|char|xor|bxor|rot|perm|shuffle|aes|rc4|crypto|plain|text|string)')
+    return ($Name -match '^(?i:de|dec)$' -or
+        $Name -match '(?i)(decode|decrypt|unwrap|inflate|expand|unpack|join|build|compose|recover|derive|byte|char|xor|bxor|rot|perm|shuffle|aes|rc4|crypto|plain|text|string)')
 }
 
 function Test-WholeScriptLocalHelperFunctionAllowed {
@@ -9223,13 +11376,14 @@ function Try-EvaluateWholeScriptPayloadExpression {
 
     $execContext = $null
     try {
-        $execContext = New-ExecutionContext -Backend 'SubprocessReplay' -ChildHost 'powershell'
+        $execContext = New-ExecutionContext
     } catch {
         $execContext = $null
     }
     if (-not $execContext) {
         return $null
     }
+    Initialize-WholeScriptSpecialVariables -ExecContext $execContext
 
     try {
         foreach ($statement in @($PrefixStatements)) {
@@ -9346,13 +11500,14 @@ function Try-EvaluateWholeScriptPayloadExpressionWithLocalHelpers {
 
     $execContext = $null
     try {
-        $execContext = New-ExecutionContext -Backend 'SubprocessReplay' -ChildHost 'powershell'
+        $execContext = New-ExecutionContext
     } catch {
         $execContext = $null
     }
     if (-not $execContext) {
         return $null
     }
+    Initialize-WholeScriptSpecialVariables -ExecContext $execContext
 
     try {
         foreach ($statement in @($helperStatements + $remainingPrefix)) {
@@ -9412,6 +11567,2336 @@ $exprText
             }
         }
     }
+}
+
+function Try-EvaluateWholeScriptExpressionInExecContext {
+    param(
+        $ExecContext,
+        $ExpressionAst,
+        [int]$TimeoutMs = 4000
+    )
+
+    if ($null -eq $ExecContext -or $null -eq $ExecContext.Runspace -or $null -eq $ExpressionAst -or -not $ExpressionAst.Extent) {
+        return $null
+    }
+
+    $exprText = [string]$ExpressionAst.Extent.Text
+    if ([string]::IsNullOrWhiteSpace($exprText)) {
+        return $null
+    }
+
+    $evalCode = @"
+`$__psdissect_payload = @(& {
+$exprText
+})
+[pscustomobject]@{ Payload = `$__psdissect_payload }
+"@
+
+    $evalResult = Invoke-InContext -ExecContext $ExecContext -Code $evalCode -TimeoutMs $TimeoutMs -PersistOnSuccess:$false
+    if (-not $evalResult.Success -or -not $evalResult.Result -or @($evalResult.Result).Count -eq 0) {
+        return $null
+    }
+
+    $payloadContainer = @($evalResult.Result)[-1]
+    $payloadItems = @()
+    if ($payloadContainer -and $payloadContainer.PSObject.Properties['Payload']) {
+        $payloadItems = @($payloadContainer.Payload)
+    } else {
+        $payloadItems = @($evalResult.Result)
+    }
+
+    if ($payloadItems.Count -eq 0) {
+        return $null
+    }
+
+    if ($payloadItems.Count -eq 1) {
+        return (Convert-WholeScriptHelperPayloadToCandidateText -Value $payloadItems[0])
+    }
+
+    return (Convert-WholeScriptHelperPayloadToCandidateText -Value @($payloadItems))
+}
+
+function Get-WholeScriptAstCommandNames {
+    param($Ast)
+
+    if ($null -eq $Ast -or -not $Ast.PSObject.Methods['FindAll']) {
+        return @()
+    }
+
+    $names = New-Object 'System.Collections.Generic.List[string]'
+    try {
+        $commandAsts = @($Ast.FindAll({
+                    param($n)
+                    $n -is [System.Management.Automation.Language.CommandAst]
+                }, $true))
+    } catch {
+        return @()
+    }
+
+    foreach ($commandAst in @($commandAsts)) {
+        $cmdName = Convert-DynamicCommandCandidateToName -Value $commandAst.GetCommandName()
+        if ([string]::IsNullOrWhiteSpace($cmdName)) {
+            continue
+        }
+        if ($names -notcontains [string]$cmdName) {
+            $names.Add([string]$cmdName) | Out-Null
+        }
+    }
+
+    return @($names.ToArray())
+}
+
+function Get-AssignmentTargetVariableName {
+    param($LeftAst)
+
+    if ($null -eq $LeftAst) {
+        return $null
+    }
+
+    if ($LeftAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        return [string]$LeftAst.VariablePath.UserPath
+    }
+
+    if ($LeftAst.PSObject.Properties['Child']) {
+        return (Get-AssignmentTargetVariableName -LeftAst $LeftAst.Child)
+    }
+
+    return $null
+}
+
+function Get-GatedRoundDynamicIexArgumentAst {
+    param($Statement)
+
+    if ($null -eq $Statement) {
+        return $null
+    }
+
+    if ($Statement -is [System.Management.Automation.Language.PipelineAst]) {
+        $elements = @($Statement.PipelineElements)
+        if ($elements.Count -eq 2 -and $elements[1] -is [System.Management.Automation.Language.CommandAst]) {
+            $sinkName = Convert-DynamicCommandCandidateToName -Value $elements[1].GetCommandName()
+            if ($sinkName -in @('Invoke-Expression', 'iex')) {
+                if ($elements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                    return $elements[0].Expression
+                }
+                if ($elements[0].PSObject.Properties['Expression']) {
+                    return $elements[0].Expression
+                }
+            }
+        }
+
+        if ($elements.Count -eq 1 -and $elements[0] -is [System.Management.Automation.Language.CommandAst]) {
+            $Statement = $elements[0]
+        } else {
+            return $null
+        }
+    }
+
+    if ($Statement -isnot [System.Management.Automation.Language.CommandAst]) {
+        return $null
+    }
+
+    $dynamicInfo = $null
+    try {
+        $dynamicInfo = Get-CommandAstStaticDynamicPayloadInfo -CommandAst $Statement -Context $null
+    } catch {
+        $dynamicInfo = $null
+    }
+
+    if ($dynamicInfo -and [string]$dynamicInfo.DynamicType -eq 'IEX' -and $dynamicInfo.ArgumentAst) {
+        return $dynamicInfo.ArgumentAst
+    }
+
+    $cmdName = Convert-DynamicCommandCandidateToName -Value $Statement.GetCommandName()
+    if ($cmdName -in @('Invoke-Expression', 'iex')) {
+        return (Get-CommandArgumentAst -CommandAst $Statement)
+    }
+
+    return $null
+}
+
+function Get-WholeScriptContiguousWhitelistedHelperPrefixStatements {
+    param(
+        [object[]]$Statements = @(),
+        [int]$BeforeIndex,
+        [int]$MaxStatements = 24
+    )
+
+    if ($BeforeIndex -le 0 -or $Statements.Count -eq 0) {
+        return @()
+    }
+
+    $selected = New-Object 'System.Collections.Generic.List[object]'
+    for ($i = $BeforeIndex - 1; $i -ge 0; $i--) {
+        $statement = $Statements[$i]
+        if ($null -eq $statement -or -not $statement.Extent) {
+            if ($selected.Count -gt 0) {
+                break
+            }
+            continue
+        }
+
+        if (Test-WholeScriptEvalFallbackAllowed -Ast $statement -AllowFunctionDefinitions:$true) {
+            if ($selected.Count -ge $MaxStatements) {
+                break
+            }
+            $selected.Add($statement) | Out-Null
+            continue
+        }
+
+        if ($selected.Count -gt 0) {
+            break
+        }
+    }
+
+    if ($selected.Count -eq 0) {
+        return @()
+    }
+
+    $ordered = New-Object 'System.Collections.Generic.List[object]'
+    for ($j = $selected.Count - 1; $j -ge 0; $j--) {
+        $ordered.Add($selected[$j]) | Out-Null
+    }
+
+    return @($ordered.ToArray())
+}
+
+function Test-WholeScriptWhitelistedIexExpansionCandidate {
+    param(
+        [object[]]$PrefixStatements = @(),
+        $ExpressionAst
+    )
+
+    $parts = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($statement in @($PrefixStatements)) {
+        if ($statement -and $statement.Extent -and -not [string]::IsNullOrWhiteSpace([string]$statement.Extent.Text)) {
+            $parts.Add([string]$statement.Extent.Text) | Out-Null
+        }
+    }
+    if ($ExpressionAst -and $ExpressionAst.Extent -and -not [string]::IsNullOrWhiteSpace([string]$ExpressionAst.Extent.Text)) {
+        $parts.Add([string]$ExpressionAst.Extent.Text) | Out-Null
+    }
+
+    $text = ($parts.ToArray() -join [Environment]::NewLine)
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $false
+    }
+
+    if ($text -notmatch '(?i)(FromBase64String|ToBase64String|GZipStream|DeflateStream|MemoryStream|StreamReader|ReadToEnd|GetBytes|GetString|TransformFinalBlock|CreateDecryptor|CreateEncryptor)') {
+        return $false
+    }
+
+    if ($text -match '(?i)\b(?:Invoke-Expression|iex|Start-Process|Invoke-WebRequest|Invoke-RestMethod|Download(?:String|File)|Start-BitsTransfer|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|mshta(?:\.exe)?|rundll32(?:\.exe)?|regsvr32(?:\.exe)?|schtasks(?:\.exe)?|Remove-Item|Set-Content|Add-Content|New-Item|Set-ItemProperty)\b') {
+        return $false
+    }
+
+    return $true
+}
+
+function Test-WholeScriptPureLocalHelperFunctionAllowed {
+    param([System.Management.Automation.Language.FunctionDefinitionAst]$FunctionAst)
+
+    if ($null -eq $FunctionAst -or [string]::IsNullOrWhiteSpace([string]$FunctionAst.Name)) {
+        return $false
+    }
+
+    $text = if ($FunctionAst.Extent) { [string]$FunctionAst.Extent.Text } else { '' }
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $false
+    }
+    if ($text.Length -gt 8192) {
+        return $false
+    }
+
+    $lineCount = ([regex]::Matches($text, "`r?`n")).Count + 1
+    if ($lineCount -gt 96) {
+        return $false
+    }
+
+    if ($text -match '(?i)\b(?:Invoke-Expression|iex|Start-Process|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|Invoke-WebRequest|Invoke-RestMethod|Start-BitsTransfer|Download(?:String|File)|Remove-Item|Set-Content|Add-Content|Clear-Content|Out-File|Copy-Item|Move-Item|Rename-Item|New-Item|Set-ItemProperty|Remove-ItemProperty|New-ItemProperty|Add-Type|VirtualAlloc|WriteProcessMemory|CreateThread)\b') {
+        return $false
+    }
+
+    try {
+        $nodes = @($FunctionAst.FindAll({ $true }, $true))
+    } catch {
+        return $false
+    }
+
+    if ($nodes.Count -gt 320) {
+        return $false
+    }
+
+    foreach ($node in $nodes) {
+        if ($node -is [System.Management.Automation.Language.TrapStatementAst] -or
+            $node -is [System.Management.Automation.Language.TryStatementAst]) {
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node -ne $FunctionAst) {
+            return $false
+        }
+
+        if ($node -is [System.Management.Automation.Language.CommandAst]) {
+            $cmdName = Convert-DynamicCommandCandidateToName -Value $node.GetCommandName()
+            if (-not (Test-WholeScriptPureLocalHelperCommandAllowed -CommandName $cmdName)) {
+                return $false
+            }
+            continue
+        }
+
+        if ($node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -or
+            $node -is [System.Management.Automation.Language.MemberExpressionAst]) {
+            if (-not (Test-WholeScriptEvalFallbackMemberAllowed -Ast $node)) {
+                return $false
+            }
+        }
+    }
+
+    return $true
+}
+
+function Try-EvaluateWhitelistedWholeScriptPayloadExpression {
+    param(
+        [object[]]$PrefixStatements = @(),
+        $ExpressionAst,
+        [int]$TimeoutMs = 4000
+    )
+
+    if ($null -eq $ExpressionAst -or -not $ExpressionAst.Extent) {
+        return $null
+    }
+
+    foreach ($statement in @($PrefixStatements)) {
+        if (-not (Test-WholeScriptEvalFallbackAllowed -Ast $statement -AllowFunctionDefinitions:$true)) {
+            return $null
+        }
+    }
+    if (-not (Test-WholeScriptEvalFallbackAllowed -Ast $ExpressionAst)) {
+        return $null
+    }
+    if (-not (Test-WholeScriptWhitelistedIexExpansionCandidate -PrefixStatements $PrefixStatements -ExpressionAst $ExpressionAst)) {
+        return $null
+    }
+
+    $execContext = $null
+    try {
+        $execContext = New-ExecutionContext
+    } catch {
+        $execContext = $null
+    }
+    if (-not $execContext) {
+        return $null
+    }
+    Initialize-WholeScriptSpecialVariables -ExecContext $execContext
+
+    try {
+        foreach ($statement in @($PrefixStatements)) {
+            if ($null -eq $statement -or -not $statement.Extent) {
+                return $null
+            }
+
+            $statementResult = Invoke-InContext -ExecContext $execContext -Code ([string]$statement.Extent.Text) -TimeoutMs $TimeoutMs -PersistOnSuccess:$true
+            if (-not $statementResult.Success) {
+                return $null
+            }
+        }
+
+        return (Try-EvaluateWholeScriptExpressionInExecContext -ExecContext $execContext -ExpressionAst $ExpressionAst -TimeoutMs $TimeoutMs)
+    } finally {
+        if ($execContext) {
+            try {
+                Close-ExecutionContext -ExecContext $execContext
+            } catch {
+            }
+        }
+    }
+}
+
+function Convert-TextToPowerShellLiteralHereString {
+    param([AllowNull()][string]$Text)
+
+    $body = if ($null -eq $Text) { '' } else { [string]$Text }
+    $body = $body -replace "`r?`n", "`r`n"
+
+    if ($body -notmatch "(?m)^'@\\s*$") {
+        return "@'`r`n$body`r`n'@"
+    }
+
+    if ($body -notmatch '(?m)^"@\s*$') {
+        return "@""`r`n$body`r`n""@"
+    }
+
+    return "@'`r`n$body`r`n'@"
+}
+
+function Get-WhitelistedRecoveredPayloadCandidateText {
+    param([AllowNull()][string]$Text)
+
+    $payloadText = Try-NormalizeRecoveredScriptText -Text $Text
+    if (-not [string]::IsNullOrWhiteSpace($payloadText)) {
+        return [string]$payloadText
+    }
+
+    $rawText = Remove-RecoveredTextTransportArtifacts -Text $Text
+    if ([string]::IsNullOrWhiteSpace($rawText)) {
+        return $null
+    }
+
+    $syntax = Test-PowerShellSyntax -ScriptText $rawText
+    if (-not $syntax.IsValid) {
+        return $null
+    }
+    if (-not (Test-UsefulRecoveredScriptText -Text $rawText)) {
+        return $null
+    }
+
+    return ($rawText.TrimEnd() + "`r`n")
+}
+
+function Test-WhitelistedIexHelperLineText {
+    param([AllowNull()][string]$LineText)
+
+    if ([string]::IsNullOrWhiteSpace($LineText)) {
+        return $true
+    }
+
+    $trim = $LineText.Trim()
+    if ([string]::IsNullOrWhiteSpace($trim)) {
+        return $true
+    }
+
+    if ($trim -match '(?i)\b(?:Invoke-Expression|iex|Start-Process|Invoke-WebRequest|Invoke-RestMethod|Download(?:String|File)|Start-BitsTransfer|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|mshta(?:\.exe)?|rundll32(?:\.exe)?|regsvr32(?:\.exe)?|schtasks(?:\.exe)?|taskkill(?:\.exe)?|Remove-Item|Set-Content|Add-Content|New-Item|Set-ItemProperty)\b') {
+        return $false
+    }
+
+    return ($trim -match '(?i)(FromBase64String|ToBase64String|GZipStream|DeflateStream|MemoryStream|StreamReader|ReadToEnd|New-Object|Set-Variable|Get-Item|Get-Variable|Out-Null|CompressionMode|::Decompress|\.Invoke\(|\.Write|\.Seek|^\$[A-Za-z_][A-Za-z0-9_]*\s*=|^Clear-Host$)')
+}
+
+function Try-EvaluateWhitelistedHelperBlockVariableValue {
+    param(
+        [string[]]$BlockLines = @(),
+        [Parameter(Mandatory)][string]$VariableName,
+        [int]$TimeoutMs = 4000
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VariableName) -or $VariableName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+        return $null
+    }
+
+    $blockText = (@($BlockLines) -join "`r`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($blockText)) {
+        return $null
+    }
+
+    if ($blockText -notmatch '(?i)(FromBase64String|GZipStream|DeflateStream|MemoryStream|StreamReader|ReadToEnd)') {
+        return $null
+    }
+
+    $execContext = $null
+    try {
+        $execContext = New-ExecutionContext
+    } catch {
+        $execContext = $null
+    }
+    if ($execContext) {
+        Initialize-WholeScriptSpecialVariables -ExecContext $execContext
+
+        try {
+            $runResult = Invoke-InContext -ExecContext $execContext -Code $blockText -TimeoutMs $TimeoutMs -PersistOnSuccess:$true
+            if ($runResult.Success) {
+                $evalCode = @"
+`$__psdissect_payload = [string]`$$VariableName
+[pscustomobject]@{ Payload = `$__psdissect_payload }
+"@
+
+                $evalResult = Invoke-InContext -ExecContext $execContext -Code $evalCode -TimeoutMs $TimeoutMs -PersistOnSuccess:$false
+                if ($evalResult.Success -and $evalResult.Result -and @($evalResult.Result).Count -gt 0) {
+                    $payloadContainer = @($evalResult.Result)[-1]
+                    if ($payloadContainer -and $payloadContainer.PSObject.Properties['Payload']) {
+                        return [string]$payloadContainer.Payload
+                    }
+
+                    return [string](@($evalResult.Result) -join [Environment]::NewLine)
+                }
+            }
+        } finally {
+            try {
+                Close-ExecutionContext -ExecContext $execContext
+            } catch {
+            }
+        }
+    }
+
+    $hostPath = $null
+    try {
+        $hostPath = (Get-Process -Id $PID -ErrorAction Stop).Path
+    } catch {
+        $hostPath = $null
+    }
+    if ([string]::IsNullOrWhiteSpace($hostPath) -or -not (Test-Path $hostPath)) {
+        $hostPath = 'pwsh'
+    }
+
+    $tmpRoot = $null
+    try {
+        $scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) { [System.IO.Path]::GetDirectoryName($PSCommandPath) } else { $null }
+        if (-not [string]::IsNullOrWhiteSpace($scriptRoot)) {
+            $tmpRoot = Join-Path $scriptRoot '__psdissect_runner_tmp'
+            if (-not (Test-Path $tmpRoot)) {
+                [System.IO.Directory]::CreateDirectory($tmpRoot) | Out-Null
+            }
+        }
+    } catch {
+        $tmpRoot = $null
+    }
+    if ([string]::IsNullOrWhiteSpace($tmpRoot)) {
+        $tmpRoot = [System.IO.Path]::GetTempPath()
+    }
+    $tmpPath = Join-Path $tmpRoot ('psdissect-whitelist-' + [Guid]::NewGuid().ToString('N') + '.ps1')
+    $outPath = Join-Path $tmpRoot ('psdissect-whitelist-' + [Guid]::NewGuid().ToString('N') + '.txt')
+    $escapedOutPath = $outPath.Replace("'", "''")
+    $runnerLines = @($BlockLines)
+    $runnerLines += ('[System.IO.File]::WriteAllText(''' + $escapedOutPath + ''', [string]$' + $VariableName + ', [System.Text.UTF8Encoding]::new($false))')
+    $runnerText = ($runnerLines -join "`r`n")
+    try {
+        [System.IO.File]::WriteAllText($tmpPath, $runnerText, [System.Text.UTF8Encoding]::new($false))
+
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $hostPath
+        $psi.Arguments = ('-NoProfile -NonInteractive -File "{0}"' -f $tmpPath)
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        if ($null -eq $proc) {
+            return $null
+        }
+
+        if (-not $proc.WaitForExit([Math]::Max(1000, $TimeoutMs))) {
+            try {
+                $proc.Kill($true)
+            } catch {
+            }
+            return $null
+        }
+
+        if (-not (Test-Path $outPath)) {
+            return $null
+        }
+
+        $stdout = [System.IO.File]::ReadAllText($outPath, [System.Text.UTF8Encoding]::new($false))
+        if ([string]::IsNullOrWhiteSpace($stdout)) {
+            return $null
+        }
+
+        return ($stdout.TrimEnd("`r", "`n"))
+    } catch {
+        return $null
+    } finally {
+        try {
+            if (Test-Path $tmpPath) {
+                Remove-Item -LiteralPath $tmpPath -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path $outPath) {
+                Remove-Item -LiteralPath $outPath -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+        }
+    }
+}
+
+function Invoke-ExpandWholeScriptLocalIexPayloadsTextFallback {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+    if ($ScriptText -notmatch '(?i)\b(?:Invoke-Expression|iex)\b' -or
+        $ScriptText -notmatch '(?i)\.readtoend\(\)') {
+        return $ScriptText
+    }
+
+    $lines = @([regex]::Split($ScriptText, "`r?`n"))
+    if ($lines.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $replacements = New-Object 'System.Collections.Generic.List[object]'
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = [string]$lines[$i]
+        $match = [regex]::Match($line, '^\s*(?<left>\$[A-Za-z_][A-Za-z0-9_]*)\s*=\s*\$[A-Za-z_][A-Za-z0-9_]*\.readtoend\(\)\s*$')
+        if (-not $match.Success) {
+            continue
+        }
+
+        $varToken = [string]$match.Groups['left'].Value
+        $varName = $varToken.TrimStart('$')
+        $hasIexUse = $false
+        for ($lookAhead = $i + 1; $lookAhead -lt [Math]::Min($lines.Count, $i + 5); $lookAhead++) {
+            $nextLine = [string]$lines[$lookAhead]
+            if ([string]::IsNullOrWhiteSpace($nextLine)) {
+                continue
+            }
+            if ($nextLine -match ('^\s*(?:Invoke-Expression|IEX)\s+' + [regex]::Escape($varToken) + '\s*$')) {
+                $hasIexUse = $true
+            }
+            break
+        }
+        if (-not $hasIexUse) {
+            continue
+        }
+
+        $helperRev = New-Object 'System.Collections.Generic.List[string]'
+        $nonEmptyCount = 0
+        for ($j = $i - 1; $j -ge 0; $j--) {
+            $helperLine = [string]$lines[$j]
+            if ([string]::IsNullOrWhiteSpace($helperLine)) {
+                if ($helperRev.Count -gt 0) {
+                    $helperRev.Add($helperLine) | Out-Null
+                }
+                continue
+            }
+
+            if (-not (Test-WhitelistedIexHelperLineText -LineText $helperLine)) {
+                if ($helperRev.Count -gt 0) {
+                    break
+                }
+                continue
+            }
+
+            $helperRev.Add($helperLine) | Out-Null
+            $nonEmptyCount++
+            if ($nonEmptyCount -ge 24) {
+                break
+            }
+        }
+
+        if ($helperRev.Count -eq 0) {
+            continue
+        }
+
+        $helperLines = New-Object 'System.Collections.Generic.List[string]'
+        for ($k = $helperRev.Count - 1; $k -ge 0; $k--) {
+            $helperLines.Add([string]$helperRev[$k]) | Out-Null
+        }
+        $helperLines.Add($line) | Out-Null
+
+        $evaluated = Try-EvaluateWhitelistedHelperBlockVariableValue -BlockLines $helperLines.ToArray() -VariableName $varName -TimeoutMs 4000
+        $payloadText = Remove-RecoveredTextTransportArtifacts -Text $evaluated
+        if ([string]::IsNullOrWhiteSpace($payloadText) -or $payloadText.Length -lt 64) {
+            continue
+        }
+
+        $payloadSyntax = Test-PowerShellSyntax -ScriptText $payloadText
+        if (-not $payloadSyntax.IsValid -or (Test-RecoveredScriptLooksWrapperLiteral -Text $payloadText)) {
+            continue
+        }
+
+        $replacementLines = New-Object 'System.Collections.Generic.List[string]'
+        $replacementLines.Add(($varToken + " = @'")) | Out-Null
+        foreach ($payloadLine in @([regex]::Split($payloadText.TrimEnd("`r", "`n"), "`r?`n"))) {
+            $replacementLines.Add([string]$payloadLine) | Out-Null
+        }
+        $replacementLines.Add("'@") | Out-Null
+
+        $replacements.Add([PSCustomObject]@{
+                LineIndex = $i
+                Lines     = @($replacementLines.ToArray())
+            }) | Out-Null
+    }
+
+    if ($replacements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $mutableLines = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($entry in $lines) {
+        $mutableLines.Add([string]$entry) | Out-Null
+    }
+
+    foreach ($replacement in @($replacements.ToArray() | Sort-Object LineIndex -Descending)) {
+        $mutableLines.RemoveAt([int]$replacement.LineIndex)
+        $insertAt = [int]$replacement.LineIndex
+        $replacementLines = @($replacement.Lines)
+        for ($lineIndex = $replacementLines.Count - 1; $lineIndex -ge 0; $lineIndex--) {
+            $mutableLines.Insert($insertAt, [string]$replacementLines[$lineIndex])
+        }
+    }
+
+    $result = ($mutableLines.ToArray() -join "`r`n")
+    $check = Test-PowerShellSyntax -ScriptText $result
+    if ($check.IsValid) {
+        return $result
+    }
+
+    return $ScriptText
+}
+
+function Invoke-ExpandWholeScriptLocalIexPayloads {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
+        [string]$PreExecutionGateMode = 'Balanced',
+        [hashtable]$PreExecutionGateCache = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    if ($ScriptText -notmatch '(?i)\b(?:Invoke-Expression|iex)\b' -or
+        $ScriptText -notmatch '(?i)(FromBase64String|GZipStream|DeflateStream|ReadToEnd|CreateDecryptor|TransformFinalBlock)') {
+        return $ScriptText
+    }
+
+    $textFallback = Invoke-ExpandWholeScriptLocalIexPayloadsTextFallback -ScriptText $ScriptText
+    if ((Get-NormalizedScriptComparisonText -ScriptText $textFallback) -ne (Get-NormalizedScriptComparisonText -ScriptText $ScriptText)) {
+        return $textFallback
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $topLevelStatements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($topLevelStatements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $replacements = New-Object 'System.Collections.Generic.List[object]'
+    $seenRanges = @{}
+
+    for ($i = 0; $i -lt $topLevelStatements.Count; $i++) {
+        if ($replacements.Count -ge 4) {
+            break
+        }
+
+        $statement = $topLevelStatements[$i]
+        $iexArgAst = Get-GatedRoundDynamicIexArgumentAst -Statement $statement
+        if ($null -eq $iexArgAst -or -not $iexArgAst.Extent) {
+            continue
+        }
+
+        $expressionAst = $iexArgAst
+        $replaceStart = [int]$iexArgAst.Extent.StartOffset
+        $replaceEnd = [int]$iexArgAst.Extent.EndOffset
+        $replacementPrefix = $null
+
+        if ($iexArgAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $varName = [string]$iexArgAst.VariablePath.UserPath
+            if (-not [string]::IsNullOrWhiteSpace($varName)) {
+                for ($j = $i - 1; $j -ge 0; $j--) {
+                    $candidateStatement = $topLevelStatements[$j]
+                    if ($candidateStatement -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+                        continue
+                    }
+
+                    $targetVarName = Get-AssignmentTargetVariableName -LeftAst $candidateStatement.Left
+                    if (-not [string]::Equals([string]$targetVarName, $varName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        continue
+                    }
+
+                    if ($null -eq $candidateStatement.Right -or -not $candidateStatement.Right.Extent) {
+                        break
+                    }
+
+                    $expressionAst = $candidateStatement.Right
+                    $replaceStart = [int]$candidateStatement.Extent.StartOffset
+                    $replaceEnd = [int]$candidateStatement.Extent.EndOffset
+                    $replacementPrefix = [string]$candidateStatement.Left.Extent.Text
+                    $prefixStatements = @(Get-WholeScriptContiguousWhitelistedHelperPrefixStatements -Statements $topLevelStatements -BeforeIndex $j)
+                    if (-not (Test-WholeScriptWhitelistedIexExpansionCandidate -PrefixStatements $prefixStatements -ExpressionAst $expressionAst)) {
+                        $expressionAst = $null
+                    } else {
+                        $evaluated = Try-EvaluateWhitelistedWholeScriptPayloadExpression -PrefixStatements $prefixStatements -ExpressionAst $expressionAst -TimeoutMs 4000
+                        $payloadText = Get-WhitelistedRecoveredPayloadCandidateText -Text $evaluated
+                        if (-not [string]::IsNullOrWhiteSpace($payloadText) -and -not (Test-RecoveredScriptLooksWrapperLiteral -Text $payloadText) -and $payloadText.Length -ge 64) {
+                            $replacementText = ([string]$replacementPrefix + ' = ' + (Convert-TextToPowerShellLiteralHereString -Text $payloadText))
+                            $rangeKey = '{0}:{1}' -f $replaceStart, $replaceEnd
+                            if (-not $seenRanges.ContainsKey($rangeKey)) {
+                                $originalText = $ScriptText.Substring($replaceStart, $replaceEnd - $replaceStart)
+                                if (-not [string]::Equals($originalText, $replacementText, [System.StringComparison]::Ordinal)) {
+                                    $seenRanges[$rangeKey] = $true
+                                    $replacements.Add([PSCustomObject]@{
+                                            Start = $replaceStart
+                                            End   = $replaceEnd
+                                            Text  = $replacementText
+                                        }) | Out-Null
+                                }
+                            }
+                        }
+                    }
+
+                    break
+                }
+
+                continue
+            }
+        }
+
+        $prefixStatements = @(Get-WholeScriptContiguousWhitelistedHelperPrefixStatements -Statements $topLevelStatements -BeforeIndex $i)
+        if (-not (Test-WholeScriptWhitelistedIexExpansionCandidate -PrefixStatements $prefixStatements -ExpressionAst $expressionAst)) {
+            continue
+        }
+
+        $evaluated = Try-EvaluateWhitelistedWholeScriptPayloadExpression -PrefixStatements $prefixStatements -ExpressionAst $expressionAst -TimeoutMs 4000
+        $payloadText = Get-WhitelistedRecoveredPayloadCandidateText -Text $evaluated
+        if ([string]::IsNullOrWhiteSpace($payloadText) -or (Test-RecoveredScriptLooksWrapperLiteral -Text $payloadText) -or $payloadText.Length -lt 64) {
+            continue
+        }
+
+        $replacementText = Convert-TextToPowerShellLiteralHereString -Text $payloadText
+        $rangeKey = '{0}:{1}' -f $replaceStart, $replaceEnd
+        if ($seenRanges.ContainsKey($rangeKey)) {
+            continue
+        }
+
+        $originalText = $ScriptText.Substring($replaceStart, $replaceEnd - $replaceStart)
+        if ([string]::Equals($originalText, $replacementText, [System.StringComparison]::Ordinal)) {
+            continue
+        }
+
+        $seenRanges[$rangeKey] = $true
+        $replacements.Add([PSCustomObject]@{
+                Start = $replaceStart
+                End   = $replaceEnd
+                Text  = $replacementText
+            }) | Out-Null
+    }
+
+    if ($replacements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $result = $ScriptText
+    foreach ($replacement in @($replacements.ToArray() | Sort-Object Start -Descending)) {
+        $result = $result.Substring(0, $replacement.Start) + [string]$replacement.Text + $result.Substring($replacement.End)
+    }
+
+    $check = Test-PowerShellSyntax -ScriptText $result
+    if ($check.IsValid) {
+        return $result
+    }
+
+    return $ScriptText
+}
+
+function Test-WholeScriptStaticLaunchableArtifactPath {
+    param([AllowNull()][string]$PathText)
+
+    if ([string]::IsNullOrWhiteSpace($PathText)) {
+        return $false
+    }
+
+    $extension = ''
+    try {
+        $extension = [System.IO.Path]::GetExtension(([string]$PathText).Trim()).ToLowerInvariant()
+    } catch {
+        $extension = ''
+    }
+
+    return ($extension -in @('.ps1', '.psm1', '.psd1', '.bat', '.cmd', '.vbs'))
+}
+
+function Convert-WholeScriptStaticExpansionToCommentBlock {
+    param(
+        [string[]]$HeaderLines = @(),
+        [AllowNull()][string]$BodyText
+    )
+
+    $body = if ($null -eq $BodyText) { '' } else { [string]$BodyText }
+    $body = $body.Trim()
+    if ([string]::IsNullOrWhiteSpace($body)) {
+        return $null
+    }
+
+    if ($body.Length -gt 131072) {
+        $body = $body.Substring(0, 131072).TrimEnd() + "`r`n...[truncated]"
+    }
+
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $lines.Add('PSDissect-LocalLaunchExpansion') | Out-Null
+    foreach ($header in @($HeaderLines)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$header)) {
+            $lines.Add([string]$header) | Out-Null
+        }
+    }
+    $lines.Add('') | Out-Null
+    foreach ($line in @($body -split "`r?`n")) {
+        $lines.Add(([string]$line -replace '#>', '# >')) | Out-Null
+    }
+
+    return "<# " + ($lines -join "`r`n") + "`r`n#>"
+}
+
+function Split-WholeScriptStaticVbsConcatParts {
+    param([AllowNull()][string]$ExpressionText)
+
+    if ([string]::IsNullOrWhiteSpace($ExpressionText)) {
+        return @()
+    }
+
+    $parts = New-Object 'System.Collections.Generic.List[string]'
+    $builder = New-Object System.Text.StringBuilder
+    $inQuote = $false
+    $text = [string]$ExpressionText
+
+    for ($i = 0; $i -lt $text.Length; $i++) {
+        $ch = $text[$i]
+        if ($ch -eq '"') {
+            if ($inQuote -and ($i + 1) -lt $text.Length -and $text[$i + 1] -eq '"') {
+                [void]$builder.Append('""')
+                $i++
+                continue
+            }
+
+            $inQuote = -not $inQuote
+            [void]$builder.Append($ch)
+            continue
+        }
+
+        if (-not $inQuote -and ($ch -eq '+' -or $ch -eq '&')) {
+            $partText = $builder.ToString().Trim()
+            if (-not [string]::IsNullOrWhiteSpace($partText)) {
+                $parts.Add($partText) | Out-Null
+            }
+            [void]$builder.Clear()
+            continue
+        }
+
+        [void]$builder.Append($ch)
+    }
+
+    $tail = $builder.ToString().Trim()
+    if (-not [string]::IsNullOrWhiteSpace($tail)) {
+        $parts.Add($tail) | Out-Null
+    }
+
+    return @($parts.ToArray())
+}
+
+function Get-WholeScriptStaticVbsFirstArgumentText {
+    param([AllowNull()][string]$ArgumentText)
+
+    if ([string]::IsNullOrWhiteSpace($ArgumentText)) {
+        return $null
+    }
+
+    $text = [string]$ArgumentText
+    $builder = New-Object System.Text.StringBuilder
+    $inQuote = $false
+    $parenDepth = 0
+
+    for ($i = 0; $i -lt $text.Length; $i++) {
+        $ch = $text[$i]
+        if ($ch -eq '"') {
+            if ($inQuote -and ($i + 1) -lt $text.Length -and $text[$i + 1] -eq '"') {
+                [void]$builder.Append('""')
+                $i++
+                continue
+            }
+
+            $inQuote = -not $inQuote
+            [void]$builder.Append($ch)
+            continue
+        }
+
+        if (-not $inQuote) {
+            if ($ch -eq '(') {
+                $parenDepth++
+            } elseif ($ch -eq ')' -and $parenDepth -gt 0) {
+                $parenDepth--
+            } elseif ($ch -eq ',' -and $parenDepth -le 0) {
+                break
+            }
+        }
+
+        [void]$builder.Append($ch)
+    }
+
+    return $builder.ToString().Trim()
+}
+
+function Resolve-WholeScriptStaticVbsStringExpressionText {
+    param(
+        [AllowNull()][string]$ExpressionText,
+        [hashtable]$Variables
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ExpressionText)) {
+        return $null
+    }
+
+    $expr = ([string]$ExpressionText).Trim()
+    while ($expr.StartsWith('(') -and $expr.EndsWith(')') -and $expr.Length -gt 2) {
+        $expr = $expr.Substring(1, $expr.Length - 2).Trim()
+    }
+
+    if ($expr -match '^\s*"(?<text>(?:[^"]|"")*)"\s*$') {
+        return ([string]$Matches['text']).Replace('""', '"')
+    }
+
+    if ($expr -match '^(?i:replace)\s*\(\s*(?<base>.+?)\s*,\s*"(?<from>(?:[^"]|"")*)"\s*,\s*"(?<to>(?:[^"]|"")*)"\s*\)\s*$') {
+        $baseText = Resolve-WholeScriptStaticVbsStringExpressionText -ExpressionText ([string]$Matches['base']) -Variables $Variables
+        if ([string]::IsNullOrWhiteSpace($baseText)) {
+            return $null
+        }
+
+        $fromText = ([string]$Matches['from']).Replace('""', '"')
+        $toText = ([string]$Matches['to']).Replace('""', '"')
+        return $baseText.Replace($fromText, $toText)
+    }
+
+    if ($expr -match '^[A-Za-z_][A-Za-z0-9_]*$') {
+        $key = $expr.ToLowerInvariant()
+        if ($Variables -and $Variables.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$Variables[$key])) {
+            return [string]$Variables[$key]
+        }
+    }
+
+    $parts = @(Split-WholeScriptStaticVbsConcatParts -ExpressionText $expr)
+    if ($parts.Count -gt 1) {
+        $builder = New-Object System.Text.StringBuilder
+        foreach ($part in @($parts)) {
+            $partText = Resolve-WholeScriptStaticVbsStringExpressionText -ExpressionText $part -Variables $Variables
+            if ($null -eq $partText) {
+                return $null
+            }
+            [void]$builder.Append([string]$partText)
+        }
+        return $builder.ToString()
+    }
+
+    return $null
+}
+
+function Get-WholeScriptStaticLaunchCommandLinesFromArtifactText {
+    param(
+        [AllowNull()][string]$ArtifactText,
+        [AllowNull()][string]$Extension
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ArtifactText)) {
+        return @()
+    }
+
+    $ext = if ([string]::IsNullOrWhiteSpace($Extension)) { '' } else { [string]$Extension.ToLowerInvariant() }
+    $results = New-Object 'System.Collections.Generic.List[string]'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $tryAdd = {
+        param([AllowNull()][string]$Value)
+        if ([string]::IsNullOrWhiteSpace($Value)) { return }
+        $trimmed = ([string]$Value).Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { return }
+        if ($seen.Add($trimmed)) {
+            $results.Add($trimmed) | Out-Null
+        }
+    }
+
+    switch ($ext) {
+        '.vbs' {
+            $variables = @{}
+            foreach ($line in @([regex]::Split([string]$ArtifactText, "`r?`n"))) {
+                $trimmed = [string]$line
+                if ([string]::IsNullOrWhiteSpace($trimmed)) {
+                    continue
+                }
+                $trimmed = $trimmed.Trim()
+                if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("'")) {
+                    continue
+                }
+
+                if ($trimmed -match '(?i)\.\s*run\s+(?<arg>.+)$') {
+                    $argText = Get-WholeScriptStaticVbsFirstArgumentText -ArgumentText ([string]$Matches['arg'])
+                    $resolvedArg = Resolve-WholeScriptStaticVbsStringExpressionText -ExpressionText $argText -Variables $variables
+                    if (-not [string]::IsNullOrWhiteSpace($resolvedArg)) {
+                        & $tryAdd $resolvedArg
+                    }
+                }
+
+                if ($trimmed -match '^(?i)(?:set\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<rhs>.+)$') {
+                    $rhsText = [string]$Matches['rhs']
+                    if ($rhsText -match '(?i)\bCreateObject\s*\(') {
+                        continue
+                    }
+
+                    $resolvedValue = Resolve-WholeScriptStaticVbsStringExpressionText -ExpressionText $rhsText -Variables $variables
+                    if (-not [string]::IsNullOrWhiteSpace($resolvedValue)) {
+                        $variables[[string]$Matches['name'].ToLowerInvariant()] = [string]$resolvedValue
+                    }
+                }
+            }
+        }
+        '.bat' { }
+        '.cmd' { }
+        default { }
+    }
+
+    if ($results.Count -eq 0) {
+        foreach ($line in @([regex]::Split([string]$ArtifactText, "`r?`n"))) {
+            $trimmed = ([string]$line).Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) {
+                continue
+            }
+            if ($trimmed -match '^(?i)(?:rem\b|::)') {
+                continue
+            }
+            if ($trimmed -match '(?i)\b(?:powershell|pwsh|cmd|wscript|cscript|start)\b' -or
+                $trimmed -match '(?i)\.(?:ps1|psm1|psd1|bat|cmd|vbs)\b') {
+                & $tryAdd $trimmed
+            }
+        }
+    }
+
+    return @($results.ToArray())
+}
+
+function Resolve-WholeScriptStaticArtifactPathFromCommandLineText {
+    param(
+        [AllowNull()][string]$CommandLineText,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CommandLineText)) {
+        return $null
+    }
+
+    $tokenMatches = @(Get-PowerShellHostLooseTokenMatches -Text ([string]$CommandLineText))
+    foreach ($tokenMatch in @($tokenMatches)) {
+        $tokenText = Unwrap-PowerShellHostLooseToken -TokenText ([string]$tokenMatch.Value)
+        if (-not (Test-WholeScriptStaticLaunchableArtifactPath -PathText $tokenText)) {
+            continue
+        }
+
+        $resolvedPath = Resolve-WholeScriptStaticDisplayPath -PathText $tokenText -Context $Context
+        if (-not [string]::IsNullOrWhiteSpace($resolvedPath)) {
+            return $resolvedPath
+        }
+    }
+
+    $pattern = '(?is)(?<path>"(?:[^"]|"")+\.(?:ps1|psm1|psd1|bat|cmd|vbs)"|''(?:[^'']|'''')+\.(?:ps1|psm1|psd1|bat|cmd|vbs)''|(?:[A-Za-z]:|%[^%]+%|\$env:[A-Za-z_][A-Za-z0-9_]*|\.{1,2}[\\/])[^''""\r\n|&<>]*?\.(?:ps1|psm1|psd1|bat|cmd|vbs))'
+    foreach ($match in @([regex]::Matches([string]$CommandLineText, $pattern))) {
+        $candidatePath = Unwrap-PowerShellHostLooseToken -TokenText ([string]$match.Groups['path'].Value)
+        if (-not (Test-WholeScriptStaticLaunchableArtifactPath -PathText $candidatePath)) {
+            continue
+        }
+
+        $resolvedPath = Resolve-WholeScriptStaticDisplayPath -PathText $candidatePath -Context $Context
+        if (-not [string]::IsNullOrWhiteSpace($resolvedPath)) {
+            return $resolvedPath
+        }
+    }
+
+    return $null
+}
+
+function Resolve-WholeScriptStaticLocalLaunchExpansionTextFromScriptText {
+    param(
+        [AllowNull()][string]$ScriptText,
+        [hashtable]$ParentContext = $null,
+        [int]$Depth = 0,
+        [System.Collections.Generic.HashSet[string]]$VisitedPaths = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText) -or $Depth -gt 6) {
+        return $null
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -eq 0) {
+        return $null
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        if ($ParentContext) {
+            if ($ParentContext.ContainsKey('ScriptPath') -and -not [string]::IsNullOrWhiteSpace([string]$ParentContext.ScriptPath)) {
+                $ctx.ScriptPath = [string]$ParentContext.ScriptPath
+            }
+            if ($ParentContext.ContainsKey('PathContext') -and $null -ne $ParentContext.PathContext) {
+                $ctx.PathContext = $ParentContext.PathContext
+            }
+        }
+
+        $staticEvalState = Get-StaticEvalState -Context $ctx
+        if ($staticEvalState) {
+            $staticEvalState.ValueDepthLimit = 64
+            $staticEvalState.StringCompatDepthLimit = 48
+        }
+        $ctx.SafeMode = $true
+
+        $blocks = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($statement in @($statements)) {
+            try {
+                [void](Invoke-WholeScriptStaticStatement -Statement $statement -Context $ctx -AllowEmptyFallback:$false)
+            } catch {
+                if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                    throw
+                }
+            }
+
+            $blockText = Resolve-WholeScriptStaticLocalLaunchExpansionTextFromStatementAst -Statement $statement -Context $ctx -Depth ($Depth + 1) -VisitedPaths $VisitedPaths
+            if (-not [string]::IsNullOrWhiteSpace($blockText)) {
+                $blocks.Add([string]$blockText) | Out-Null
+            }
+        }
+
+        if ($blocks.Count -eq 0) {
+            return $null
+        }
+
+        return (($blocks.ToArray()) -join "`r`n`r`n")
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
+}
+
+function Resolve-WholeScriptStaticLocalLaunchExpansionTextFromArtifactPath {
+    param(
+        [AllowNull()][string]$PathText,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$Depth = 0,
+        [System.Collections.Generic.HashSet[string]]$VisitedPaths = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathText) -or $Depth -gt 6) {
+        return $null
+    }
+
+    $pathInfo = Get-WholeScriptStaticArtifactPathInfo -PathText $PathText -Context $Context
+    if ($null -eq $pathInfo -or $pathInfo.IsRegistry) {
+        return $null
+    }
+
+    if ($null -eq $VisitedPaths) {
+        $VisitedPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    }
+    if (-not $VisitedPaths.Add([string]$pathInfo.CanonicalPath)) {
+        return $null
+    }
+
+    try {
+        $record = Get-WholeScriptStaticFileArtifact -Context $Context -PathText ([string]$pathInfo.DisplayPath)
+        if ($null -eq $record -or [string]$record.Kind -ne 'File') {
+            return $null
+        }
+
+        $contentText = if ($null -eq $record.ContentText) { '' } else { [string]$record.ContentText }
+        if ([string]::IsNullOrWhiteSpace($contentText)) {
+            return $null
+        }
+
+        $extension = ''
+        try {
+            $extension = [System.IO.Path]::GetExtension([string]$record.DisplayPath).ToLowerInvariant()
+        } catch {
+            $extension = ''
+        }
+
+        $blocks = New-Object 'System.Collections.Generic.List[string]'
+        $headerLines = @(
+            ('SourcePath: ' + [string]$record.DisplayPath),
+            ('ArtifactType: ' + $(if ([bool]$record.IsPowerShell) { 'PowerShell' } elseif (-not [string]::IsNullOrWhiteSpace($extension)) { $extension } else { 'Text' }))
+        )
+
+        if ([bool]$record.IsPowerShell) {
+            $payloadText = Try-NormalizeStaticArtifactPayloadText -Text $contentText
+            if ([string]::IsNullOrWhiteSpace($payloadText)) {
+                $payloadText = $contentText.Trim()
+            }
+
+            $mainBlock = Convert-WholeScriptStaticExpansionToCommentBlock -HeaderLines $headerLines -BodyText $payloadText
+            if (-not [string]::IsNullOrWhiteSpace($mainBlock)) {
+                $blocks.Add([string]$mainBlock) | Out-Null
+            }
+
+            $nestedText = Resolve-WholeScriptStaticLocalLaunchExpansionTextFromScriptText -ScriptText $payloadText -ParentContext $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths
+            if (-not [string]::IsNullOrWhiteSpace($nestedText)) {
+                $blocks.Add([string]$nestedText) | Out-Null
+            }
+        } else {
+            if ($extension -in @('.bat', '.cmd', '.vbs', '.ps1', '.psm1', '.psd1')) {
+                $mainBlock = Convert-WholeScriptStaticExpansionToCommentBlock -HeaderLines $headerLines -BodyText $contentText
+                if (-not [string]::IsNullOrWhiteSpace($mainBlock)) {
+                    $blocks.Add([string]$mainBlock) | Out-Null
+                }
+            }
+
+            foreach ($commandLine in @(Get-WholeScriptStaticLaunchCommandLinesFromArtifactText -ArtifactText $contentText -Extension $extension)) {
+                $nestedText = Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandLineText -CommandLineText $commandLine -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths
+                if (-not [string]::IsNullOrWhiteSpace($nestedText)) {
+                    $blocks.Add([string]$nestedText) | Out-Null
+                }
+            }
+        }
+
+        if ($blocks.Count -eq 0) {
+            return $null
+        }
+
+        return (($blocks.ToArray()) -join "`r`n`r`n")
+    } finally {
+        [void]$VisitedPaths.Remove([string]$pathInfo.CanonicalPath)
+    }
+}
+
+function Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandLineText {
+    param(
+        [AllowNull()][string]$CommandLineText,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$Depth = 0,
+        [System.Collections.Generic.HashSet[string]]$VisitedPaths = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CommandLineText) -or $Depth -gt 6) {
+        return $null
+    }
+
+    $artifactPath = Resolve-WholeScriptStaticArtifactPathFromCommandLineText -CommandLineText $CommandLineText -Context $Context
+    if ([string]::IsNullOrWhiteSpace($artifactPath)) {
+        return $null
+    }
+
+    return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromArtifactPath -PathText $artifactPath -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+}
+
+function Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandAst {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$Depth = 0,
+        [System.Collections.Generic.HashSet[string]]$VisitedPaths = $null
+    )
+
+    if ($Depth -gt 6) {
+        return $null
+    }
+
+    $elements = @($CommandAst.CommandElements)
+    if ($elements.Count -eq 0) {
+        return $null
+    }
+
+    $targetAst = $null
+    switch ([string]$CommandAst.InvocationOperator) {
+        'Ampersand' { if ($elements.Count -ge 1) { $targetAst = $elements[0] } }
+        'Dot'       { if ($elements.Count -ge 1) { $targetAst = $elements[0] } }
+    }
+    if ($null -eq $targetAst) {
+        $headText = if ($elements[0] -and $elements[0].Extent) { [string]$elements[0].Extent.Text } else { $null }
+        if ($headText -in @('&', '.') -and $elements.Count -ge 2) {
+            $targetAst = $elements[1]
+        }
+    }
+    if ($null -ne $targetAst) {
+        $artifactPath = Resolve-WholeScriptStaticArtifactPathTextFromAst -Ast $targetAst -Context $Context
+        if (Test-WholeScriptStaticLaunchableArtifactPath -PathText $artifactPath) {
+            return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromArtifactPath -PathText $artifactPath -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+        }
+    }
+
+    $headPath = Resolve-WholeScriptStaticArtifactPathTextFromAst -Ast $elements[0] -Context $Context
+    if (Test-WholeScriptStaticLaunchableArtifactPath -PathText $headPath) {
+        return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromArtifactPath -PathText $headPath -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+    }
+
+    $cmdName = Convert-DynamicCommandCandidateToName -Value $CommandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($cmdName)) {
+        return $null
+    }
+
+    $binding = Get-StaticCommandArgumentBinding -CommandAst $CommandAst
+    switch -Regex ($cmdName) {
+        '^(?i:powershell|pwsh)(?:\.exe)?$' {
+            foreach ($key in @('file', 'f')) {
+                if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                    $artifactPath = Resolve-WholeScriptStaticArtifactPathTextFromAst -Ast $binding.Parameters[$key] -Context $Context
+                    if (Test-WholeScriptStaticLaunchableArtifactPath -PathText $artifactPath) {
+                        return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromArtifactPath -PathText $artifactPath -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+                    }
+                }
+            }
+
+            $commandLineText = if ($CommandAst.Extent) { [string]$CommandAst.Extent.Text } else { $null }
+            return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandLineText -CommandLineText $commandLineText -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+        }
+        '^(?i:cmd|cmd\.exe|wscript|wscript\.exe|cscript|cscript\.exe)$' {
+            $commandLineText = if ($CommandAst.Extent) { [string]$CommandAst.Extent.Text } else { $null }
+            return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandLineText -CommandLineText $commandLineText -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+        }
+        '^(?i:start-process|start|saps)$' {
+            $fileAst = $null
+            foreach ($key in @('filepath')) {
+                if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                    $fileAst = $binding.Parameters[$key]
+                    break
+                }
+            }
+            if ($null -eq $fileAst -and $binding.Positional.Count -gt 0) {
+                $fileAst = $binding.Positional[0]
+            }
+
+            $hostPath = Resolve-WholeScriptStaticArtifactPathTextFromAst -Ast $fileAst -Context $Context
+            if (Test-WholeScriptStaticLaunchableArtifactPath -PathText $hostPath) {
+                return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromArtifactPath -PathText $hostPath -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+            }
+
+            $argAst = $null
+            foreach ($key in @('argumentlist')) {
+                if ($binding.Parameters.ContainsKey($key) -and $binding.Parameters[$key]) {
+                    $argAst = $binding.Parameters[$key]
+                    break
+                }
+            }
+            if ($null -eq $argAst -and $binding.Positional.Count -gt 1) {
+                $argAst = $binding.Positional[1]
+            }
+
+            $argumentText = Resolve-WholeScriptStaticCommandValueTextFromAst -Ast $argAst -Context $Context -Delimiter ' '
+            $commandLineText = if ([string]::IsNullOrWhiteSpace($argumentText)) {
+                $hostPath
+            } elseif ([string]::IsNullOrWhiteSpace($hostPath)) {
+                $argumentText
+            } else {
+                ($hostPath + ' ' + $argumentText).Trim()
+            }
+
+            return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandLineText -CommandLineText $commandLineText -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+        }
+        '^(?i:schtasks(?:\.exe)?)$' {
+            $commandText = if ($CommandAst.Extent) { [string]$CommandAst.Extent.Text } else { $null }
+            if ([string]::IsNullOrWhiteSpace($commandText)) {
+                return $null
+            }
+
+            $trMatch = [regex]::Match($commandText, '(?is)(?:^|\s)(?:/TR|-TR)\s+(?<cmd>"(?:[^"]|"")*"|''(?:[^'']|'''')*''|\S+)')
+            if (-not $trMatch.Success) {
+                return $null
+            }
+
+            $taskCommandLine = Unwrap-PowerShellHostLooseToken -TokenText ([string]$trMatch.Groups['cmd'].Value)
+            return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandLineText -CommandLineText $taskCommandLine -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+        }
+    }
+
+    return $null
+}
+
+function Resolve-WholeScriptStaticLocalLaunchExpansionTextFromStatementAst {
+    param(
+        $Statement,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [int]$Depth = 0,
+        [System.Collections.Generic.HashSet[string]]$VisitedPaths = $null
+    )
+
+    $commandAst = Get-WholeScriptSingleCommandAst -Ast $Statement
+    if ($null -eq $commandAst) {
+        return $null
+    }
+
+    return (Resolve-WholeScriptStaticLocalLaunchExpansionTextFromCommandAst -CommandAst $commandAst -Context $Context -Depth ($Depth + 1) -VisitedPaths $VisitedPaths)
+}
+
+function Invoke-ExpandWholeScriptLocalArtifactLaunchPass {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText) -or
+        $ScriptText -notmatch '(?i)\b(?:Start-Process|start|saps|powershell|pwsh|cmd|wscript|cscript|schtasks)\b') {
+        return $ScriptText
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $staticEvalState = Get-StaticEvalState -Context $ctx
+        if ($staticEvalState) {
+            $staticEvalState.ValueDepthLimit = 64
+            $staticEvalState.StringCompatDepthLimit = 48
+        }
+        $ctx.SafeMode = $true
+
+        $replacements = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($statement in @($statements)) {
+            try {
+                [void](Invoke-WholeScriptStaticStatement -Statement $statement -Context $ctx -AllowEmptyFallback:$false)
+            } catch {
+                if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                    throw
+                }
+            }
+
+            if ($null -eq $statement -or $null -eq $statement.Extent) {
+                continue
+            }
+
+            $launchExpansionText = Resolve-WholeScriptStaticLocalLaunchExpansionTextFromStatementAst -Statement $statement -Context $ctx -Depth 0
+            if ([string]::IsNullOrWhiteSpace($launchExpansionText)) {
+                continue
+            }
+
+            $replacement = ([string]$statement.Extent.Text).TrimEnd() + "`r`n" + [string]$launchExpansionText
+            $replacements.Add([PSCustomObject]@{
+                    StartOffset = [int]$statement.Extent.StartOffset
+                    EndOffset   = [int]$statement.Extent.EndOffset
+                    Replacement = [string]$replacement
+                }) | Out-Null
+        }
+
+        if ($replacements.Count -eq 0) {
+            return $ScriptText
+        }
+
+        $selectedInfo = Select-NonOverlappingReplacements -Candidates @($replacements.ToArray()) -Strategy 'Outer'
+        $selected = @($selectedInfo.Selected)
+        if ($selected.Count -eq 0) {
+            return $ScriptText
+        }
+
+        $rewritten = Apply-ReplacementsToText -Text $ScriptText -Replacements $selected
+        $check = Test-PowerShellSyntax -ScriptText $rewritten
+        if ($check.IsValid) {
+            return $rewritten
+        }
+
+        return $ScriptText
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
+}
+
+function Get-GatedRoundSafeExtractionSinkInfo {
+    param($Statement)
+
+    if ($null -eq $Statement -or -not $Statement.PSObject.Properties['Extent'] -or $null -eq $Statement.Extent) {
+        return $null
+    }
+
+    $statementText = [string]$Statement.Extent.Text
+    if ([string]::IsNullOrWhiteSpace($statementText)) {
+        return $null
+    }
+
+    $reasons = New-Object 'System.Collections.Generic.List[string]'
+    $tryAddReason = {
+        param([string]$Reason)
+
+        if ([string]::IsNullOrWhiteSpace($Reason)) {
+            return
+        }
+
+        if (-not $reasons.Contains([string]$Reason)) {
+            $reasons.Add([string]$Reason) | Out-Null
+        }
+    }
+
+    $dynamicIexArgument = Get-GatedRoundDynamicIexArgumentAst -Statement $Statement
+    if ($dynamicIexArgument) {
+        & $tryAddReason 'dynamic_iex'
+    }
+
+    $commandNames = New-Object 'System.Collections.Generic.List[string]'
+    $tryAddCommandName = {
+        param([AllowNull()][string]$Name)
+
+        if ([string]::IsNullOrWhiteSpace($Name)) {
+            return
+        }
+
+        $canonicalName = [string](Convert-DynamicCommandCandidateToName -Value $Name)
+        if ([string]::IsNullOrWhiteSpace($canonicalName)) {
+            return
+        }
+
+        if (-not $commandNames.Contains($canonicalName)) {
+            $commandNames.Add($canonicalName) | Out-Null
+        }
+    }
+
+    if ($Statement -is [System.Management.Automation.Language.CommandAst]) {
+        & $tryAddCommandName $Statement.GetCommandName()
+    } elseif ($Statement -is [System.Management.Automation.Language.PipelineAst]) {
+        foreach ($element in @($Statement.PipelineElements)) {
+            if ($element -is [System.Management.Automation.Language.CommandAst]) {
+                & $tryAddCommandName $element.GetCommandName()
+            }
+        }
+    }
+
+    foreach ($commandName in @($commandNames.ToArray())) {
+        if ($commandName -match '^(?i:invoke-expression|iex)$') {
+            & $tryAddReason 'invoke_expression'
+        }
+        if ($commandName -match '^(?i:powershell|pwsh|cmd|cmd\.exe|start-process|start|saps)$') {
+            & $tryAddReason 'host_wrapper'
+        }
+    }
+
+    if ($statementText -match '(?i)(?:^|\s)-(?:enc|encodedcommand)\b') {
+        & $tryAddReason 'encoded_command'
+    }
+    if ($statementText -match '(?i)\bFromBase64String\b') {
+        & $tryAddReason 'base64_decode'
+    }
+    if ($statementText -match '(?i)\b(?:DeflateStream|GZipStream)\b' -and
+        $statementText -match '(?i)\bReadToEnd\b') {
+        & $tryAddReason 'compressed_loader'
+    }
+
+    if ($reasons.Count -eq 0) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        Reasons = @($reasons.ToArray())
+    }
+}
+
+function Try-Resolve-GatedRoundIntermediatePrefixPayloadInfo {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [hashtable]$PreExecutionGateCache = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -lt 2) {
+        return $null
+    }
+
+    for ($index = $statements.Count - 1; $index -ge 0; $index--) {
+        $statement = $statements[$index]
+        $sinkInfo = Get-GatedRoundSafeExtractionSinkInfo -Statement $statement
+        if ($null -eq $sinkInfo -or $null -eq $statement.Extent) {
+            continue
+        }
+
+        $prefixEnd = [int]$statement.Extent.EndOffset
+        if ($prefixEnd -le 0 -or $prefixEnd -gt $ScriptText.Length -or $prefixEnd -eq $ScriptText.Length) {
+            continue
+        }
+
+        $prefixScript = $ScriptText.Substring(0, $prefixEnd)
+        if ([string]::IsNullOrWhiteSpace($prefixScript)) {
+            continue
+        }
+
+        $attempts = @()
+
+        $mandatoryBase64Payload = Try-Resolve-WholeScriptMandatoryBase64PayloadInfo -ScriptText $prefixScript
+        if ($mandatoryBase64Payload -and -not [string]::IsNullOrWhiteSpace([string]$mandatoryBase64Payload.PayloadText)) {
+            $attempts += [PSCustomObject]@{
+                PayloadText = [string]$mandatoryBase64Payload.PayloadText
+                Source      = if ($mandatoryBase64Payload.PSObject.Properties['DecodeSource']) { [string]$mandatoryBase64Payload.DecodeSource } else { 'gated_prefix_mandatory_base64' }
+            }
+        }
+
+        $compressedLoaderPayload = Try-Resolve-WholeScriptStaticCompressedLoaderPayloadInfo -ScriptText $prefixScript
+        if ($compressedLoaderPayload -and -not [string]::IsNullOrWhiteSpace([string]$compressedLoaderPayload.PayloadText)) {
+            $attempts += [PSCustomObject]@{
+                PayloadText = [string]$compressedLoaderPayload.PayloadText
+                Source      = if ($compressedLoaderPayload.PSObject.Properties['DecodeSource']) { [string]$compressedLoaderPayload.DecodeSource } else { 'gated_prefix_static_compressed_loader' }
+            }
+        }
+
+        $hostPayload = Resolve-WholeScriptHostPayloadInfo -ScriptText $prefixScript
+        if ($hostPayload -and -not [string]::IsNullOrWhiteSpace([string]$hostPayload.PayloadText)) {
+            $attempts += [PSCustomObject]@{
+                PayloadText = [string]$hostPayload.PayloadText
+                Source      = if ($hostPayload.PSObject.Properties['DecodeSource']) { [string]$hostPayload.DecodeSource } else { 'gated_prefix_host_wrapper' }
+            }
+        }
+
+        try {
+            $staticPayload = Resolve-WholeScriptStaticPayloadInfo -ScriptText $prefixScript -PreExecutionGateMode 'Disabled' -PreExecutionGateCache $PreExecutionGateCache -SafeMode:$false
+        } catch {
+            $staticPayload = $null
+        }
+        if ($staticPayload -and -not [string]::IsNullOrWhiteSpace([string]$staticPayload.PayloadText)) {
+            $attempts += [PSCustomObject]@{
+                PayloadText = [string]$staticPayload.PayloadText
+                Source      = if ($staticPayload.PSObject.Properties['DecodeSource']) { [string]$staticPayload.DecodeSource } else { 'gated_prefix_static_payload' }
+            }
+        }
+
+        foreach ($attempt in @($attempts)) {
+            if ($null -eq $attempt -or [string]::IsNullOrWhiteSpace([string]$attempt.PayloadText)) {
+                continue
+            }
+
+            $resultPayloadText = [string]$attempt.PayloadText
+            $tailText = if ($prefixEnd -lt $ScriptText.Length) {
+                [string]$ScriptText.Substring($prefixEnd)
+            } else {
+                ''
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($tailText)) {
+                $combinedCandidate = (($resultPayloadText.TrimEnd()) + "`r`n`r`n" + $tailText.TrimStart("`r", "`n"))
+                $combinedPayloadText = Get-WholeScriptReplacementCandidateText -OriginalText $ScriptText -CandidateText $combinedCandidate
+                if (-not [string]::IsNullOrWhiteSpace($combinedPayloadText)) {
+                    $combinedParse = Test-PowerShellSyntax -ScriptText $combinedPayloadText
+                    if ($combinedParse.IsValid) {
+                        $resultPayloadText = [string]$combinedPayloadText
+                    }
+                }
+            }
+
+            return [PSCustomObject]@{
+                PayloadText     = [string]$resultPayloadText
+                Source          = [string]$attempt.Source
+                StatementIndex  = [int]$index
+                PrefixEndOffset = [int]$prefixEnd
+                SinkReasons     = @($sinkInfo.Reasons)
+            }
+        }
+    }
+
+    return $null
+}
+
+function Test-WholeScriptBootstrapHelperScriptAllowed {
+    param(
+        [string]$ScriptText,
+        [string[]]$RequiredHelperNames = @()
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $false
+    }
+
+    $topLevelStatements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($topLevelStatements.Count -eq 0) {
+        return $false
+    }
+
+    $foundRequiredHelper = ($RequiredHelperNames.Count -eq 0)
+    foreach ($statement in @($topLevelStatements)) {
+        if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+            if (-not (Test-WholeScriptLocalHelperFunctionAllowed -FunctionAst $statement)) {
+                return $false
+            }
+            if (-not $foundRequiredHelper -and ([string]$statement.Name) -in @($RequiredHelperNames)) {
+                $foundRequiredHelper = $true
+            }
+            continue
+        }
+
+        if (-not (Test-WholeScriptEvalFallbackAllowed -Ast $statement -AllowFunctionDefinitions:$true)) {
+            return $false
+        }
+    }
+
+    return $foundRequiredHelper
+}
+
+function Get-WholeScriptSingleCommandAst {
+    param($Ast)
+
+    if ($null -eq $Ast) {
+        return $null
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandAst]) {
+        return $Ast
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.PipelineAst]) {
+        $elements = @($Ast.PipelineElements)
+        if ($elements.Count -eq 1 -and $elements[0] -is [System.Management.Automation.Language.CommandAst]) {
+            return $elements[0]
+        }
+        return $null
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return (Get-WholeScriptSingleCommandAst -Ast $Ast.Expression)
+    }
+
+    return $null
+}
+
+function Get-WholeScriptKnownEncodingObject {
+    param([AllowNull()][string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return $null
+    }
+
+    switch -Regex (([string]$Name).Trim()) {
+        '^(?i:ascii|asciiencoding)$' { return [System.Text.Encoding]::ASCII }
+        '^(?i:utf8|utf8encoding)$' { return [System.Text.Encoding]::UTF8 }
+        '^(?i:unicode|unicodeencoding)$' { return [System.Text.Encoding]::Unicode }
+        '^(?i:bigendianunicode|bigendianunicodeencoding)$' { return [System.Text.Encoding]::BigEndianUnicode }
+        '^(?i:default)$' { return [System.Text.Encoding]::Default }
+        '^(?i:utf32|utf32encoding)$' { return [System.Text.Encoding]::UTF32 }
+    }
+
+    return $null
+}
+
+function Try-Resolve-WholeScriptEmbeddedPasswordDeriveTripleDesPayloadText {
+    param(
+        [Parameter(Mandatory)][string]$HelperScriptText,
+        [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$HelperCallAst
+    )
+
+    if ([string]::IsNullOrWhiteSpace($HelperScriptText)) {
+        return $null
+    }
+
+    $callCommandName = Convert-DynamicCommandCandidateToName -Value $HelperCallAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($callCommandName)) {
+        return $null
+    }
+
+    $callElements = @($HelperCallAst.CommandElements)
+    if ($callElements.Count -lt 3) {
+        return $null
+    }
+
+    $callArg1 = Try-GetStaticStringValue -Ast $callElements[1] -Context $null
+    $callArg2 = Try-GetStaticStringValue -Ast $callElements[2] -Context $null
+    if ([string]::IsNullOrWhiteSpace($callArg1) -or [string]::IsNullOrWhiteSpace($callArg2)) {
+        return $null
+    }
+
+    $helperTokens = $null
+    $helperParseErrors = $null
+    try {
+        $helperAst = [System.Management.Automation.Language.Parser]::ParseInput($HelperScriptText, [ref]$helperTokens, [ref]$helperParseErrors)
+    } catch {
+        return $null
+    }
+
+    if ($null -eq $helperAst -or @($helperParseErrors).Count -gt 0) {
+        return $null
+    }
+
+    $helperFunction = @($helperAst.EndBlock.Statements | Where-Object {
+            $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.Name)
+        } | Select-Object -First 1)
+    if ($helperFunction.Count -eq 0) {
+        return $null
+    }
+
+    $helperFunctionAst = $helperFunction[0]
+    if ([string]::IsNullOrWhiteSpace([string]$helperFunctionAst.Name) -or $helperFunctionAst.Name -ine $callCommandName) {
+        return $null
+    }
+
+    $cipherBase64 = $null
+    try {
+        $stringNodes = @($helperFunctionAst.Body.FindAll({
+                    param($node)
+                    $node -is [System.Management.Automation.Language.StringConstantExpressionAst]
+                }, $true))
+    } catch {
+        $stringNodes = @()
+    }
+
+    foreach ($stringNode in @($stringNodes)) {
+        $candidateValue = [string]$stringNode.Value
+        if ([string]::IsNullOrWhiteSpace($candidateValue)) {
+            continue
+        }
+        if ($candidateValue.Length -lt 128) {
+            continue
+        }
+        if (($candidateValue.Length % 4) -ne 0) {
+            continue
+        }
+        if ($candidateValue -notmatch '^[A-Za-z0-9+/=]+$') {
+            continue
+        }
+
+        $cipherBase64 = $candidateValue
+        break
+    }
+
+    if ([string]::IsNullOrWhiteSpace($cipherBase64)) {
+        return $null
+    }
+
+    $encodingName = $null
+    $encodingPattern = '(?is)System\.Text\.(?<ctor>ASCIIEncoding|UTF8Encoding|UnicodeEncoding|BigEndianUnicodeEncoding|UTF32Encoding)|Encoding\]::(?<static>ASCII|UTF8|Unicode|BigEndianUnicode|Default|UTF32)'
+    $encodingMatch = [regex]::Match($HelperScriptText, $encodingPattern)
+    if ($encodingMatch.Success) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$encodingMatch.Groups['ctor'].Value)) {
+            $encodingName = [string]$encodingMatch.Groups['ctor'].Value
+        } elseif (-not [string]::IsNullOrWhiteSpace([string]$encodingMatch.Groups['static'].Value)) {
+            $encodingName = [string]$encodingMatch.Groups['static'].Value
+        }
+    }
+
+    $encoding = Get-WholeScriptKnownEncodingObject -Name $encodingName
+    if ($null -eq $encoding) {
+        return $null
+    }
+
+    $ivLiteral = $null
+    $literalGetBytesMatches = @([regex]::Matches($HelperScriptText, '(?is)\.GetBytes\(\s*"(?<value>[^"\r\n]+)"\s*\)'))
+    foreach ($literalGetBytesMatch in @($literalGetBytesMatches)) {
+        $candidateIv = [string]$literalGetBytesMatch.Groups['value'].Value
+        if ([string]::IsNullOrWhiteSpace($candidateIv)) {
+            continue
+        }
+        if ($candidateIv -ieq $callArg1 -or $candidateIv -ieq $callArg2) {
+            continue
+        }
+        $ivLiteral = $candidateIv
+        break
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ivLiteral)) {
+        return $null
+    }
+
+    $deriveTypeToken = ('Password' + 'DeriveBytes')
+    $derivePattern = '(?is)' + [regex]::Escape($deriveTypeToken) + '\(\s*\$[A-Za-z_]\w*\s*,\s*[^,]+,\s*"(?<hash>[^"]+)"\s*,\s*(?<iter>\d+)'
+    $deriveMatch = [regex]::Match($HelperScriptText, $derivePattern)
+    if (-not $deriveMatch.Success) {
+        return $null
+    }
+
+    $hashName = [string]$deriveMatch.Groups['hash'].Value
+    $iterationText = [string]$deriveMatch.Groups['iter'].Value
+    $iterations = 0
+    if ([string]::IsNullOrWhiteSpace($hashName) -or -not [int]::TryParse($iterationText, [ref]$iterations) -or $iterations -lt 1) {
+        return $null
+    }
+
+    $keyLengthMatch = [regex]::Match($HelperScriptText, '(?is)\.GetBytes\(\s*(?<length>\d{1,3})\s*\)')
+    $keyLength = 0
+    if (-not $keyLengthMatch.Success -or -not [int]::TryParse([string]$keyLengthMatch.Groups['length'].Value, [ref]$keyLength) -or $keyLength -lt 8) {
+        return $null
+    }
+
+    $providerTypeToken = ('Triple' + 'DES' + 'CryptoServiceProvider')
+    if ($HelperScriptText -notmatch [regex]::Escape($providerTypeToken)) {
+        return $null
+    }
+    if ($HelperScriptText -notmatch '(?is)CipherMode\]::CBC') {
+        return $null
+    }
+
+    $cipherBytes = $null
+    $deriveInstance = $null
+    $provider = $null
+    $memoryStream = $null
+    $cryptoStream = $null
+    try {
+        $cipherBytes = [Convert]::FromBase64String($cipherBase64)
+        if ($null -eq $cipherBytes -or $cipherBytes.Length -eq 0) {
+            return $null
+        }
+
+        $saltBytes = $encoding.GetBytes($callArg2)
+        $ivBytes = $encoding.GetBytes($ivLiteral)
+        if ($null -eq $saltBytes -or $null -eq $ivBytes) {
+            return $null
+        }
+
+        $deriveTypeName = 'System.Security.Cryptography.' + $deriveTypeToken
+        $deriveInstance = New-Object $deriveTypeName ($callArg1, $saltBytes, $hashName, $iterations)
+        if ($null -eq $deriveInstance) {
+            return $null
+        }
+
+        [byte[]]$keyBytes = $deriveInstance.GetBytes($keyLength)
+        if ($null -eq $keyBytes -or $keyBytes.Length -eq 0) {
+            return $null
+        }
+
+        $providerTypeName = 'System.Security.Cryptography.' + $providerTypeToken
+        $provider = New-Object $providerTypeName
+        $provider.Mode = [System.Security.Cryptography.CipherMode]::CBC
+
+        $decryptor = $provider.CreateDecryptor($keyBytes, $ivBytes)
+        if ($null -eq $decryptor) {
+            return $null
+        }
+
+        $memoryStream = New-Object System.IO.MemoryStream($cipherBytes, $true)
+        $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $decryptor, [System.Security.Cryptography.CryptoStreamMode]::Read)
+        [byte[]]$buffer = New-Object byte[]($cipherBytes.Length)
+        [void]$cryptoStream.Read($buffer, 0, $buffer.Length)
+
+        if (($buffer.Length -gt 3) -and ($buffer[0] -eq 0xEF) -and ($buffer[1] -eq 0xBB) -and ($buffer[2] -eq 0xBF)) {
+            $buffer = $buffer[3..($buffer.Length - 1)]
+        }
+
+        $payloadText = $encoding.GetString($buffer).TrimEnd([char]0)
+        if ([string]::IsNullOrWhiteSpace($payloadText)) {
+            return $null
+        }
+
+        return $payloadText
+    } catch {
+        return $null
+    } finally {
+        if ($cryptoStream) {
+            try {
+                $cryptoStream.Close()
+            } catch {
+            }
+        }
+        if ($memoryStream) {
+            try {
+                $memoryStream.Close()
+            } catch {
+            }
+        }
+        if ($provider) {
+            try {
+                $provider.Clear()
+            } catch {
+            }
+        }
+    }
+}
+
+function Try-Resolve-GatedRoundStaticCryptoHelperPayloadInfo {
+    param(
+        $TargetExpressionAst,
+        [hashtable]$HelperTextMap = $null,
+        [AllowNull()][string]$OriginalText = $null
+    )
+
+    if ($null -eq $TargetExpressionAst -or $null -eq $HelperTextMap -or $HelperTextMap.Count -eq 0) {
+        return $null
+    }
+
+    $helperCommandAst = Get-WholeScriptSingleCommandAst -Ast $TargetExpressionAst
+    if ($null -eq $helperCommandAst) {
+        return $null
+    }
+
+    $helperCommandName = Convert-DynamicCommandCandidateToName -Value $helperCommandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($helperCommandName)) {
+        return $null
+    }
+
+    $helperScriptText = $null
+    foreach ($mapKey in @($HelperTextMap.Keys)) {
+        if ([string]::IsNullOrWhiteSpace([string]$mapKey)) {
+            continue
+        }
+        if ([string]$mapKey -ieq $helperCommandName) {
+            $helperScriptText = [string]$HelperTextMap[$mapKey]
+            break
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($helperScriptText)) {
+        return $null
+    }
+
+    $payloadText = Try-Resolve-WholeScriptEmbeddedPasswordDeriveTripleDesPayloadText -HelperScriptText $helperScriptText -HelperCallAst $helperCommandAst
+    if ([string]::IsNullOrWhiteSpace($payloadText)) {
+        return $null
+    }
+
+    $comparisonOriginal = if (-not [string]::IsNullOrWhiteSpace($OriginalText)) { [string]$OriginalText } else { $null }
+    $candidateVariants = New-Object 'System.Collections.Generic.List[string]'
+
+    $normalizedPayload = Try-NormalizeRecoveredScriptText -Text $payloadText
+    if (-not [string]::IsNullOrWhiteSpace($normalizedPayload)) {
+        $candidateVariants.Add([string]$normalizedPayload) | Out-Null
+    }
+
+    $cleanPayloadText = Remove-RecoveredTextTransportArtifacts -Text $payloadText
+    if (-not [string]::IsNullOrWhiteSpace($cleanPayloadText)) {
+        $candidateVariants.Add([string]$cleanPayloadText) | Out-Null
+    }
+
+    foreach ($candidateVariant in @($candidateVariants.ToArray())) {
+        $candidateScript = Get-WholeScriptReplacementCandidateText -OriginalText $comparisonOriginal -CandidateText $candidateVariant
+        if ([string]::IsNullOrWhiteSpace($candidateScript)) {
+            continue
+        }
+        if (-not (Test-UsefulRecoveredScriptText -Text $candidateScript)) {
+            continue
+        }
+
+        return [PSCustomObject]@{
+            PayloadText = [string]$candidateScript
+            Source      = 'gated_helper_bootstrap_static_crypto'
+        }
+    }
+
+    return $null
+}
+
+function Try-Resolve-GatedRoundBootstrapHelperPayloadInfo {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [hashtable]$PreExecutionGateCache = $null,
+        [int]$TimeoutMs = 4000
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -lt 2) {
+        return $null
+    }
+
+    for ($targetIndex = ($statements.Count - 1); $targetIndex -ge 0; $targetIndex--) {
+        $targetStatement = $statements[$targetIndex]
+        $sinkArgAst = Get-GatedRoundDynamicIexArgumentAst -Statement $targetStatement
+        if ($null -eq $sinkArgAst) {
+            continue
+        }
+
+        $sourceAssignmentIndex = -1
+        if ($sinkArgAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
+            $sourceVarName = [string]$sinkArgAst.VariablePath.UserPath
+            if (-not [string]::IsNullOrWhiteSpace($sourceVarName)) {
+                for ($j = $targetIndex - 1; $j -ge 0; $j--) {
+                    $candidateAssign = $statements[$j]
+                    if ($candidateAssign -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+                        continue
+                    }
+                    $assignedVarName = Get-AssignmentTargetVariableName -LeftAst $candidateAssign.Left
+                    if ([string]::IsNullOrWhiteSpace($assignedVarName)) {
+                        continue
+                    }
+                    if ($assignedVarName -ieq $sourceVarName) {
+                        $sourceAssignmentIndex = $j
+                        break
+                    }
+                }
+            }
+        }
+
+        $targetExpressionAst = $sinkArgAst
+        if ($sourceAssignmentIndex -ge 0) {
+            $targetExpressionAst = $statements[$sourceAssignmentIndex].Right
+        }
+        if ($null -eq $targetExpressionAst) {
+            continue
+        }
+
+        $helperNames = @(Get-WholeScriptAstCommandNames -Ast $targetExpressionAst | Where-Object {
+                Test-WholeScriptLocalHelperNameAllowed -Name $_
+            })
+        if ($helperNames.Count -eq 0) {
+            continue
+        }
+
+        $planIndexes = New-Object 'System.Collections.Generic.List[int]'
+        $resolvedHelperNames = @()
+        $resolvedHelperTexts = @{}
+
+        foreach ($helperName in @($helperNames)) {
+            for ($j = $targetIndex - 1; $j -ge 0; $j--) {
+                $candidateStmt = $statements[$j]
+                if ($candidateStmt -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$candidateStmt.Name) -and
+                        $candidateStmt.Name -ieq $helperName -and
+                        (Test-WholeScriptLocalHelperFunctionAllowed -FunctionAst $candidateStmt)) {
+                        if ($planIndexes -notcontains $j) {
+                            $planIndexes.Add($j) | Out-Null
+                        }
+                        if ($resolvedHelperNames -notcontains $helperName) {
+                            $resolvedHelperNames += $helperName
+                        }
+                        if (-not $resolvedHelperTexts.ContainsKey($helperName)) {
+                            $resolvedHelperTexts[$helperName] = [string]$candidateStmt.Extent.Text
+                        }
+                        break
+                    }
+                    continue
+                }
+
+                if ($candidateStmt -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    continue
+                }
+                if ($j + 1 -ge $targetIndex) {
+                    continue
+                }
+
+                $followStmt = $statements[$j + 1]
+                $bootstrapArgAst = Get-GatedRoundDynamicIexArgumentAst -Statement $followStmt
+                if ($bootstrapArgAst -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
+                    continue
+                }
+                $bootstrapVarName = Get-AssignmentTargetVariableName -LeftAst $candidateStmt.Left
+                $invokeVarName = [string]$bootstrapArgAst.VariablePath.UserPath
+                if ([string]::IsNullOrWhiteSpace($bootstrapVarName) -or
+                    [string]::IsNullOrWhiteSpace($invokeVarName) -or
+                    $bootstrapVarName -ine $invokeVarName) {
+                    continue
+                }
+
+                $bootstrapText = Try-GetStaticStringValue -Ast $candidateStmt.Right -Context $null
+                if ([string]::IsNullOrWhiteSpace($bootstrapText)) {
+                    continue
+                }
+                if (-not (Test-WholeScriptBootstrapHelperScriptAllowed -ScriptText $bootstrapText -RequiredHelperNames @($helperName))) {
+                    continue
+                }
+
+                if ($planIndexes -notcontains $j) {
+                    $planIndexes.Add($j) | Out-Null
+                }
+                if ($planIndexes -notcontains ($j + 1)) {
+                    $planIndexes.Add($j + 1) | Out-Null
+                }
+                if ($resolvedHelperNames -notcontains $helperName) {
+                    $resolvedHelperNames += $helperName
+                }
+                if (-not $resolvedHelperTexts.ContainsKey($helperName) -or [string]::IsNullOrWhiteSpace([string]$resolvedHelperTexts[$helperName])) {
+                    $resolvedHelperTexts[$helperName] = $bootstrapText
+                }
+                break
+            }
+        }
+
+        if ($resolvedHelperNames.Count -eq 0) {
+            continue
+        }
+
+        if ($sourceAssignmentIndex -ge 0 -and $planIndexes -notcontains $sourceAssignmentIndex) {
+            $planIndexes.Add($sourceAssignmentIndex) | Out-Null
+        }
+
+        $sortedPlanIndexes = @($planIndexes | Sort-Object -Unique)
+        if ($sortedPlanIndexes.Count -eq 0) {
+            continue
+        }
+
+        $staticCryptoPayload = Try-Resolve-GatedRoundStaticCryptoHelperPayloadInfo -TargetExpressionAst $targetExpressionAst -HelperTextMap $resolvedHelperTexts -OriginalText $ScriptText
+        if ($staticCryptoPayload -and -not [string]::IsNullOrWhiteSpace([string]$staticCryptoPayload.PayloadText)) {
+            return [PSCustomObject]@{
+                PayloadText = [string]$staticCryptoPayload.PayloadText
+                Source      = if ($staticCryptoPayload.PSObject.Properties['Source']) { [string]$staticCryptoPayload.Source } else { 'gated_helper_bootstrap_static_crypto' }
+            }
+        }
+
+        $execContext = $null
+        try {
+            $execContext = New-ExecutionContext
+        } catch {
+            $execContext = $null
+        }
+        if (-not $execContext) {
+            continue
+        }
+        Initialize-WholeScriptSpecialVariables -ExecContext $execContext
+
+        try {
+            $executionFailed = $false
+
+            foreach ($planIndex in @($sortedPlanIndexes)) {
+                if ($planIndex -lt 0 -or $planIndex -ge $statements.Count) {
+                    $executionFailed = $true
+                    break
+                }
+
+                $planStatement = $statements[$planIndex]
+                if ($null -eq $planStatement -or -not $planStatement.Extent) {
+                    $executionFailed = $true
+                    break
+                }
+
+                if ($planStatement -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+                    if (-not (Test-WholeScriptEvalFallbackAllowed -Ast $planStatement)) {
+                        $executionFailed = $true
+                        break
+                    }
+
+                    $assignResult = Invoke-InContext -ExecContext $execContext -Code ([string]$planStatement.Extent.Text) -TimeoutMs $TimeoutMs -PersistOnSuccess:$true
+                    if (-not $assignResult.Success) {
+                        $executionFailed = $true
+                        break
+                    }
+                    continue
+                }
+
+                if ($planStatement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+                    if (-not (Test-WholeScriptLocalHelperFunctionAllowed -FunctionAst $planStatement)) {
+                        $executionFailed = $true
+                        break
+                    }
+
+                    $helperResult = Invoke-InContext -ExecContext $execContext -Code ([string]$planStatement.Extent.Text) -TimeoutMs $TimeoutMs -PersistOnSuccess:$true
+                    if (-not $helperResult.Success) {
+                        $executionFailed = $true
+                        break
+                    }
+                    continue
+                }
+
+                $bootstrapArgAst = Get-GatedRoundDynamicIexArgumentAst -Statement $planStatement
+                if ($null -eq $bootstrapArgAst) {
+                    $executionFailed = $true
+                    break
+                }
+
+                $bootstrapText = Try-EvaluateWholeScriptExpressionInExecContext -ExecContext $execContext -ExpressionAst $bootstrapArgAst -TimeoutMs $TimeoutMs
+                if ([string]::IsNullOrWhiteSpace($bootstrapText) -or
+                    -not (Test-WholeScriptBootstrapHelperScriptAllowed -ScriptText $bootstrapText -RequiredHelperNames @($helperNames))) {
+                    $executionFailed = $true
+                    break
+                }
+
+                $bootstrapResult = Invoke-InContext -ExecContext $execContext -Code $bootstrapText -TimeoutMs $TimeoutMs -PersistOnSuccess:$true
+                if (-not $bootstrapResult.Success) {
+                    $executionFailed = $true
+                    break
+                }
+            }
+
+            if ($executionFailed) {
+                continue
+            }
+
+            $candidateText = Try-EvaluateWholeScriptExpressionInExecContext -ExecContext $execContext -ExpressionAst $sinkArgAst -TimeoutMs $TimeoutMs
+            if ([string]::IsNullOrWhiteSpace($candidateText)) {
+                continue
+            }
+
+            $normalizedInfo = Get-WholeScriptNormalizedPayloadInfo -Text $candidateText -OriginalText $ScriptText -Source 'gated_helper_bootstrap'
+            if ($null -eq $normalizedInfo) {
+                continue
+            }
+
+            $candidateScript = if ($normalizedInfo.PSObject.Properties['ScriptText']) { [string]$normalizedInfo.ScriptText } else { $null }
+            if ([string]::IsNullOrWhiteSpace($candidateScript) -or -not (Test-UsefulRecoveredScriptText -Text $candidateScript)) {
+                continue
+            }
+
+            return [PSCustomObject]@{
+                PayloadText = $candidateScript
+                Source      = 'gated_helper_bootstrap'
+            }
+        } finally {
+            try {
+                Close-ExecutionContext -ExecContext $execContext
+            } catch {
+            }
+        }
+    }
+
+    return $null
 }
 
 function Invoke-WholeScriptStaticSideEffectCommand {
@@ -9781,6 +14266,7 @@ function Invoke-WholeScriptStaticSideEffectCommand {
             $destRecord.ContentText = [string]$sourceRecord.ContentText
             $destRecord.IsPowerShell = [bool]$sourceRecord.IsPowerShell
             $destRecord.Properties = if ($null -ne $sourceRecord.Properties) { @{} + $sourceRecord.Properties } else { @{} }
+            Add-WholeScriptStaticArtifactReferencedPath -Record $destRecord -PathText $sourcePathText -Context $Context
             Add-WholeScriptStaticArtifactEvent -Context $Context -Action 'write' -Path $resolvedDestinationPath -Kind ([string]$destRecord.Kind) -Detail ('Copy-Item <= ' + $sourcePathText)
 
             return [PSCustomObject]@{ Success = $true; OutputItems = @(); UsedEmptyFallback = $false; Message = $null }
@@ -9932,6 +14418,10 @@ function Invoke-WholeScriptStaticStatement {
 
     if ($null -eq $Statement) {
         return [PSCustomObject]@{ Success = $false; OutputItems = @(); UsedEmptyFallback = $false; Message = '语句为空' }
+    }
+
+    if ($Statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        return Register-WholeScriptStaticPureHelperFunction -FunctionAst $Statement -Context $Context -TimeoutMs 2000
     }
 
     if ($Statement -is [System.Management.Automation.Language.AssignmentStatementAst]) {
@@ -10237,6 +14727,316 @@ function Get-CommandAstStaticDynamicPayloadInfo {
     }
 
     return $null
+}
+
+function Get-WholeScriptStaticDeterministicTestDrivePath {
+    param([hashtable]$Context)
+
+    $pathContext = Get-WholeScriptStaticPathContext -Context $Context
+    if ($pathContext -and -not [string]::IsNullOrWhiteSpace([string]$pathContext.TestDriveRoot)) {
+        return [string]$pathContext.TestDriveRoot
+    }
+
+    if ($pathContext -and -not [string]::IsNullOrWhiteSpace([string]$pathContext.CurrentDirectory)) {
+        try {
+            return [System.IO.Path]::Combine([string]$pathContext.CurrentDirectory, 'PSDissect-TestDrive')
+        } catch {
+            return (([string]$pathContext.CurrentDirectory).TrimEnd('\') + '\PSDissect-TestDrive')
+        }
+    }
+
+    return 'C:\PSDissect-TestDrive'
+}
+
+function Initialize-WholeScriptSpecialVariables {
+    param(
+        $ExecContext,
+        [hashtable]$Context = $null
+    )
+
+    if ($null -eq $ExecContext -or $null -eq $ExecContext.Runspace) {
+        return
+    }
+
+    $pathContext = Get-WholeScriptStaticPathContext -Context $Context
+    $variables = [ordered]@{
+        TestDrive    = Get-WholeScriptStaticDeterministicTestDrivePath -Context $Context
+        PSScriptRoot = if ($pathContext) { [string]$pathContext.ScriptDirectory } else { $null }
+        PSCommandPath = if ($pathContext) { [string]$pathContext.ScriptPath } else { $null }
+    }
+
+    foreach ($entry in $variables.GetEnumerator()) {
+        if ([string]::IsNullOrWhiteSpace([string]$entry.Value)) {
+            continue
+        }
+        try {
+            $ExecContext.Runspace.SessionStateProxy.SetVariable([string]$entry.Key, [string]$entry.Value)
+        } catch {
+        }
+    }
+}
+
+function Convert-WholeScriptStaticPathToSymbolicRoot {
+    param(
+        [AllowNull()][string]$PathText,
+        [hashtable]$Context
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathText)) {
+        return $null
+    }
+
+    $candidate = ([string]$PathText).Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return $null
+    }
+    if ($candidate -notmatch '^(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+)') {
+        return $candidate
+    }
+
+    $pathContext = Get-WholeScriptStaticPathContext -Context $Context
+    if ($null -eq $pathContext -or $null -eq $pathContext.EnvironmentPaths) {
+        return $candidate
+    }
+
+    $preferredNames = @('TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PUBLIC', 'WINDIR', 'SYSTEMROOT', 'USERPROFILE')
+    $preferredRanks = @{}
+    for ($i = 0; $i -lt $preferredNames.Count; $i++) {
+        $preferredRanks[$preferredNames[$i]] = $i
+    }
+
+    $mappings = @()
+    foreach ($entry in $pathContext.EnvironmentPaths.GetEnumerator()) {
+        $name = [string]$entry.Key
+        $root = [string]$entry.Value
+        if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+        if ($name -notin $preferredNames) {
+            continue
+        }
+
+        $mappings += [PSCustomObject]@{
+            Name = $name
+            Root = ($root -replace '/', '\').TrimEnd('\')
+            Rank = [int]$preferredRanks[$name]
+        }
+    }
+
+    foreach ($mapping in @($mappings | Sort-Object @{ Expression = { $_.Root.Length }; Descending = $true }, @{ Expression = { $_.Rank }; Descending = $false })) {
+        $root = [string]$mapping.Root
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+
+        if ($candidate.Equals($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return ('%' + [string]$mapping.Name + '%')
+        }
+        if ($candidate.StartsWith($root + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            return (('%' + [string]$mapping.Name + '%') + '\' + $candidate.Substring($root.Length + 1))
+        }
+    }
+
+    return $candidate
+}
+
+function Test-StatementsContainMandatoryBase64Consumer {
+    param([object[]]$Statements = @())
+
+    foreach ($statement in @($Statements)) {
+        if ($null -eq $statement -or -not $statement.Extent) {
+            continue
+        }
+
+        if (Test-MandatoryBase64ConsumerText -Text ([string]$statement.Extent.Text)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Resolve-MandatoryBase64ExpressionTextValue {
+    param(
+        $Ast,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [bool]$AllowIndirect = $false
+    )
+
+    if ($null -eq $Ast) {
+        return $null
+    }
+
+    $containsBase64Consumer = Test-MandatoryBase64ExpressionAst -Ast $Ast
+    if (-not $containsBase64Consumer -and -not $AllowIndirect) {
+        return $null
+    }
+
+    $directText = Resolve-DirectBase64TextFromAst -Ast $Ast -Context $Context
+    if (-not [string]::IsNullOrWhiteSpace($directText)) {
+        return $directText
+    }
+
+    try {
+        $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+    } catch {
+        if (Test-IsCallDepthOverflowException -ErrorObject $_) {
+            return $null
+        }
+        throw
+    }
+
+    if (-not $resolved -or -not $resolved.Success) {
+        return $null
+    }
+
+    return (Convert-StaticValueToMeaningfulString -Value $resolved.Value)
+}
+
+function Resolve-MandatoryBase64CommandPayloadText {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst,
+        [Parameter(Mandatory)][hashtable]$Context,
+        [object[]]$PrefixStatements = @(),
+        [bool]$AllowIndirect = $false
+    )
+
+    $dynamicInfo = Get-CommandAstStaticDynamicPayloadInfo -CommandAst $CommandAst -Context $Context -PrefixStatements $PrefixStatements
+    if (-not $dynamicInfo -or -not $dynamicInfo.ArgumentAst) {
+        return $null
+    }
+
+    if ([string]$dynamicInfo.DynamicType -eq 'EncodedCommand') {
+        $encoded = Resolve-MandatoryBase64ExpressionTextValue -Ast $dynamicInfo.ArgumentAst -Context $Context -AllowIndirect:$true
+        if ([string]::IsNullOrWhiteSpace($encoded)) {
+            $encoded = Try-GetStaticStringValue -Ast $dynamicInfo.ArgumentAst -Context $Context
+        }
+        if ([string]::IsNullOrWhiteSpace($encoded)) {
+            return $null
+        }
+
+        return (Try-DecodeEncodedCommandValue -Base64String $encoded)
+    }
+
+    return (Resolve-MandatoryBase64ExpressionTextValue -Ast $dynamicInfo.ArgumentAst -Context $Context -AllowIndirect:$AllowIndirect)
+}
+
+function Try-Resolve-WholeScriptMandatoryBase64PayloadInfo {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $null
+    }
+
+    $hostPayloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $ScriptText
+    if ($hostPayloadInfo -and [string]$hostPayloadInfo.DynamicType -eq 'EncodedCommand' -and
+        -not [string]::IsNullOrWhiteSpace([string]$hostPayloadInfo.PayloadText)) {
+        $normalizedHostText = Try-NormalizeRecoveredScriptText -Text ([string]$hostPayloadInfo.PayloadText)
+        if (-not [string]::IsNullOrWhiteSpace($normalizedHostText)) {
+            return [PSCustomObject]@{
+                PayloadText  = $normalizedHostText
+                DecodeSource = if ($hostPayloadInfo.PSObject.Properties['DecodeSource']) { [string]$hostPayloadInfo.DecodeSource } else { 'mandatory_base64_encodedcommand' }
+            }
+        }
+    }
+
+    $statements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($statements.Count -eq 0) {
+        return $null
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $staticEvalState = Get-StaticEvalState -Context $ctx
+        if ($staticEvalState) {
+            $staticEvalState.ValueDepthLimit = 96
+            $staticEvalState.StringCompatDepthLimit = 72
+        }
+        $ctx.SafeMode = $true
+
+        $prefixStatements = @()
+        if ($statements.Count -gt 1) {
+            $prefixStatements = @($statements | Select-Object -First ($statements.Count - 1))
+            [void](Initialize-WholeScriptStaticAssignments -Statements $prefixStatements -Context $ctx)
+        }
+        $allowIndirect = (Test-StatementsContainMandatoryBase64Consumer -Statements $prefixStatements)
+
+        $targetStatement = $statements[-1]
+        $payloadText = $null
+        $decodeSource = $null
+
+        if ($targetStatement -is [System.Management.Automation.Language.CommandAst]) {
+            $payloadText = Resolve-MandatoryBase64CommandPayloadText -CommandAst $targetStatement -Context $ctx -PrefixStatements $prefixStatements -AllowIndirect:$allowIndirect
+            if ($payloadText) {
+                $decodeSource = 'mandatory_base64_command'
+            }
+        } elseif ($targetStatement -is [System.Management.Automation.Language.PipelineAst]) {
+            $elements = @($targetStatement.PipelineElements)
+            if ($elements.Count -eq 1 -and $elements[0] -is [System.Management.Automation.Language.CommandAst]) {
+                $payloadText = Resolve-MandatoryBase64CommandPayloadText -CommandAst $elements[0] -Context $ctx -PrefixStatements $prefixStatements -AllowIndirect:$allowIndirect
+                if ($payloadText) {
+                    $decodeSource = 'mandatory_base64_pipeline_command'
+                }
+            } elseif ($elements.Count -eq 1 -and
+                (($elements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) -or $elements[0].PSObject.Properties['Expression'])) {
+                $expr = if ($elements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                    $elements[0].Expression
+                } else {
+                    $elements[0].Expression
+                }
+                $payloadText = Resolve-MandatoryBase64ExpressionTextValue -Ast $expr -Context $ctx -AllowIndirect:$allowIndirect
+                if ($payloadText) {
+                    $decodeSource = 'mandatory_base64_pipeline_expression'
+                }
+            } elseif ($elements.Count -eq 2 -and $elements[-1] -is [System.Management.Automation.Language.CommandAst]) {
+                $sinkInfo = Get-CommandAstStaticDynamicPayloadInfo -CommandAst $elements[-1] -Context $ctx -PrefixStatements $prefixStatements
+                if ($sinkInfo -and [string]$sinkInfo.DynamicType -eq 'IEX') {
+                    $sourceAst = $elements[0]
+                    if ($elements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                        $sourceAst = $elements[0].Expression
+                    } elseif ($elements[0].PSObject.Properties['Expression']) {
+                        $sourceAst = $elements[0].Expression
+                    } elseif ($elements[0] -is [System.Management.Automation.Language.CommandAst]) {
+                        $payloadText = Resolve-MandatoryBase64CommandPayloadText -CommandAst $elements[0] -Context $ctx -PrefixStatements $prefixStatements -AllowIndirect:$allowIndirect
+                    }
+
+                    if (-not $payloadText -and $sourceAst) {
+                        $payloadText = Resolve-MandatoryBase64ExpressionTextValue -Ast $sourceAst -Context $ctx -AllowIndirect:$allowIndirect
+                    }
+                    if ($payloadText) {
+                        $decodeSource = 'mandatory_base64_pipeline_iex'
+                    }
+                }
+            }
+        }
+
+        if (-not $payloadText -and $statements.Count -eq 1) {
+            $expr = Get-SingleTopLevelExpressionAstFromText -ScriptText $ScriptText
+            if ($expr) {
+                $payloadText = Resolve-MandatoryBase64ExpressionTextValue -Ast $expr -Context $ctx -AllowIndirect:$allowIndirect
+                if ($payloadText) {
+                    $decodeSource = 'mandatory_base64_expression'
+                }
+            }
+        }
+
+        $payloadText = Get-WholeScriptReplacementCandidateText -OriginalText $ScriptText -CandidateText (Try-NormalizeRecoveredScriptText -Text $payloadText)
+        if (-not $payloadText) {
+            return $null
+        }
+
+        return [PSCustomObject]@{
+            PayloadText  = $payloadText
+            DecodeSource = $decodeSource
+        }
+    } catch {
+        if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+            throw
+        }
+        return $null
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
 }
 
 function Resolve-WholeScriptStaticPayloadInfo {
@@ -11054,6 +15854,322 @@ function Test-SensitiveLiteralizableText {
     }
 }
 
+function New-FastSensitiveEvalFailureResult {
+    param(
+        [string]$Reason,
+        [string]$Message
+    )
+
+    return [PSCustomObject]@{
+        Success           = $false
+        Value             = $null
+        UsedEmptyFallback = $false
+        Reason            = $Reason
+        Message           = $Message
+    }
+}
+
+function New-FastSensitiveEvalSuccessResult {
+    param(
+        $Value,
+        [bool]$UsedEmptyFallback = $false
+    )
+
+    return [PSCustomObject]@{
+        Success           = $true
+        Value             = $Value
+        UsedEmptyFallback = $UsedEmptyFallback
+        Reason            = $null
+        Message           = $null
+    }
+}
+
+function Test-FastSensitiveAstWithinBudget {
+    param(
+        $Ast,
+        [int]$MaxAstNodesPerTarget = 128,
+        [int]$MaxDepth = 6
+    )
+
+    if ($null -eq $Ast) {
+        return $false
+    }
+
+    $nodes = @($Ast.FindAll({ param($n) $true }, $true))
+    if ($nodes.Count -gt [Math]::Max(1, $MaxAstNodesPerTarget)) {
+        return $false
+    }
+
+    $rootParent = $Ast.Parent
+    foreach ($node in $nodes) {
+        $depth = 0
+        $cursor = $node
+        while ($null -ne $cursor -and $cursor -ne $rootParent) {
+            $depth++
+            if ($depth -gt [Math]::Max(1, $MaxDepth)) {
+                return $false
+            }
+            $cursor = $cursor.Parent
+        }
+    }
+
+    return $true
+}
+
+function Convert-FastSensitiveResolvedTextForSinkKind {
+    param(
+        [AllowNull()][string]$Text,
+        [hashtable]$Context,
+        [string]$SinkKind = 'Generic'
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    $normalized = ([string]$Text).Trim().Trim('"', "'", ' ')
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return $null
+    }
+
+    switch ($SinkKind) {
+        { $_ -in @('FilePath', 'DirectoryPath', 'RegKey') } {
+            $pathInfo = Get-WholeScriptStaticArtifactPathInfo -PathText $normalized -Context $Context
+            if ($pathInfo -and -not [string]::IsNullOrWhiteSpace([string]$pathInfo.DisplayPath)) {
+                return [string]$pathInfo.DisplayPath
+            }
+            return (Resolve-WholeScriptStaticDisplayPath -PathText $normalized -Context $Context)
+        }
+        'Host' {
+            return ($normalized.Trim('"', "'", ' '))
+        }
+        'Url' {
+            return ($normalized.Trim('"', "'", ' '))
+        }
+        default {
+            return $normalized
+        }
+    }
+}
+
+function Convert-FastSensitiveResolvedValueToText {
+    param(
+        $Value,
+        [hashtable]$Context,
+        [string]$SinkKind = 'Generic',
+        [int]$MaxResolvedTextLength = 8192
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $text = Convert-StaticValueToMeaningfulString -Value $Value
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    $normalized = Convert-FastSensitiveResolvedTextForSinkKind -Text $text -Context $Context -SinkKind $SinkKind
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return $null
+    }
+
+    if ($MaxResolvedTextLength -gt 0 -and $normalized.Length -gt $MaxResolvedTextLength) {
+        return $null
+    }
+
+    return [string]$normalized
+}
+
+function Resolve-FastSensitiveArguments {
+    param(
+        [object[]]$Arguments = @(),
+        [hashtable]$Context,
+        $Config,
+        [int]$Depth = 0
+    )
+
+    $values = New-Object 'System.Collections.Generic.List[object]'
+    $usedEmptyFallback = $false
+
+    foreach ($argAst in @($Arguments)) {
+        $argResult = Resolve-FastSensitiveExpressionValue -Ast $argAst -Context $Context -Config $Config -Depth ($Depth + 1)
+        if (-not $argResult.Success) {
+            return [PSCustomObject]@{
+                Success           = $false
+                Values            = @()
+                UsedEmptyFallback = $usedEmptyFallback
+                Reason            = $argResult.Reason
+                Message           = $argResult.Message
+            }
+        }
+
+        $usedEmptyFallback = ($usedEmptyFallback -or [bool]$argResult.UsedEmptyFallback)
+        $values.Add($argResult.Value) | Out-Null
+    }
+
+    return [PSCustomObject]@{
+        Success           = $true
+        Values            = @($values.ToArray())
+        UsedEmptyFallback = $usedEmptyFallback
+        Reason            = $null
+        Message           = $null
+    }
+}
+
+function Resolve-FastSensitiveCommandValue {
+    param(
+        [System.Management.Automation.Language.CommandAst]$CommandAst,
+        [hashtable]$Context,
+        $Config,
+        [int]$Depth = 0
+    )
+
+    if ($null -eq $CommandAst) {
+        return (New-FastSensitiveEvalFailureResult -Reason 'no_command_ast' -Message '命令 AST 为空')
+    }
+
+    $resolved = Resolve-StaticAstValue -Ast $CommandAst -Context $Context -AllowEmptyFallback:$true -Depth $Depth
+    if ($resolved.Success) {
+        return (New-FastSensitiveEvalSuccessResult -Value $resolved.Value -UsedEmptyFallback ([bool]$resolved.UsedEmptyFallback))
+    }
+
+    return (New-FastSensitiveEvalFailureResult -Reason $resolved.Reason -Message $resolved.Message)
+}
+
+function Resolve-FastSensitiveExpressionValue {
+    param(
+        $Ast,
+        [hashtable]$Context,
+        $Config,
+        [int]$Depth = 0
+    )
+
+    if ($null -eq $Ast) {
+        return (New-FastSensitiveEvalFailureResult -Reason 'no_ast' -Message 'AST 为空')
+    }
+
+    $maxDepth = if ($Config -and $Config.PSObject.Properties['MaxDepth']) { [int]$Config.MaxDepth } else { 6 }
+    $maxNodes = if ($Config -and $Config.PSObject.Properties['MaxAstNodesPerTarget']) { [int]$Config.MaxAstNodesPerTarget } else { 128 }
+    if ($Depth -gt $maxDepth) {
+        return (New-FastSensitiveEvalFailureResult -Reason 'depth_limit' -Message 'fast sensitive 深度超限')
+    }
+
+    if (-not (Test-FastSensitiveAstWithinBudget -Ast $Ast -MaxAstNodesPerTarget $maxNodes -MaxDepth $maxDepth)) {
+        return (New-FastSensitiveEvalFailureResult -Reason 'shape_budget' -Message 'AST 复杂度超过 fast sensitive 限制')
+    }
+
+    if (Test-StaticEvalBudgetExceeded -Context $Context) {
+        return (New-FastSensitiveEvalFailureResult -Reason 'budget_exceeded' -Message 'fast sensitive 静态预算已耗尽')
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
+        if ($null -ne $expr) {
+            return (Resolve-FastSensitiveExpressionValue -Ast $expr -Context $Context -Config $Config -Depth ($Depth + 1))
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.SubExpressionAst]) {
+        $statements = @(Get-StaticExpressionFromStatementBlock -StatementBlockAst $Ast.SubExpression)
+        if ($statements.Count -eq 1) {
+            $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $statements[0]
+            if ($null -ne $expr) {
+                return (Resolve-FastSensitiveExpressionValue -Ast $expr -Context $Context -Config $Config -Depth ($Depth + 1))
+            }
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandExpressionAst] -and $Ast.Expression) {
+        return (Resolve-FastSensitiveExpressionValue -Ast $Ast.Expression -Context $Context -Config $Config -Depth ($Depth + 1))
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.PipelineAst]) {
+        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast
+        if ($null -ne $expr) {
+            return (Resolve-FastSensitiveExpressionValue -Ast $expr -Context $Context -Config $Config -Depth ($Depth + 1))
+        }
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandAst]) {
+        return (Resolve-FastSensitiveCommandValue -CommandAst $Ast -Context $Context -Config $Config -Depth ($Depth + 1))
+    }
+
+    $resolved = Resolve-StaticAstValue -Ast $Ast -Context $Context -AllowEmptyFallback:$true -Depth $Depth
+    if ($resolved.Success) {
+        return (New-FastSensitiveEvalSuccessResult -Value $resolved.Value -UsedEmptyFallback ([bool]$resolved.UsedEmptyFallback))
+    }
+
+    return (New-FastSensitiveEvalFailureResult -Reason $resolved.Reason -Message $resolved.Message)
+}
+
+function Get-FastSensitiveReplacementTextInfo {
+    param(
+        $Ast,
+        [hashtable]$Context,
+        [string]$SinkKind = 'Generic',
+        $Config = $null
+    )
+
+    if ($null -eq $Ast) {
+        return $null
+    }
+
+    if ($null -eq $Config) {
+        $Config = Get-FastSensitivePassConfig
+    }
+
+    $resolved = Resolve-FastSensitiveExpressionValue -Ast $Ast -Context $Context -Config $Config -Depth 0
+    if (-not $resolved.Success) {
+        return $null
+    }
+
+    $maxResolvedTextLength = if ($Config -and $Config.PSObject.Properties['MaxResolvedTextLength']) { [int]$Config.MaxResolvedTextLength } else { 8192 }
+    $replacementText = $null
+    $displayText = $null
+
+    if (($resolved.Value -is [System.Collections.IEnumerable]) -and -not ($resolved.Value -is [string]) -and -not ($resolved.Value -is [char[]])) {
+        $items = @()
+        foreach ($item in @(Convert-StaticValueToStringArray -Value $resolved.Value)) {
+            $itemText = Convert-FastSensitiveResolvedTextForSinkKind -Text ([string]$item) -Context $Context -SinkKind $SinkKind
+            if ([string]::IsNullOrWhiteSpace($itemText)) {
+                continue
+            }
+            if ($maxResolvedTextLength -gt 0 -and $itemText.Length -gt $maxResolvedTextLength) {
+                continue
+            }
+            if (Test-SensitiveLiteralizableText -Text $itemText -SinkKind $SinkKind) {
+                $items += [string]$itemText
+            }
+        }
+        if ($items.Count -eq 0) {
+            return $null
+        }
+        $displayText = ($items -join ' ')
+        $replacementText = '@(' + (($items | ForEach-Object { ConvertTo-SingleQuotedStringLiteral -Text ([string]$_) }) -join ', ') + ')'
+    } else {
+        $displayText = Convert-FastSensitiveResolvedValueToText -Value $resolved.Value -Context $Context -SinkKind $SinkKind -MaxResolvedTextLength $maxResolvedTextLength
+        if ([string]::IsNullOrWhiteSpace($displayText)) {
+            return $null
+        }
+        $replacementText = Format-LiteralizedCommandValue -Value $displayText
+    }
+
+    if ([string]::IsNullOrWhiteSpace($displayText)) {
+        return $null
+    }
+
+    if (-not (Test-SensitiveLiteralizableText -Text $displayText -SinkKind $SinkKind)) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        Text              = [string]$displayText
+        ReplacementText   = [string]$replacementText
+        UsedEmptyFallback = [bool]$resolved.UsedEmptyFallback
+    }
+}
+
 function Get-StaticSensitiveReplacementTextInfo {
     param(
         $Ast,
@@ -11412,6 +16528,11 @@ function Get-SensitiveMemberInvocationTargets {
                     return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'LauncherArgs'; SinkType = 'MemberShellRun' })
                 }
             }
+            'createshortcut' {
+                if ($modeledType -eq 'wscript.shell' -and $InvokeAst.Arguments.Count -ge 1) {
+                    return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'FilePath'; SinkType = 'MemberCreateShortcutPath' })
+                }
+            }
             'addscript' {
                 if ($InvokeAst.Arguments.Count -ge 1) {
                     return @([PSCustomObject]@{ Ast = $InvokeAst.Arguments[0]; SinkKind = 'CommandText'; SinkType = 'MemberAddScript' })
@@ -11441,7 +16562,8 @@ function Add-SensitiveEvidenceRecord {
         [string]$Value,
         [string]$Source,
         [string]$Stage,
-        [string]$Confidence = 'High'
+        [string]$Confidence = 'High',
+        [bool]$PreserveLiteral = $false
     )
 
     if ([string]::IsNullOrWhiteSpace($Kind) -or [string]::IsNullOrWhiteSpace($Value)) {
@@ -11454,7 +16576,353 @@ function Add-SensitiveEvidenceRecord {
         Source     = [string]$Source
         Stage      = [string]$Stage
         Confidence = [string]$Confidence
+        PreserveLiteral = [bool]$PreserveLiteral
     }) | Out-Null
+}
+
+function Normalize-WholeScriptLooseFilePathEvidenceText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    $candidate = ([string]$Text).Trim().Trim('"', "'", ' ', "`t", "`r", "`n")
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return $null
+    }
+
+    $candidate = $candidate.TrimEnd(',', ';')
+    $extensionPathPattern = '(?i)\.(?:ps1|psm1|psd1|bat|cmd|vbs|vbe|wsf|wsh|js|jse|hta|exe|dll|lnk|zip|txt|log|dat|tmp|evtx|reg|scr|jar|msi|com)'
+    if ($candidate -match ('^(?<path>.+?' + $extensionPathPattern + ')(?:\s+(?:-[A-Za-z_][\w-]*|/[ckCK]\b|\|{1,2}|>{1,2}).*)$')) {
+        $candidate = [string]$Matches['path']
+    } elseif ($candidate -match '^(?<path>.+?\\\*\.[A-Za-z0-9*?]+)(?:\s+(?:-[A-Za-z_][\w-]*|/[ckCK]\b|\|{1,2}|>{1,2}).*)$') {
+        $candidate = [string]$Matches['path']
+    }
+
+    return $candidate.Trim().Trim('"', "'", ' ', "`t", "`r", "`n")
+}
+
+function Add-WholeScriptSensitivePathEvidenceVariants {
+    param(
+        [Parameter(Mandatory)][System.Collections.IList]$EvidenceList,
+        [string]$Kind,
+        [AllowNull()][string]$PathText,
+        [string]$Source,
+        [string]$Stage,
+        [hashtable]$Context = $null,
+        [string]$Confidence = 'High'
+    )
+
+    $normalizedPath = Normalize-WholeScriptLooseFilePathEvidenceText -Text $PathText
+    if ([string]::IsNullOrWhiteSpace($normalizedPath)) {
+        return
+    }
+
+    $variants = @(Get-WholeScriptStaticArtifactDisplayVariants -PathText $normalizedPath -Context $Context)
+    if ($variants.Count -eq 0) {
+        $variants = @($normalizedPath)
+    }
+
+    foreach ($variant in @($variants)) {
+        if ([string]::IsNullOrWhiteSpace([string]$variant)) { continue }
+        if (-not (Test-SensitiveLiteralizableText -Text ([string]$variant) -SinkKind $Kind)) { continue }
+        Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $Kind -Value ([string]$variant) -Source $Source -Stage $Stage -Confidence $Confidence -PreserveLiteral:$true
+    }
+}
+
+function Test-WholeScriptDictionaryContainsKey {
+    param(
+        $Dictionary,
+        [AllowNull()][string]$Key
+    )
+
+    if ($null -eq $Dictionary -or [string]::IsNullOrWhiteSpace($Key)) {
+        return $false
+    }
+
+    if ($Dictionary -is [System.Collections.IDictionary]) {
+        return $Dictionary.Contains($Key)
+    }
+
+    if ($Dictionary.PSObject.Methods.Name -contains 'ContainsKey') {
+        return $Dictionary.ContainsKey($Key)
+    }
+
+    return $false
+}
+
+function Get-WholeScriptRegexSensitiveEvidenceFromText {
+    param(
+        [AllowNull()][string]$Text,
+        [string]$Source = 'helper_payload',
+        [string]$Stage = 'whole_script_helper',
+        [hashtable]$Context = $null
+    )
+
+    $candidate = Remove-RecoveredTextTransportArtifacts -Text $Text
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return @()
+    }
+
+    $evidence = New-Object 'System.Collections.Generic.List[object]'
+    $patterns = @(
+        @{ Kind = 'Url'; Pattern = '(?im)\b(?:https?|ftp)://[^\s''"`<>)]+' },
+        @{ Kind = 'RegKey'; Pattern = '(?im)\b(?:(?:registry::)?(?:hkcu|hklm|hkcr|hku|hkcc):\\[^\r\n''"`<>]+|hkey_(?:current_user|local_machine|classes_root|users|current_config)\\[^\r\n''"`<>]+)' },
+        @{ Kind = 'FilePath'; Pattern = '(?im)(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+|(?:\.{1,2}\\|%[A-Za-z_][A-Za-z0-9_]*%\\|\$env:[A-Za-z_][A-Za-z0-9_]*\\|~\\))[^\r\n''"`<>|]*' }
+    )
+
+    foreach ($entry in $patterns) {
+        foreach ($match in @([regex]::Matches($candidate, $entry.Pattern))) {
+            $value = Remove-RecoveredTextTransportArtifacts -Text ([string]$match.Value)
+            if ([string]$entry.Kind -eq 'FilePath') {
+                Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $evidence -Kind 'FilePath' -PathText $value -Source $Source -Stage $Stage -Context $Context
+                continue
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($value) -and
+                (Test-SensitiveLiteralizableText -Text $value -SinkKind ([string]$entry.Kind))) {
+                Add-SensitiveEvidenceRecord -EvidenceList $evidence -Kind ([string]$entry.Kind) -Value $value -Source $Source -Stage $Stage
+            }
+        }
+    }
+
+    return @($evidence.ToArray())
+}
+
+function Expand-SimpleBatchArtifactVariableText {
+    param(
+        [AllowNull()][string]$Text,
+        [System.Collections.IDictionary]$Variables = $null,
+        [hashtable]$Context = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $Text
+    }
+
+    $resolved = [string]$Text
+    for ($pass = 0; $pass -lt 4; $pass++) {
+        $before = $resolved
+        $resolved = [regex]::Replace($resolved, '(?i)%([A-Za-z_][A-Za-z0-9_]*)%', {
+                param($m)
+                $name = [string]$m.Groups[1].Value
+                if (Test-WholeScriptDictionaryContainsKey -Dictionary $Variables -Key $name) {
+                    return [string]$Variables[$name]
+                }
+
+                $envValue = Resolve-WholeScriptStaticEnvironmentValueText -Name $name -Context $Context
+                if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+                    return [string]$envValue
+                }
+
+                return [string]$m.Value
+            })
+        if ($resolved -eq $before) {
+            break
+        }
+    }
+
+    return $resolved
+}
+
+function Get-SimpleBatchArtifactSensitiveEvidenceFromText {
+    param(
+        [AllowNull()][string]$Text,
+        [string]$Source = 'artifact_batch',
+        [string]$Stage = 'whole_script_artifact_batch',
+        [hashtable]$Context = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    $evidence = New-Object 'System.Collections.Generic.List[object]'
+    $variables = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $lines = [regex]::Split([string]$Text, "`r?`n")
+    foreach ($line in $lines) {
+        $trimmed = ([string]$line).Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($trimmed -match '^(?i)(?:rem\b|::)') { continue }
+
+        if ($trimmed -match '^(?i)@?\s*set\s+"?(?<name>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)"?\s*$') {
+            $varName = [string]$Matches['name']
+            $varValue = Expand-SimpleBatchArtifactVariableText -Text ([string]$Matches['value']) -Variables $variables -Context $Context
+            if (-not [string]::IsNullOrWhiteSpace($varName)) {
+                $variables[$varName] = [string]$varValue
+            }
+            foreach ($entry in @(Get-WholeScriptRegexSensitiveEvidenceFromText -Text $varValue -Source ($Source + ':set') -Stage $Stage -Context $Context)) {
+                if ($null -eq $entry) { continue }
+                $evidence.Add($entry) | Out-Null
+            }
+            continue
+        }
+
+        $resolvedLine = Expand-SimpleBatchArtifactVariableText -Text $trimmed -Variables $variables -Context $Context
+        foreach ($entry in @(Get-WholeScriptRegexSensitiveEvidenceFromText -Text $resolvedLine -Source ($Source + ':line') -Stage $Stage -Context $Context)) {
+            if ($null -eq $entry) { continue }
+            $evidence.Add($entry) | Out-Null
+        }
+    }
+
+    return @($evidence.ToArray())
+}
+
+function Resolve-SimpleVbsStringExpression {
+    param(
+        [AllowNull()][string]$Expression,
+        [System.Collections.IDictionary]$Variables = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Expression)) {
+        return $null
+    }
+
+    $expr = ([string]$Expression).Trim()
+    if ([string]::IsNullOrWhiteSpace($expr)) {
+        return $null
+    }
+
+    if ($expr -match '^"(?:[^"]|"")*"$') {
+        return (($expr.Substring(1, $expr.Length - 2)) -replace '""', '"')
+    }
+
+    if ($expr -match '^(?i:[A-Za-z_][A-Za-z0-9_]*)$') {
+        if (Test-WholeScriptDictionaryContainsKey -Dictionary $Variables -Key ([string]$expr)) {
+            return [string]$Variables[[string]$expr]
+        }
+        return $null
+    }
+
+    $allowedRemainder = [regex]::Replace($expr, '"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*|\s+|[+&()]', '')
+    if (-not [string]::IsNullOrWhiteSpace($allowedRemainder)) {
+        return $null
+    }
+
+    $parts = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($token in @([regex]::Matches($expr, '"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_]*'))) {
+        $tokenText = [string]$token.Value
+        if ($tokenText -match '^"(?:[^"]|"")*"$') {
+            $parts.Add(($tokenText.Substring(1, $tokenText.Length - 2) -replace '""', '"')) | Out-Null
+            continue
+        }
+
+        if (Test-WholeScriptDictionaryContainsKey -Dictionary $Variables -Key $tokenText) {
+            $parts.Add([string]$Variables[$tokenText]) | Out-Null
+            continue
+        }
+
+        return $null
+    }
+
+    if ($parts.Count -eq 0) {
+        return $null
+    }
+
+    return ($parts.ToArray() -join '')
+}
+
+function Get-SimpleVbsArtifactSensitiveEvidenceFromText {
+    param(
+        [AllowNull()][string]$Text,
+        [string]$Source = 'artifact_vbs',
+        [string]$Stage = 'whole_script_artifact_vbs',
+        [hashtable]$Context = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    $evidence = New-Object 'System.Collections.Generic.List[object]'
+    $variables = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $lines = [regex]::Split([string]$Text, "`r?`n")
+
+    for ($pass = 0; $pass -lt 4; $pass++) {
+        $changed = $false
+        foreach ($line in $lines) {
+            $trimmed = ([string]$line).Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+            if ($trimmed -match "^(?i:'|rem\b)") { continue }
+
+            if ($trimmed -match '^(?i)(?:set\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<expr>.+?)\s*$') {
+                $varName = [string]$Matches['name']
+                $resolvedValue = Resolve-SimpleVbsStringExpression -Expression ([string]$Matches['expr']) -Variables $variables
+                if ([string]::IsNullOrWhiteSpace($resolvedValue)) { continue }
+                if ((-not (Test-WholeScriptDictionaryContainsKey -Dictionary $variables -Key $varName)) -or ($variables[$varName] -ne $resolvedValue)) {
+                    $variables[$varName] = $resolvedValue
+                    $changed = $true
+                }
+            }
+        }
+        if (-not $changed) { break }
+    }
+
+    foreach ($pair in $variables.GetEnumerator()) {
+        foreach ($entry in @(Get-WholeScriptRegexSensitiveEvidenceFromText -Text ([string]$pair.Value) -Source ($Source + ':var:' + [string]$pair.Key) -Stage $Stage -Context $Context)) {
+            if ($null -eq $entry) { continue }
+            $evidence.Add($entry) | Out-Null
+        }
+    }
+
+    return @($evidence.ToArray())
+}
+
+function Get-WholeScriptStaticArtifactContentProfile {
+    param($Record)
+
+    if ($null -eq $Record) {
+        return 'text'
+    }
+
+    $path = if ($Record.PSObject.Properties['DisplayPath']) { [string]$Record.DisplayPath } else { '' }
+    if ($path -match '(?i)\.(ps1|psm1|psd1)$') { return 'powershell' }
+    if ($path -match '(?i)\.(bat|cmd)$') { return 'batch' }
+    if ($path -match '(?i)\.(vbs|vbe|wsf|wsh)$') { return 'vbs' }
+    if ($Record.PSObject.Properties['IsPowerShell'] -and [bool]$Record.IsPowerShell) { return 'powershell' }
+    return 'text'
+}
+
+function Update-WholeScriptStaticArtifactDerivedEvidence {
+    param(
+        [Parameter(Mandatory)]$Record,
+        [hashtable]$Context = $null
+    )
+
+    if ($null -eq $Record) {
+        return @()
+    }
+
+    $contentText = if ($Record.PSObject.Properties['ContentText']) { [string]$Record.ContentText } else { '' }
+    if ([string]::IsNullOrWhiteSpace($contentText)) {
+        $Record.DerivedEvidence = @()
+        return @()
+    }
+
+    $evidence = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($entry in @(Get-WholeScriptRegexSensitiveEvidenceFromText -Text $contentText -Source 'ArtifactContent' -Stage 'whole_script_artifact_content' -Context $Context)) {
+        if ($null -eq $entry) { continue }
+        $evidence.Add($entry) | Out-Null
+    }
+
+    switch (Get-WholeScriptStaticArtifactContentProfile -Record $Record) {
+        'batch' {
+            foreach ($entry in @(Get-SimpleBatchArtifactSensitiveEvidenceFromText -Text $contentText -Source 'ArtifactContentBatch' -Stage 'whole_script_artifact_batch' -Context $Context)) {
+                if ($null -eq $entry) { continue }
+                $evidence.Add($entry) | Out-Null
+            }
+        }
+        'vbs' {
+            foreach ($entry in @(Get-SimpleVbsArtifactSensitiveEvidenceFromText -Text $contentText -Source 'ArtifactContentVbs' -Stage 'whole_script_artifact_vbs' -Context $Context)) {
+                if ($null -eq $entry) { continue }
+                $evidence.Add($entry) | Out-Null
+            }
+        }
+    }
+
+    $Record.DerivedEvidence = @(Get-UniqueSensitiveEvidenceRecords -Evidence ($evidence.ToArray()))
+    return @($Record.DerivedEvidence)
 }
 
 function Convert-SensitiveEvidenceValueToCanonical {
@@ -11496,7 +16964,12 @@ function Get-UniqueSensitiveEvidenceRecords {
         if ($null -eq $entry) { continue }
         $kind = if ($entry.PSObject.Properties['Kind']) { [string]$entry.Kind } else { '' }
         $value = if ($entry.PSObject.Properties['Value']) { [string]$entry.Value } else { '' }
-        $canonical = Convert-SensitiveEvidenceValueToCanonical -Kind $kind -Value $value
+        $preserveLiteral = if ($entry.PSObject.Properties['PreserveLiteral']) { [bool]$entry.PreserveLiteral } else { $false }
+        $canonical = if ($preserveLiteral) {
+            ([string]$value).Trim()
+        } else {
+            Convert-SensitiveEvidenceValueToCanonical -Kind $kind -Value $value
+        }
         if ([string]::IsNullOrWhiteSpace($kind) -or [string]::IsNullOrWhiteSpace($canonical)) {
             continue
         }
@@ -11511,6 +16984,7 @@ function Get-UniqueSensitiveEvidenceRecords {
             Source     = if ($entry.PSObject.Properties['Source']) { [string]$entry.Source } else { '' }
             Stage      = if ($entry.PSObject.Properties['Stage']) { [string]$entry.Stage } else { '' }
             Confidence = if ($entry.PSObject.Properties['Confidence']) { [string]$entry.Confidence } else { 'High' }
+            PreserveLiteral = $preserveLiteral
         }
         $result += $copy
     }
@@ -11528,16 +17002,32 @@ function Add-SensitiveArtifactEvidenceFromContext {
     foreach ($fileKey in @($store.Files.Keys)) {
         $record = $store.Files[$fileKey]
         if ($null -eq $record) { continue }
-        if (-not [string]::IsNullOrWhiteSpace([string]$record.DisplayPath)) {
-            Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind 'FilePath' -Value ([string]$record.DisplayPath) -Source 'ArtifactStore' -Stage 'whole_script_static'
+        foreach ($variant in @($record.DisplayVariants)) {
+            Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind 'FilePath' -PathText ([string]$variant) -Source 'ArtifactStore' -Stage 'whole_script_static' -Context $Context
+        }
+        if ((@($record.DisplayVariants).Count -eq 0) -and -not [string]::IsNullOrWhiteSpace([string]$record.DisplayPath)) {
+            Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind 'FilePath' -PathText ([string]$record.DisplayPath) -Source 'ArtifactStore' -Stage 'whole_script_static' -Context $Context
+        }
+        foreach ($refPath in @($record.ReferencedPaths)) {
+            Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind 'FilePath' -PathText ([string]$refPath) -Source 'ArtifactReference' -Stage 'whole_script_static' -Context $Context
         }
         if ($record.Properties -is [System.Collections.IDictionary]) {
             foreach ($propName in @($record.Properties.Keys)) {
                 $propValue = $record.Properties[$propName]
                 if (-not [string]::IsNullOrWhiteSpace([string]$propValue) -and (Test-SensitiveLiteralizableText -Text ([string]$propValue) -SinkKind 'FilePath')) {
-                    Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind 'FilePath' -Value ([string]$propValue) -Source ('ArtifactProperty:' + [string]$propName) -Stage 'whole_script_static'
+                    Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind 'FilePath' -PathText ([string]$propValue) -Source ('ArtifactProperty:' + [string]$propName) -Stage 'whole_script_static' -Context $Context
                 }
             }
+        }
+        foreach ($derivedEntry in @(Update-WholeScriptStaticArtifactDerivedEvidence -Record $record -Context $Context)) {
+            if ($null -eq $derivedEntry) { continue }
+            Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList `
+                -Kind ([string]$derivedEntry.Kind) `
+                -Value ([string]$derivedEntry.Value) `
+                -Source $(if ($derivedEntry.PSObject.Properties['Source']) { [string]$derivedEntry.Source } else { 'ArtifactDerived' }) `
+                -Stage $(if ($derivedEntry.PSObject.Properties['Stage']) { [string]$derivedEntry.Stage } else { 'whole_script_static' }) `
+                -Confidence $(if ($derivedEntry.PSObject.Properties['Confidence']) { [string]$derivedEntry.Confidence } else { 'High' }) `
+                -PreserveLiteral $(if ($derivedEntry.PSObject.Properties['PreserveLiteral']) { [bool]$derivedEntry.PreserveLiteral } else { $false })
         }
     }
 
@@ -11553,7 +17043,7 @@ function Add-SensitiveArtifactEvidenceFromContext {
                 $valueText = $record.Values[$valueName]
                 if (-not [string]::IsNullOrWhiteSpace([string]$valueText)) {
                     if (Test-SensitiveLiteralizableText -Text ([string]$valueText) -SinkKind 'FilePath') {
-                        Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind 'FilePath' -Value ([string]$valueText) -Source ('RegistryValue:' + [string]$valueName) -Stage 'whole_script_static'
+                        Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind 'FilePath' -PathText ([string]$valueText) -Source ('RegistryValue:' + [string]$valueName) -Stage 'whole_script_static' -Context $Context
                     }
                     if (Test-SensitiveLiteralizableText -Text ([string]$valueText) -SinkKind 'CommandText') {
                         Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind 'CommandText' -Value ([string]$valueText) -Source ('RegistryValue:' + [string]$valueName) -Stage 'whole_script_static'
@@ -11566,7 +17056,11 @@ function Add-SensitiveArtifactEvidenceFromContext {
     foreach ($evt in @($Context.ArtifactEvents)) {
         if ($null -eq $evt -or [string]::IsNullOrWhiteSpace([string]$evt.Path)) { continue }
         $kind = if ([string]$evt.Kind -eq 'Registry') { 'RegKey' } else { 'FilePath' }
-        Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $kind -Value ([string]$evt.Path) -Source ('ArtifactEvent:' + [string]$evt.Action) -Stage 'whole_script_static'
+        if ($kind -eq 'FilePath') {
+            Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind 'FilePath' -PathText ([string]$evt.Path) -Source ('ArtifactEvent:' + [string]$evt.Action) -Stage 'whole_script_static' -Context $Context
+        } else {
+            Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $kind -Value ([string]$evt.Path) -Source ('ArtifactEvent:' + [string]$evt.Action) -Stage 'whole_script_static'
+        }
     }
 }
 
@@ -11609,6 +17103,14 @@ function Add-SensitivePropertyBagEvidenceFromParse {
                 }
                 break
             }
+            '^wscript\.shell\.shortcut$' {
+                switch -Regex ($memberName.ToLowerInvariant()) {
+                    '^(?:fullname|targetpath|iconlocation)$' { $kind = 'FilePath'; break }
+                    '^arguments$' { $kind = 'LauncherArgs'; break }
+                    '^workingdirectory$' { $kind = 'DirectoryPath'; break }
+                }
+                break
+            }
             '^webclient$' {
                 if ($memberName -match '^(?i:BaseAddress)$') { $kind = 'Url' }
                 break
@@ -11620,7 +17122,11 @@ function Add-SensitivePropertyBagEvidenceFromParse {
         if (($rhsResult.Value -is [System.Collections.IEnumerable]) -and -not ($rhsResult.Value -is [string]) -and -not ($rhsResult.Value -is [char[]])) {
             foreach ($item in @(Convert-StaticValueToStringArray -Value $rhsResult.Value)) {
                 if (Test-SensitiveLiteralizableText -Text ([string]$item) -SinkKind $kind) {
-                    Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $kind -Value ([string]$item) -Source ($modeledType + '.' + $memberName) -Stage 'property_bag'
+                    if ($kind -in @('FilePath', 'DirectoryPath')) {
+                        Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind $kind -PathText ([string]$item) -Source ($modeledType + '.' + $memberName) -Stage 'property_bag' -Context $Context
+                    } else {
+                        Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $kind -Value ([string]$item) -Source ($modeledType + '.' + $memberName) -Stage 'property_bag'
+                    }
                 }
             }
             continue
@@ -11628,9 +17134,46 @@ function Add-SensitivePropertyBagEvidenceFromParse {
 
         $text = Convert-StaticValueToMeaningfulString -Value $rhsResult.Value
         if (-not [string]::IsNullOrWhiteSpace($text) -and (Test-SensitiveLiteralizableText -Text $text -SinkKind $kind)) {
-            Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $kind -Value $text -Source ($modeledType + '.' + $memberName) -Stage 'property_bag'
+            if ($kind -in @('FilePath', 'DirectoryPath')) {
+                Add-WholeScriptSensitivePathEvidenceVariants -EvidenceList $EvidenceList -Kind $kind -PathText $text -Source ($modeledType + '.' + $memberName) -Stage 'property_bag' -Context $Context
+            } else {
+                Add-SensitiveEvidenceRecord -EvidenceList $EvidenceList -Kind $kind -Value $text -Source ($modeledType + '.' + $memberName) -Stage 'property_bag'
+            }
         }
     }
+}
+
+function Test-WholeScriptSensitiveEvidenceHarvestTriggerText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    return ([string]$Text -match '(?i)(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+|%[A-Za-z_][A-Za-z0-9_]*%\\|\$env:[A-Za-z_][A-Za-z0-9_]*\\|https?://|(?:registry::)?(?:hkcu|hklm|hkcr|hku|hkcc):\\|hkey_(?:current_user|local_machine|classes_root|users|current_config)\\|createshortcut|specialfolders|set-content|add-content|out-file|new-item|copy-item|move-item|rename-item|start-process)')
+}
+
+function Invoke-AppendWholeScriptHarvestedSensitiveEvidenceCommentBlock {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [string]$Source = 'postprocess_harvest',
+        [string]$Stage = 'postprocess_harvest'
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    if (-not (Test-WholeScriptSensitiveEvidenceHarvestTriggerText -Text $ScriptText)) {
+        return $ScriptText
+    }
+
+    $evidence = @(Get-WholeScriptSensitiveEvidenceFromText -Text $ScriptText -Source $Source -Stage $Stage)
+    if ($evidence.Count -eq 0) {
+        return $ScriptText
+    }
+
+    return (Append-SensitiveEvidenceCommentBlock -ScriptText $ScriptText -Evidence $evidence)
 }
 
 function Get-SensitiveEvidenceCommentBlock {
@@ -11712,6 +17255,140 @@ function Remove-StandaloneCmdlineNoiseLines {
     }
 
     return $ScriptText
+}
+
+function Invoke-NormalizeSensitiveIndicatorArgumentsFast {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $config = Get-FastSensitivePassConfig
+    if (-not $config.Enabled -or [string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $state = Get-StaticEvalState -Context $ctx
+        if ($state) {
+            $state.ValueDepthLimit = 32
+            $state.StringCompatDepthLimit = 24
+        }
+        $null = Reset-StaticEvalState -Context $ctx -TimeBudgetMs ([int]$config.StaticBudgetMs)
+
+        $topLevelStatements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+        if ($topLevelStatements.Count -gt 0) {
+            [void](Initialize-WholeScriptStaticAssignments -Statements $topLevelStatements -Context $ctx)
+        }
+
+        $state = Get-StaticEvalState -Context $ctx
+        if ($state) {
+            $state.ValueDepthLimit = 32
+            $state.StringCompatDepthLimit = 24
+        }
+        $null = Reset-StaticEvalState -Context $ctx -TimeBudgetMs ([int]$config.StaticBudgetMs)
+
+        $targets = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($cmdAst in @($parse.Ast.FindAll({
+                        param($n)
+                        $n -is [System.Management.Automation.Language.CommandAst]
+                    }, $true))) {
+            foreach ($target in @(Get-SensitiveCommandArgumentTargets -CommandAst $cmdAst -Context $ctx)) {
+                if ($targets.Count -ge [int]$config.MaxTargets) { break }
+                $targets.Add($target) | Out-Null
+            }
+            if ($targets.Count -ge [int]$config.MaxTargets) { break }
+        }
+
+        if ($targets.Count -lt [int]$config.MaxTargets) {
+            foreach ($invokeAst in @($parse.Ast.FindAll({
+                            param($n)
+                            $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst]
+                        }, $true))) {
+                foreach ($target in @(Get-SensitiveMemberInvocationTargets -InvokeAst $invokeAst -Context $ctx)) {
+                    if ($targets.Count -ge [int]$config.MaxTargets) { break }
+                    $targets.Add($target) | Out-Null
+                }
+                if ($targets.Count -ge [int]$config.MaxTargets) { break }
+            }
+        }
+
+        $replacements = @()
+        $seenRanges = @{}
+        $sensitiveEvidence = New-Object 'System.Collections.Generic.List[object]'
+
+        foreach ($target in @($targets.ToArray())) {
+            if (Test-StaticEvalBudgetExceeded -Context $ctx) {
+                break
+            }
+
+            $targetAst = $target.Ast
+            if ($null -eq $targetAst -or -not $targetAst.Extent) {
+                continue
+            }
+
+            $replacementInfo = Get-FastSensitiveReplacementTextInfo -Ast $targetAst -Context $ctx -SinkKind ([string]$target.SinkKind) -Config $config
+            if ($null -eq $replacementInfo) {
+                continue
+            }
+
+            $canRewriteTarget = ((Test-CmdlineSensitiveReplacementAstShape -Ast $targetAst) -and -not [bool]$replacementInfo.UsedEmptyFallback)
+            $evidenceText = Get-CmdlineSensitiveEvidenceText -Ast $targetAst -ReplacementInfo $replacementInfo -CanRewriteTarget $canRewriteTarget
+            if ([string]::IsNullOrWhiteSpace($evidenceText)) {
+                $evidenceText = [string]$replacementInfo.Text
+            }
+
+            Add-SensitiveEvidenceRecord -EvidenceList $sensitiveEvidence -Kind ([string]$target.SinkKind) -Value ([string]$evidenceText) -Source ([string]$target.SinkType) -Stage $(if ($canRewriteTarget) { 'fast_ast_replacement' } else { 'fast_ast_preserved' })
+
+            if (-not $canRewriteTarget) {
+                continue
+            }
+
+            $start = [int]$targetAst.Extent.StartOffset
+            $end = [int]$targetAst.Extent.EndOffset
+            $rangeKey = '{0}:{1}' -f $start, $end
+            if ($seenRanges.ContainsKey($rangeKey)) {
+                continue
+            }
+
+            $original = $ScriptText.Substring($start, $end - $start)
+            if ([string]::Equals($original, [string]$replacementInfo.ReplacementText, [System.StringComparison]::Ordinal)) {
+                continue
+            }
+
+            $seenRanges[$rangeKey] = $true
+            $replacements += [PSCustomObject]@{
+                Start = $start
+                End   = $end
+                Text  = [string]$replacementInfo.ReplacementText
+            }
+        }
+
+        Add-SensitiveArtifactEvidenceFromContext -Context $ctx -EvidenceList $sensitiveEvidence
+
+        if ($replacements.Count -eq 0) {
+            return (Append-SensitiveEvidenceCommentBlock -ScriptText $ScriptText -Evidence ($sensitiveEvidence.ToArray()))
+        }
+
+        $result = $ScriptText
+        foreach ($r in @($replacements | Sort-Object Start -Descending)) {
+            $result = $result.Substring(0, $r.Start) + $r.Text + $result.Substring($r.End)
+        }
+
+        $check = Test-PowerShellSyntax -ScriptText $result
+        if ($check.IsValid) {
+            return (Append-SensitiveEvidenceCommentBlock -ScriptText $result -Evidence ($sensitiveEvidence.ToArray()))
+        }
+
+        return (Append-SensitiveEvidenceCommentBlock -ScriptText $ScriptText -Evidence ($sensitiveEvidence.ToArray()))
+    } catch {
+        return $ScriptText
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
 }
 
 function Invoke-NormalizeSensitiveIndicatorArguments {
@@ -11927,10 +17604,91 @@ function Test-IsSimpleCommandArgumentValue {
     return ($Value -match '^[A-Za-z_][A-Za-z0-9_-]*$')
 }
 
+function Test-IsRuntimeScopedVariableName {
+    param([AllowNull()][string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return $false
+    }
+
+    return ($Name -match '^(?i:env:[A-Za-z_][A-Za-z0-9_]*|PSScriptRoot|PSCommandPath|MyInvocation|PID|Args|Input|PSItem|_)$')
+}
+
+function Test-SafeSimpleCommandArgumentStaticNormalizationAst {
+    param([System.Management.Automation.Language.Ast]$Ast)
+
+    if ($null -eq $Ast) {
+        return $false
+    }
+
+    $containsUnsupported = @($Ast.FindAll({
+                param($n)
+                ($n -is [System.Management.Automation.Language.CommandAst]) -or
+                ($n -is [System.Management.Automation.Language.AssignmentStatementAst]) -or
+                ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) -or
+                ($n -is [System.Management.Automation.Language.FunctionDefinitionAst]) -or
+                ($n -is [System.Management.Automation.Language.ParamBlockAst])
+            }, $true)).Count -gt 0
+    if ($containsUnsupported) {
+        return $false
+    }
+
+    $runtimeScopedVariable = @($Ast.FindAll({
+                param($n)
+                ($n -is [System.Management.Automation.Language.VariableExpressionAst]) -and
+                $n.VariablePath -and
+                (Test-IsRuntimeScopedVariableName -Name ([string]$n.VariablePath.UserPath))
+            }, $true) | Select-Object -First 1)
+    if ($runtimeScopedVariable.Count -gt 0) {
+        return $false
+    }
+
+    return $true
+}
+
+function Convert-SimpleCommandArgumentResolvedTextToReplacementText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    if (Test-IsSimpleCommandArgumentValue -Value $Text) {
+        return [string]$Text
+    }
+
+    return (Convert-ReplacementTextToExpressionLiteral -Text $Text)
+}
+
+function Test-CommandArgumentMayBenefitFromStaticNormalization {
+    param([System.Management.Automation.Language.Ast]$Ast)
+
+    if ($null -eq $Ast -or -not $Ast.Extent) {
+        return $false
+    }
+
+    if (($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) -or
+        (($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -and @($Ast.NestedExpressions).Count -eq 0)) {
+        return $false
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        foreach ($elem in @($Ast.Elements)) {
+            if ($elem -and (Test-CommandArgumentMayBenefitFromStaticNormalization -Ast $elem)) {
+                return $true
+            }
+        }
+        return $false
+    }
+
+    return (Test-SafeSimpleCommandArgumentStaticNormalizationAst -Ast $Ast)
+}
+
 function Get-SimpleCommandArgumentReplacementText {
     param(
         [Parameter(Mandatory)][System.Management.Automation.Language.Ast]$Ast,
-        [Parameter(Mandatory)][string]$SourceText
+        [Parameter(Mandatory)][string]$SourceText,
+        [hashtable]$Context = $null
     )
 
     if (-not $Ast.Extent) {
@@ -11942,29 +17700,40 @@ function Get-SimpleCommandArgumentReplacementText {
         $value = [string]$Ast.Value
     } elseif ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
         if (@($Ast.NestedExpressions).Count -gt 0) {
-            return $null
+            $value = $null
+        } else {
+            $value = Get-ExpandableStringLiteralOnlyValue -Ast $Ast -SourceText $SourceText
         }
+    }
 
-        $value = Get-ExpandableStringLiteralOnlyValue -Ast $Ast -SourceText $SourceText
-    } else {
+    if ([string]::IsNullOrWhiteSpace($value) -and $Context -and (Test-SafeSimpleCommandArgumentStaticNormalizationAst -Ast $Ast)) {
+        try {
+            $staticInfo = Resolve-StaticAstTextInfo -Ast $Ast -Context $Context -AllowEmptyFallback:$false
+        } catch {
+            $staticInfo = $null
+        }
+        if ($staticInfo -and -not [string]::IsNullOrWhiteSpace([string]$staticInfo.Text)) {
+            $value = [string]$staticInfo.Text
+        }
+    }
+
+    $replacementText = Convert-SimpleCommandArgumentResolvedTextToReplacementText -Text $value
+    if ([string]::IsNullOrWhiteSpace($replacementText)) {
         return $null
     }
 
-    if (-not (Test-IsSimpleCommandArgumentValue -Value $value)) {
+    if ([string]$Ast.Extent.Text -ceq [string]$replacementText) {
         return $null
     }
 
-    if ([string]$Ast.Extent.Text -ceq [string]$value) {
-        return $null
-    }
-
-    return [string]$value
+    return [string]$replacementText
 }
 
 function Get-SimpleCommandArgumentReplacementRecords {
     param(
         [Parameter(Mandatory)][System.Management.Automation.Language.Ast]$Ast,
-        [Parameter(Mandatory)][string]$SourceText
+        [Parameter(Mandatory)][string]$SourceText,
+        [hashtable]$Context = $null
     )
 
     if (-not $Ast.Extent) {
@@ -11977,9 +17746,14 @@ function Get-SimpleCommandArgumentReplacementRecords {
         $candidateAsts = @($Ast)
     } elseif ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
         $candidateAsts = @($Ast.Elements | Where-Object {
-                ($_ -is [System.Management.Automation.Language.StringConstantExpressionAst]) -or
-                ($_ -is [System.Management.Automation.Language.ExpandableStringExpressionAst])
+                $_ -and $_.Extent -and (
+                    ($_ -is [System.Management.Automation.Language.StringConstantExpressionAst]) -or
+                    ($_ -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) -or
+                    (Test-SafeSimpleCommandArgumentStaticNormalizationAst -Ast $_)
+                )
             })
+    } elseif ($Context -and (Test-SafeSimpleCommandArgumentStaticNormalizationAst -Ast $Ast)) {
+        $candidateAsts = @($Ast)
     } else {
         return @()
     }
@@ -11988,7 +17762,7 @@ function Get-SimpleCommandArgumentReplacementRecords {
     foreach ($candidateAst in $candidateAsts) {
         if (-not $candidateAst -or -not $candidateAst.Extent) { continue }
 
-        $normalized = Get-SimpleCommandArgumentReplacementText -Ast $candidateAst -SourceText $SourceText
+        $normalized = Get-SimpleCommandArgumentReplacementText -Ast $candidateAst -SourceText $SourceText -Context $Context
         if ([string]::IsNullOrWhiteSpace($normalized)) { continue }
 
         $records.Add([PSCustomObject]@{
@@ -12235,33 +18009,94 @@ function Invoke-NormalizeSimpleCommandArguments {
         return $ScriptText
     }
 
+    $topLevelStatements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+    if ($topLevelStatements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $needsStaticContext = $false
+    foreach ($statement in @($topLevelStatements)) {
+        $commandAsts = @($statement.FindAll({
+                    param($n)
+                    $n -is [System.Management.Automation.Language.CommandAst]
+                }, $true))
+        foreach ($cmdAst in @($commandAsts)) {
+            if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -lt 2) { continue }
+
+            for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+                $elem = $cmdAst.CommandElements[$i]
+                if (-not $elem -or -not $elem.Extent) { continue }
+
+                $targetAst = $elem
+                if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                    $targetAst = $elem.Argument
+                }
+
+                if ($targetAst -and (Test-CommandArgumentMayBenefitFromStaticNormalization -Ast $targetAst)) {
+                    $needsStaticContext = $true
+                    break
+                }
+            }
+
+            if ($needsStaticContext) { break }
+        }
+
+        if ($needsStaticContext) { break }
+    }
+
+    $ctx = $null
     $replacements = @()
-    $commandAsts = @($parse.Ast.FindAll({
-            param($n)
-            $n -is [System.Management.Automation.Language.CommandAst]
-        }, $true))
+    try {
+        if ($needsStaticContext) {
+            $ctx = New-WholeScriptStaticResolutionContext
+            $staticEvalState = Get-StaticEvalState -Context $ctx
+            if ($staticEvalState) {
+                $staticEvalState.ValueDepthLimit = 96
+                $staticEvalState.StringCompatDepthLimit = 72
+            }
+        }
 
-    foreach ($cmdAst in $commandAsts) {
-        if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -lt 2) { continue }
+        foreach ($statement in @($topLevelStatements)) {
+            $statementCommandAsts = @($statement.FindAll({
+                        param($n)
+                        $n -is [System.Management.Automation.Language.CommandAst]
+                    }, $true))
 
-        for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
-            $elem = $cmdAst.CommandElements[$i]
-            if (-not $elem -or -not $elem.Extent) { continue }
+            foreach ($cmdAst in @($statementCommandAsts)) {
+                if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -lt 2) { continue }
 
-            if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
-                if ($elem.Argument -and $elem.Argument.Extent) {
-                    foreach ($replacement in @(Get-SimpleCommandArgumentReplacementRecords -Ast $elem.Argument -SourceText $ScriptText)) {
+                for ($i = 1; $i -lt $cmdAst.CommandElements.Count; $i++) {
+                    $elem = $cmdAst.CommandElements[$i]
+                    if (-not $elem -or -not $elem.Extent) { continue }
+
+                    if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                        if ($elem.Argument -and $elem.Argument.Extent) {
+                            foreach ($replacement in @(Get-SimpleCommandArgumentReplacementRecords -Ast $elem.Argument -SourceText $ScriptText -Context $ctx)) {
+                                $replacements += $replacement
+                            }
+                        }
+
+                        continue
+                    }
+
+                    foreach ($replacement in @(Get-SimpleCommandArgumentReplacementRecords -Ast $elem -SourceText $ScriptText -Context $ctx)) {
                         $replacements += $replacement
                     }
                 }
-
-                continue
             }
 
-            foreach ($replacement in @(Get-SimpleCommandArgumentReplacementRecords -Ast $elem -SourceText $ScriptText)) {
-                $replacements += $replacement
+            if ($ctx) {
+                try {
+                    [void](Invoke-WholeScriptStaticStatement -Statement $statement -Context $ctx -AllowEmptyFallback:$false)
+                } catch {
+                    if (-not (Test-IsCallDepthOverflowException -ErrorObject $_)) {
+                        throw
+                    }
+                }
             }
         }
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
     }
 
     if ($replacements.Count -eq 0) {
@@ -12281,6 +18116,122 @@ function Invoke-NormalizeSimpleCommandArguments {
     return $ScriptText
 }
 
+function Invoke-NormalizeMandatoryBase64Expressions {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $state = Get-StaticEvalState -Context $ctx
+        if ($state) {
+            $state.ValueDepthLimit = 96
+            $state.StringCompatDepthLimit = 72
+        }
+
+        $topLevelStatements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+        if ($topLevelStatements.Count -gt 0) {
+            [void](Initialize-WholeScriptStaticAssignments -Statements $topLevelStatements -Context $ctx)
+        }
+
+        $replacements = New-Object System.Collections.Generic.List[object]
+
+        $commandAsts = @($parse.Ast.FindAll({
+                    param($n)
+                    $n -is [System.Management.Automation.Language.CommandAst] -and (Test-MandatoryBase64CommandAst -CommandAst $n)
+                }, $true))
+        foreach ($cmdAst in $commandAsts) {
+            if (-not $cmdAst -or -not $cmdAst.Extent) { continue }
+
+            $decodedInfo = $null
+            try {
+                $decodedInfo = Try-DecodeEncodedCommand -CommandAst $cmdAst
+            } catch {
+                $decodedInfo = $null
+            }
+            if (-not $decodedInfo -or [string]::IsNullOrWhiteSpace([string]$decodedInfo.ReplacementText)) {
+                continue
+            }
+
+            $original = [string]$cmdAst.Extent.Text
+            $replacement = [string]$decodedInfo.ReplacementText
+            if ($replacement -eq $original) {
+                continue
+            }
+
+            $replacements.Add([PSCustomObject]@{
+                    Start = [int]$cmdAst.Extent.StartOffset
+                    End   = [int]$cmdAst.Extent.EndOffset
+                    Text  = $replacement
+                }) | Out-Null
+        }
+
+        $exprAsts = @($parse.Ast.FindAll({
+                    param($n)
+                    $n -is [System.Management.Automation.Language.ExpressionAst] -and (Test-MandatoryBase64ExpressionAst -Ast $n)
+                }, $true) | Sort-Object -Property @{ Expression = { [int]$_.Extent.StartOffset } }, @{ Expression = { -([int]$_.Extent.EndOffset - [int]$_.Extent.StartOffset) } })
+        foreach ($exprAst in $exprAsts) {
+            if (-not $exprAst -or -not $exprAst.Extent) { continue }
+
+            $replacement = Get-MandatoryBase64ExpressionReplacementText -Ast $exprAst -Context $ctx
+            if ([string]::IsNullOrWhiteSpace($replacement)) {
+                continue
+            }
+
+            $original = [string]$exprAst.Extent.Text
+            if ($replacement -eq $original) {
+                continue
+            }
+
+            $replacements.Add([PSCustomObject]@{
+                    Start = [int]$exprAst.Extent.StartOffset
+                    End   = [int]$exprAst.Extent.EndOffset
+                    Text  = $replacement
+                }) | Out-Null
+        }
+
+        if ($replacements.Count -eq 0) {
+            return $ScriptText
+        }
+
+        $selectedReplacements = @()
+        foreach ($candidate in @($replacements | Sort-Object -Property @{ Expression = { [int]$_.Start } }, @{ Expression = { -([int]$_.End - [int]$_.Start) } })) {
+            $overlaps = $false
+            foreach ($existing in $selectedReplacements) {
+                if ([int]$candidate.Start -lt [int]$existing.End -and [int]$candidate.End -gt [int]$existing.Start) {
+                    $overlaps = $true
+                    break
+                }
+            }
+
+            if (-not $overlaps) {
+                $selectedReplacements += $candidate
+            }
+        }
+
+        $result = $ScriptText
+        foreach ($replacement in @($selectedReplacements | Sort-Object Start -Descending)) {
+            $result = $result.Substring(0, $replacement.Start) + [string]$replacement.Text + $result.Substring($replacement.End)
+        }
+
+        $check = Test-PowerShellSyntax -ScriptText $result
+        if ($check.IsValid) {
+            return $result
+        }
+
+        return $ScriptText
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
+}
+
 function Invoke-PostProcessDeobfuscatedScriptText {
     param(
         [Parameter(Mandatory)][string]$ScriptText,
@@ -12291,25 +18242,58 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     )
 
     $working = $ScriptText
-    $fastTimeoutPostProcess = ((Test-IsTimeoutCoverageOptimizationProfile) -and ($working.Length -ge 16384))
+    $fastSensitiveConfig = Get-FastSensitivePassConfig
+    $fastPostProcessTriggerTextLength = if ((Test-IsAdaptiveCoverageOptimizationProfile) -and $fastSensitiveConfig.Enabled) {
+        [int]$fastSensitiveConfig.TriggerTextLength
+    } else {
+        16384
+    }
+    $fastTimeoutPostProcess = ((Test-UsesFastTimeoutPostProcessProfile) -and ($working.Length -ge $fastPostProcessTriggerTextLength))
     $maxPasses = if ($fastTimeoutPostProcess) { 1 } else { 8 }
 
     if ($fastTimeoutPostProcess) {
         $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
         $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
         $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
+        $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
+        $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
+        $mandatoryPayloadInfo = Try-Resolve-WholeScriptMandatoryBase64PayloadInfo -ScriptText $working
+        if ($mandatoryPayloadInfo -and -not [string]::IsNullOrWhiteSpace([string]$mandatoryPayloadInfo.PayloadText)) {
+            $working = [string]$mandatoryPayloadInfo.PayloadText
+            $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
+            $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
+            $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
+            $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
+            $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
+        }
 
         $stageStripped = Try-StripDuplicatedStageWrapper -ScriptText $working
         if (-not [string]::IsNullOrWhiteSpace($stageStripped)) {
             $working = $stageStripped
         }
 
-        $fastCheck = Test-PowerShellSyntax -ScriptText $working
-        if ($fastCheck.IsValid) {
-            return $working
+        $expandedIexPayload = Invoke-ExpandWholeScriptLocalIexPayloads -ScriptText $working -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $PreExecutionGateCache
+        if ((Get-NormalizedScriptComparisonText -ScriptText $expandedIexPayload) -ne (Get-NormalizedScriptComparisonText -ScriptText $working)) {
+            $expandedCheck = Test-PowerShellSyntax -ScriptText $expandedIexPayload
+            if ($expandedCheck.IsValid) {
+                $expandedIexPayload = Invoke-WholeScriptStaticGetContentMaterializationPass -ScriptText $expandedIexPayload
+                return (Invoke-AppendWholeScriptHarvestedSensitiveEvidenceCommentBlock -ScriptText $expandedIexPayload -Source 'postprocess_fast_expanded' -Stage 'postprocess_fast_expanded')
+            }
+        }
+        $working = $expandedIexPayload
+        $working = Invoke-ExpandWholeScriptLocalArtifactLaunchPass -ScriptText $working
+        $working = Invoke-WholeScriptStaticGetContentMaterializationPass -ScriptText $working
+
+        if (Test-IsAdaptiveCoverageOptimizationProfile) {
+            $working = Invoke-NormalizeSensitiveIndicatorArgumentsFast -ScriptText $working
         }
 
-        return $ScriptText
+        $fastCheck = Test-PowerShellSyntax -ScriptText $working
+        if ($fastCheck.IsValid) {
+            return (Invoke-AppendWholeScriptHarvestedSensitiveEvidenceCommentBlock -ScriptText $working -Source 'postprocess_fast' -Stage 'postprocess_fast')
+        }
+
+        return (Invoke-AppendWholeScriptHarvestedSensitiveEvidenceCommentBlock -ScriptText $ScriptText -Source 'postprocess_fast_fallback' -Stage 'postprocess_fast_fallback')
     }
 
     for ($pass = 0; $pass -lt $maxPasses; $pass++) {
@@ -12318,12 +18302,14 @@ function Invoke-PostProcessDeobfuscatedScriptText {
         $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
         $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
         $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
-        if (-not $fastTimeoutPostProcess) {
-            $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
-        }
+        $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
+        $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
 
         while ($true) {
-            $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $working
+            $payloadInfo = Try-Resolve-WholeScriptMandatoryBase64PayloadInfo -ScriptText $working
+            if (-not $payloadInfo) {
+                $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $working
+            }
             if ((-not $payloadInfo) -and (-not $fastTimeoutPostProcess)) {
                 $payloadInfo = Try-Resolve-WholeScriptStaticPayloadInfoSafe -ScriptText $working -WarningContext 'postprocess' -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $PreExecutionGateCache -SafeMode:$SafeMode
             }
@@ -12343,15 +18329,22 @@ function Invoke-PostProcessDeobfuscatedScriptText {
             $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
             $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
             $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
-            if (-not $fastTimeoutPostProcess) {
-                $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
-            }
+            $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
+            $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
+        }
+
+        if (-not $fastTimeoutPostProcess) {
+            $working = Invoke-NormalizeSensitiveIndicatorArguments -ScriptText $working
         }
 
         $stageStripped = Try-StripDuplicatedStageWrapper -ScriptText $working
         if (-not [string]::IsNullOrWhiteSpace($stageStripped)) {
             $working = $stageStripped
         }
+
+        $working = Invoke-ExpandWholeScriptLocalIexPayloads -ScriptText $working -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $PreExecutionGateCache
+        $working = Invoke-ExpandWholeScriptLocalArtifactLaunchPass -ScriptText $working
+        $working = Invoke-WholeScriptStaticGetContentMaterializationPass -ScriptText $working
 
         $after = Get-NormalizedScriptComparisonText -ScriptText $working
         if ($after -eq $before) {
@@ -12362,10 +18355,10 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     $normalized = Invoke-NormalizePlainScriptText -ScriptText $working
     $check = Test-PowerShellSyntax -ScriptText $normalized
     if ($check.IsValid) {
-        return $normalized
+        return (Invoke-AppendWholeScriptHarvestedSensitiveEvidenceCommentBlock -ScriptText $normalized -Source 'postprocess_final' -Stage 'postprocess_final')
     }
 
-    return $working
+    return (Invoke-AppendWholeScriptHarvestedSensitiveEvidenceCommentBlock -ScriptText $working -Source 'postprocess_fallback' -Stage 'postprocess_fallback')
 }
 
 function Ensure-ParentDirectory {
@@ -12680,7 +18673,22 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
             if ([string]$roundGate.Decision -eq 'Stop') {
                 $stoppedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $rawRoundText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
-                Write-TextFileAtomic -Path $roundOutPath -Content $stoppedText
+                $stoppedText = if ($stoppedText -is [System.Array]) { ($stoppedText -join "`r`n") } else { [string]$stoppedText }
+                $safeExtraction = Try-Resolve-GatedRoundSafePayloadInfo -ScriptText $stoppedText -OriginalText $rawRoundText -PreExecutionGateCache $preExecutionGateCache
+                $continuedBySafeExtraction = ($safeExtraction -and -not [string]::IsNullOrWhiteSpace([string]$safeExtraction.PayloadText))
+                $roundOutputText = if ($continuedBySafeExtraction) { [string]$safeExtraction.PayloadText } else { $stoppedText }
+                Write-TextFileAtomic -Path $roundOutPath -Content $roundOutputText
+                if (-not $continuedBySafeExtraction) {
+                    $persistedRoundText = Get-RawScriptTextFromFile -Path $roundOutPath
+                    if (-not [string]::IsNullOrWhiteSpace($persistedRoundText)) {
+                        $safeExtraction = Try-Resolve-GatedRoundSafePayloadInfo -ScriptText $persistedRoundText -OriginalText $rawRoundText -PreExecutionGateCache $preExecutionGateCache
+                        $continuedBySafeExtraction = ($safeExtraction -and -not [string]::IsNullOrWhiteSpace([string]$safeExtraction.PayloadText))
+                        if ($continuedBySafeExtraction) {
+                            $roundOutputText = [string]$safeExtraction.PayloadText
+                            Write-TextFileAtomic -Path $roundOutPath -Content $roundOutputText
+                        }
+                    }
+                }
 
                 if ($FullOutput) {
                     $report = [ordered]@{
@@ -12693,11 +18701,16 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
                         GateMode           = $PreExecutionGateMode
-                        TerminatedBy       = 'pre_execution_gate'
+                        TerminatedBy       = if ($continuedBySafeExtraction) { 'pre_execution_gate_safe_extracted' } else { 'pre_execution_gate' }
                         GateDecision       = $roundGate.Decision
                         GateScore          = $roundGate.Score
                         GateReasons        = @($roundGate.Reasons)
                         GateMetrics        = $roundGate.Metrics
+                        SafeExtractionAttempted = $true
+                        SafeExtractionSucceeded = [bool]$continuedBySafeExtraction
+                        SafeExtractionSource = if ($continuedBySafeExtraction) { [string]$safeExtraction.Source } else { $null }
+                        NextRoundIsMaterializedPayload = [bool]$continuedBySafeExtraction
+                        NextRoundMaterializedPayloadReason = if ($continuedBySafeExtraction) { [string]$safeExtraction.Source } else { $null }
                         FinalSyntaxValid   = $true
                         FinalOutputSource  = 'rebuilt_output'
                         Timestamp          = (Get-Date).ToString('o')
@@ -12705,11 +18718,17 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                     Write-JsonFile -Path $roundReportPath -Object $report
                 }
 
-                $currentText = $stoppedText
+                $currentText = $roundOutputText
                 $finalRound = $round
                 $finalRoundOutPath = $roundOutPath
                 $lastValidRoundOutPath = $roundOutPath
-                $lastValidText = $stoppedText
+                $lastValidText = $roundOutputText
+                if ($continuedBySafeExtraction) {
+                    $currentPath = $roundOutPath
+                    $currentRoundIsMaterializedPayload = $true
+                    continue
+                }
+
                 $terminatedBy = 'pre_execution_gate'
                 break
             }
@@ -12878,7 +18897,17 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             $effectiveRoundLimits.MaxTotalNodes = [Math]::Min([int]$effectiveRoundLimits.MaxTotalNodes, [int]$roundExecutionPlan.MaxTotalNodes)
         }
         if ([string]$roundGate.Decision -eq 'Stop') {
-            $currentText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $currentText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
+            $stoppedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $currentText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
+            $stoppedText = if ($stoppedText -is [System.Array]) { ($stoppedText -join "`r`n") } else { [string]$stoppedText }
+            $safeExtraction = Try-Resolve-GatedRoundSafePayloadInfo -ScriptText $stoppedText -OriginalText $currentText -PreExecutionGateCache $preExecutionGateCache
+            if ($safeExtraction -and -not [string]::IsNullOrWhiteSpace([string]$safeExtraction.PayloadText)) {
+                $currentText = [string]$safeExtraction.PayloadText
+                $currentRoundIsMaterializedPayload = $true
+                $finalRound = $round
+                continue
+            }
+
+            $currentText = $stoppedText
             $finalRound = $round
             $terminatedBy = 'pre_execution_gate'
             break
@@ -12936,7 +18965,14 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
     $roundBaselineSyntax = Test-PowerShellSyntax -ScriptText $scriptText
     $earlyPostProcessedText = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $scriptText -PreExecutionGateMode $PreExecutionGateMode -SafeMode:$SafeMode -PreExecutionGateCache $preExecutionGateCache
     $earlyPostProcessChanged = ((Get-NormalizedScriptComparisonText -ScriptText $earlyPostProcessedText) -ne (Get-NormalizedScriptComparisonText -ScriptText $scriptText))
-    $skipNextRoundPayloadProbe = ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and ([bool]$roundExecutionPlan.StopAfterThisRound -or [bool]$roundExecutionPlan.SkipCfgTraversal))
+    $skipNextRoundPayloadProbe = $false
+    if ($roundExecutionPlan) {
+        if (Test-IsTimeoutCoverageOptimizationProfile) {
+            $skipNextRoundPayloadProbe = ([bool]$roundExecutionPlan.StopAfterThisRound -or [bool]$roundExecutionPlan.SkipCfgTraversal)
+        } elseif (Test-IsAdaptiveCoverageOptimizationProfile) {
+            $skipNextRoundPayloadProbe = [bool]$roundExecutionPlan.StopAfterThisRound
+        }
+    }
 
     if ($earlyPostProcessChanged) {
         $candidates = @()
@@ -13003,6 +19039,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         }
         $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
         $sensitive = Get-SensitiveSinkReplacementCandidates -Context $ctx -ScriptText $scriptText
+        $mandatoryBase64 = Get-MandatoryBase64ReplacementCandidates -Context $ctx -ScriptText $scriptText
         $remainingStaticBudgetMs = Get-RemainingTimeBudgetMs -BudgetMs $GlobalTimeBudgetMs -Stopwatch $globalStopwatch
         if ([int]$profileSettings.StaticBudgetCapMs -gt 0 -and $remainingStaticBudgetMs -gt 0) {
             $remainingStaticBudgetMs = [Math]::Min([int]$remainingStaticBudgetMs, [int]$profileSettings.StaticBudgetCapMs)
@@ -13020,12 +19057,12 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         } else {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
-        $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($functionResults.Candidates) + @($wholeScriptDynamic.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($base.Candidates) + @($static.Candidates))
+        $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($functionResults.Candidates) + @($wholeScriptDynamic.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates))
         $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($merged.Candidates) -Context $ctx -ScriptText $scriptText
         $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
         $candidates = @($preferred.Candidates)
-        $skipped = @($dynamic.Skipped) + @($functionResults.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+        $skipped = @($dynamic.Skipped) + @($functionResults.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
         $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
         $autoCandidates = @()
@@ -13091,7 +19128,14 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
     if ($selected.Count -eq 0 -and -not $postProcessChanged) {
         $noReplacementReason = Get-NoReplacementTerminationReason -CandidateCount $candidates.Count -Skipped $skipped
-        $noReplacementTerminatedBy = if ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and ($roundExecutionPlan.StopAfterThisRound -or $roundExecutionPlan.SkipCfgTraversal)) { 'stable_output' } else { 'no_replacements' }
+        $noReplacementTerminatedBy = if (
+            ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and ($roundExecutionPlan.StopAfterThisRound -or $roundExecutionPlan.SkipCfgTraversal)) -or
+            ((Test-IsAdaptiveCoverageOptimizationProfile) -and $roundExecutionPlan -and [bool]$roundExecutionPlan.StopAfterThisRound)
+        ) {
+            'stable_output'
+        } else {
+            'no_replacements'
+        }
         Write-Host ("  candidates={0} selected={1} applied={2} skipped={3}" -f $candidates.Count, $selected.Count, $appliedCount, $skipped.Count) -ForegroundColor Gray
 
         if ($FullOutput) {
@@ -13184,9 +19228,10 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
         $staticHigh = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'High' }).Count
         $staticLow = @($candidates | Where-Object { $_.SourceKind -eq 'Static' -and $_.Confidence -eq 'Low' }).Count
+        $mandatoryBase64Count = @($candidates | Where-Object { $_.SourceKind -eq 'MandatoryBase64' }).Count
         $dynamicCount = @($candidates | Where-Object { $_.SourceKind -eq 'DynamicInvoke' }).Count
         $literalizedCount = @($candidates | Where-Object { $_.SourceKind -eq 'LiteralizedCommand' }).Count
-        $otherExecutedCount = @($candidates | Where-Object { $_.SourceKind -notin @('Static', 'DynamicInvoke', 'LiteralizedCommand') }).Count
+        $otherExecutedCount = @($candidates | Where-Object { $_.SourceKind -notin @('Static', 'DynamicInvoke', 'LiteralizedCommand', 'MandatoryBase64') }).Count
 
         $report = [ordered]@{
             Round           = $round
@@ -13219,6 +19264,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             CandidateCount  = $candidates.Count
             DynamicCount    = $dynamicCount
             LiteralizedCommandCount = $literalizedCount
+            MandatoryBase64Count = $mandatoryBase64Count
             OtherExecutedCount = $otherExecutedCount
             StaticHighCount = $staticHigh
             StaticLowCount  = $staticLow
@@ -13262,9 +19308,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
     $finalRound = $round
 
-    if ((Test-IsTimeoutCoverageOptimizationProfile) -and $roundExecutionPlan -and [bool]$roundExecutionPlan.StopAfterThisRound) {
+    if (((Test-IsTimeoutCoverageOptimizationProfile) -or (Test-IsAdaptiveCoverageOptimizationProfile)) -and $roundExecutionPlan -and [bool]$roundExecutionPlan.StopAfterThisRound) {
         $terminatedBy = 'stable_output'
-        $completionKind = 'budget_partial'
+        if (Test-IsTimeoutCoverageOptimizationProfile) {
+            $completionKind = 'budget_partial'
+        }
         break
     }
 

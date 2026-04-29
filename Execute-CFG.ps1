@@ -2175,29 +2175,142 @@ function Invoke-DynamicStopPostProcessRecovery {
     if ([string]::IsNullOrWhiteSpace($ScriptText)) {
         return $null
     }
-    if (-not (Get-Command Invoke-PostProcessDeobfuscatedScriptText -ErrorAction SilentlyContinue)) {
+
+    $hasPostProcess = ($null -ne (Get-Command Invoke-PostProcessDeobfuscatedScriptText -ErrorAction SilentlyContinue))
+    $hasHostResolver = ($null -ne (Get-Command Resolve-WholeScriptHostPayloadInfo -ErrorAction SilentlyContinue))
+    $hasMandatoryBase64Resolver = ($null -ne (Get-Command Try-Resolve-WholeScriptMandatoryBase64PayloadInfo -ErrorAction SilentlyContinue))
+    $hasStaticResolver = ($null -ne (Get-Command Try-Resolve-WholeScriptStaticPayloadInfoSafe -ErrorAction SilentlyContinue))
+    $hasRecoveredTextNormalizer = ($null -ne (Get-Command Try-NormalizeRecoveredScriptText -ErrorAction SilentlyContinue))
+
+    if (-not ($hasPostProcess -or $hasHostResolver -or $hasMandatoryBase64Resolver -or $hasStaticResolver -or $hasRecoveredTextNormalizer)) {
         return $null
     }
 
-    try {
-        $recovered = Invoke-PostProcessDeobfuscatedScriptText -ScriptText $ScriptText
-    } catch {
-        return $null
-    }
+    $getComparisonText = {
+        param([AllowNull()][string]$Text)
 
-    if ([string]::IsNullOrWhiteSpace([string]$recovered)) {
-        return $null
-    }
-
-    if (Get-Command Get-NormalizedScriptComparisonText -ErrorAction SilentlyContinue) {
-        if ((Get-NormalizedScriptComparisonText -ScriptText $recovered) -eq (Get-NormalizedScriptComparisonText -ScriptText $ScriptText)) {
-            return $null
+        $candidateText = if ($null -eq $Text) { '' } else { [string]$Text }
+        if (Get-Command Get-NormalizedScriptComparisonText -ErrorAction SilentlyContinue) {
+            return (Get-NormalizedScriptComparisonText -ScriptText $candidateText)
         }
-    } elseif ([string]$recovered -eq [string]$ScriptText) {
+
+        return $candidateText
+    }
+
+    $working = [string]$ScriptText
+    $adoptCandidate = {
+        param([AllowNull()][string]$Candidate)
+
+        if ([string]::IsNullOrWhiteSpace([string]$Candidate)) {
+            return $false
+        }
+
+        $candidateText = [string]$Candidate
+        if ((& $getComparisonText $candidateText) -eq (& $getComparisonText $working)) {
+            return $false
+        }
+
+        $working = $candidateText
+        return $true
+    }
+
+    if (Get-Command Remove-RecoveredTextTransportArtifacts -ErrorAction SilentlyContinue) {
+        try {
+            [void](& $adoptCandidate (Remove-RecoveredTextTransportArtifacts -Text $working))
+        } catch {
+        }
+    }
+
+    for ($round = 0; $round -lt 6; $round++) {
+        $changed = $false
+
+        if ($hasRecoveredTextNormalizer) {
+            try {
+                if (& $adoptCandidate (Try-NormalizeRecoveredScriptText -Text $working)) {
+                    $changed = $true
+                }
+            } catch {
+            }
+        }
+
+        foreach ($resolverName in @('Try-Resolve-WholeScriptMandatoryBase64PayloadInfo', 'Resolve-WholeScriptHostPayloadInfo', 'Try-Resolve-WholeScriptStaticPayloadInfoSafe')) {
+            $payloadInfo = $null
+            try {
+                switch ($resolverName) {
+                    'Try-Resolve-WholeScriptMandatoryBase64PayloadInfo' {
+                        if ($hasMandatoryBase64Resolver) {
+                            $payloadInfo = Try-Resolve-WholeScriptMandatoryBase64PayloadInfo -ScriptText $working
+                        }
+                    }
+                    'Resolve-WholeScriptHostPayloadInfo' {
+                        if ($hasHostResolver) {
+                            $payloadInfo = Resolve-WholeScriptHostPayloadInfo -ScriptText $working
+                        }
+                    }
+                    'Try-Resolve-WholeScriptStaticPayloadInfoSafe' {
+                        if ($hasStaticResolver) {
+                            $payloadInfo = Try-Resolve-WholeScriptStaticPayloadInfoSafe -ScriptText $working -WarningContext 'dynamic_stop_recovery'
+                        }
+                    }
+                }
+            } catch {
+                $payloadInfo = $null
+            }
+
+            if (-not $payloadInfo -or -not $payloadInfo.PSObject.Properties['PayloadText'] -or
+                [string]::IsNullOrWhiteSpace([string]$payloadInfo.PayloadText)) {
+                continue
+            }
+
+            $payloadText = [string]$payloadInfo.PayloadText
+            if (Get-Command Get-WholeScriptReplacementCandidateText -ErrorAction SilentlyContinue) {
+                try {
+                    $candidateText = Get-WholeScriptReplacementCandidateText -OriginalText $working -CandidateText $payloadText
+                    if (-not [string]::IsNullOrWhiteSpace([string]$candidateText)) {
+                        $payloadText = [string]$candidateText
+                    }
+                } catch {
+                }
+            }
+            if (Get-Command Remove-RecoveredTextTransportArtifacts -ErrorAction SilentlyContinue) {
+                try {
+                    $payloadText = Remove-RecoveredTextTransportArtifacts -Text $payloadText
+                } catch {
+                }
+            }
+
+            if (& $adoptCandidate $payloadText) {
+                $changed = $true
+                break
+            }
+        }
+
+        if ($hasPostProcess) {
+            try {
+                if (& $adoptCandidate (Invoke-PostProcessDeobfuscatedScriptText -ScriptText $working)) {
+                    $changed = $true
+                }
+            } catch {
+            }
+        }
+
+        if (-not $changed) {
+            break
+        }
+    }
+
+    if (Get-Command Invoke-NormalizePlainScriptText -ErrorAction SilentlyContinue) {
+        try {
+            [void](& $adoptCandidate (Invoke-NormalizePlainScriptText -ScriptText $working))
+        } catch {
+        }
+    }
+
+    if ((& $getComparisonText $working) -eq (& $getComparisonText $ScriptText)) {
         return $null
     }
 
-    return [string]$recovered
+    return [string]$working
 }
 
 function ConvertTo-CanonicalPowerShellHostCommandText {

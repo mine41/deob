@@ -157,7 +157,7 @@ Notes:
 | `-DynamicTimeBudgetMs` | `15000` | Time budget for one dynamic expansion in milliseconds. `0` means unlimited. |
 | `-SafeMode` | `$true` | Whether to keep safety protections enabled |
 | `-PreExecutionGateMode` | `Balanced` | Complexity-aware pre-execution gate: `Disabled` / `Conservative` / `Balanced` / `Aggressive` |
-| `-OptimizationProfile` | `Default` | Behavior-tuning profile: `Default` / `Cmdline` / `TimeoutCoverage` |
+| `-OptimizationProfile` | `Default` | Behavior-tuning profile: `Default` / `Cmdline` / `AdaptiveCoverage` |
 | `-RunMetadataPath` | unset | Optional JSON summary output path for run metadata |
 | `-DryRun` | `$false` | Analyze only, do not write the final output |
 
@@ -181,7 +181,7 @@ Optimization profiles:
 
 - `Default`: standard behavior.
 - `Cmdline`: tuned for command-line style samples and more conservative about some rewrites.
-- `TimeoutCoverage`: prioritizes finishing within budget and reducing timeouts, even if some expensive stages are skipped or made shallow.
+- `AdaptiveCoverage`: prioritizes finishing within budget while preserving one more chance for high-value follow-up recovery after lightweight peeling.
 
 Pre-execution gate modes:
 
