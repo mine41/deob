@@ -1,0 +1,100 @@
+﻿{
+  "file": "f65efd76d129483fb6795d1dd0b40d19.deob.ps1",
+  "sampleId": "f65efd76d129483fb6795d1dd0b40d19",
+  "rawInstructionCount": 399,
+  "instructionCount": 399,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 397,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 4,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "ScriptExec|RemoteMemoryAlloc|RemoteThreadCreate|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 15681,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 1157,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 50,
+  "deobfuscationScore": 50,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

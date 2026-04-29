@@ -1,0 +1,111 @@
+﻿{
+  "file": "39a7d780b3e8f35bfaad0210ba22b3c7.deob.ps1",
+  "sampleId": "39a7d780b3e8f35bfaad0210ba22b3c7",
+  "rawInstructionCount": 420,
+  "instructionCount": 420,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 415,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteThreadCreate"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 7,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 26983,
+  "byteArrayLiteralBytes": 6,
+  "astNodeCount": 131,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 3,
+  "obfuscationScore": 82,
+  "deobfuscationScore": 18,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

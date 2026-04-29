@@ -1,0 +1,88 @@
+﻿{
+  "file": "a1c01714b5096f4a6cbd8af7766f341d.deob.ps1",
+  "sampleId": "a1c01714b5096f4a6cbd8af7766f341d",
+  "rawInstructionCount": 148,
+  "instructionCount": 148,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 146,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "FileWrite"
+  ],
+  "capabilitySignature": "ScriptExec|FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 299995,
+  "byteArrayLiteralBytes": 1604,
+  "astNodeCount": 22,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 47,
+  "deobfuscationScore": 53,
+  "apiSequenceCoverage": "fallback_appended"
+}

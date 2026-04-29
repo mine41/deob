@@ -1,0 +1,133 @@
+﻿{
+  "file": "09f1da26b08f3ea6ff5c69e036d0a560.rebuilt.ps1",
+  "sampleId": "09f1da26b08f3ea6ff5c69e036d0a560",
+  "rawInstructionCount": 400,
+  "instructionCount": 400,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "remove-item",
+    "System.IO.File.ReadAllBytes",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "Win32Functions.Win32.CreateThread",
+    "Win32Functions.Win32.WaitForSingleObject",
+    "start-sleep",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedActionSequence": [
+    "remove-item",
+    "System.IO.File.ReadAllBytes",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "Win32Functions.Win32.CreateThread",
+    "Win32Functions.Win32.WaitForSingleObject",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "remove-item",
+    "System.IO.File.ReadAllBytes",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "Win32Functions.Win32.CreateThread",
+    "Win32Functions.Win32.WaitForSingleObject",
+    "remove-item",
+    "remove-item"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "remove-item",
+    "System.IO.File.ReadAllBytes",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "Win32Functions.Win32.CreateThread",
+    "Win32Functions.Win32.WaitForSingleObject",
+    "start-sleep",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedApiSequence": [
+    "remove-item",
+    "System.IO.File.ReadAllBytes",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "Win32Functions.Win32.CreateThread",
+    "Win32Functions.Win32.WaitForSingleObject",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "remove-item",
+    "add-type",
+    "remove-item",
+    "remove-item"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 392,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "Win32Functions.Win32.CreateThread",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "remove-item",
+    "add-type",
+    "remove-item",
+    "remove-item"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 756,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 99,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,134 @@
+﻿{
+  "file": "560f8202720b0f330af6fc36ab4888d1.rebuilt.ps1",
+  "sampleId": "560f8202720b0f330af6fc36ab4888d1",
+  "rawInstructionCount": 589,
+  "instructionCount": 589,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.Threading.Thread.Sleep",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.String.Normalize",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedActionSequence": [
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.Threading.Thread.Sleep",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.String.Normalize",
+    "new-object",
+    "System.Net.WebClient.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.Threading.Thread.Sleep",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.String.Normalize",
+    "new-object",
+    "System.Net.WebClient.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.Threading.Thread.Sleep",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.String.Normalize",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedApiSequence": [
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.String.Normalize",
+    "System.Threading.Thread.Sleep",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.String.Normalize",
+    "new-object",
+    "System.Net.WebClient.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "System.Net.WebClient.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 579,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "System.Threading.Thread.Sleep",
+    "System.Management.Automation.PSObject.DownloadData"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "System.Threading.Thread.Sleep",
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadData",
+    "System.Reflection.Assembly.Load"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "Download"
+  ],
+  "capabilitySignature": "Download",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1421,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 651,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 1,
+  "deobfuscationScore": 99,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

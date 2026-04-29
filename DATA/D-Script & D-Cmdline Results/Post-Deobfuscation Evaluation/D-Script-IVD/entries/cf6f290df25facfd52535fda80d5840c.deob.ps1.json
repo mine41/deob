@@ -1,0 +1,119 @@
+﻿{
+  "file": "cf6f290df25facfd52535fda80d5840c.deob.ps1",
+  "sampleId": "cf6f290df25facfd52535fda80d5840c",
+  "rawInstructionCount": 1047,
+  "instructionCount": 1047,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "test-path",
+    "System.Convert.FromBase64String",
+    "new-object",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "set-content",
+    "pOWErshELl.EXe"
+  ],
+  "normalizedActionSequence": [
+    "test-path",
+    "System.Convert.FromBase64String",
+    "new-object",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "set-content",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "test-path",
+    "System.Convert.FromBase64String",
+    "new-object",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "set-content",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "test-path",
+    "System.Convert.FromBase64String",
+    "new-object",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "set-content",
+    "pOWErshELl.EXe"
+  ],
+  "normalizedApiSequence": [
+    "test-path",
+    "System.Convert.FromBase64String",
+    "new-object",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "set-content",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1040,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "FileWrite"
+  ],
+  "capabilitySignature": "FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 5,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 286182,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 270,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 50,
+  "deobfuscationScore": 50,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

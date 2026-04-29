@@ -1,0 +1,137 @@
+﻿{
+  "file": "541d593daa1a55ba2fa992015f5cfb2e",
+  "sampleId": "541d593daa1a55ba2fa992015f5cfb2e",
+  "rawInstructionCount": 1143,
+  "instructionCount": 1143,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetString",
+    "invoke-expression",
+    "write-host",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "out-null",
+    "System.Management.Automation.SteppablePipeline.End",
+    "invoke-webrequest",
+    "regsvr32.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetString",
+    "invoke-expression",
+    "write-host",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "out-null",
+    "invoke-webrequest",
+    "regsvr32.exe"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetString",
+    "invoke-expression",
+    "write-host",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "out-null",
+    "invoke-webrequest",
+    "regsvr32.exe"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetString",
+    "invoke-expression",
+    "write-host",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "out-null",
+    "System.Management.Automation.SteppablePipeline.End",
+    "invoke-webrequest",
+    "regsvr32.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetString",
+    "invoke-expression",
+    "write-host",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "out-null",
+    "invoke-webrequest",
+    "regsvr32.exe"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "invoke-expression",
+    "invoke-webrequest"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "cmdline",
+  "normalizedMode": "script",
+  "normalizeStatus": "decoded_cmdline",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 1134,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "invoke-webrequest"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "Download"
+  ],
+  "capabilitySignature": "ScriptExec|Download",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 809,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 47,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 25,
+  "deobfuscationScore": 75,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

@@ -1,0 +1,107 @@
+﻿{
+  "file": "success\\1433d3d488655cdaf2947d06554de143",
+  "sampleId": "1433d3d488655cdaf2947d06554de143",
+  "rawInstructionCount": 1982,
+  "instructionCount": 1982,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Guid.NewGuid",
+    "get-process",
+    "rundll32.exe",
+    "start-sleep",
+    "test-path",
+    "out-file"
+  ],
+  "normalizedActionSequence": [
+    "System.Guid.NewGuid",
+    "get-process",
+    "rundll32.exe",
+    "test-path",
+    "out-file"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "System.Guid.NewGuid",
+    "get-process",
+    "rundll32.exe",
+    "test-path",
+    "out-file"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "System.Guid.NewGuid",
+    "get-process",
+    "rundll32.exe",
+    "start-sleep",
+    "test-path",
+    "out-file"
+  ],
+  "normalizedApiSequence": [
+    "System.Guid.NewGuid",
+    "get-process",
+    "rundll32.exe",
+    "test-path",
+    "out-file"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "out-file"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1977,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "out-file"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "FileWrite|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 206810,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 264,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 47,
+  "deobfuscationScore": 53,
+  "apiSequenceCoverage": "fallback_appended"
+}

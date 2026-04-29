@@ -1,0 +1,82 @@
+﻿{
+  "file": "531ad87f878dac568fb836dffef0894e.rebuilt.ps1",
+  "sampleId": "531ad87f878dac568fb836dffef0894e",
+  "rawInstructionCount": 326,
+  "instructionCount": 326,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetString",
+    "set-location"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetString"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetString"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetString",
+    "set-location"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetString"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 324,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 6,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1751,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 73,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 37,
+  "deobfuscationScore": 63,
+  "apiSequenceCoverage": "complete"
+}

@@ -1,0 +1,114 @@
+﻿{
+  "file": "cf16114f68f60c9f2319b852f4b8107e.deob.ps1",
+  "sampleId": "cf16114f68f60c9f2319b852f4b8107e",
+  "rawInstructionCount": 277,
+  "instructionCount": 277,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 271,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllBytes",
+    "start-process",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "FileWrite|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1275327,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 73,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 32,
+  "deobfuscationScore": 68,
+  "apiSequenceCoverage": "fallback_appended"
+}

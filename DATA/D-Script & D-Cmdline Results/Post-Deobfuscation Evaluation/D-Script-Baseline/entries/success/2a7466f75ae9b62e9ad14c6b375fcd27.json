@@ -1,0 +1,122 @@
+﻿{
+  "file": "success\\2a7466f75ae9b62e9ad14c6b375fcd27",
+  "sampleId": "2a7466f75ae9b62e9ad14c6b375fcd27",
+  "rawInstructionCount": 317,
+  "instructionCount": 317,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "start-sleep",
+    "set-itemproperty",
+    "set-itemproperty",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "start-sleep",
+    "set-itemproperty",
+    "set-itemproperty",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content"
+  ],
+  "recordedImportantApiCount": 5,
+  "importantApiCount": 5,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 312,
+  "stubbedSinkCount": 3,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 5,
+  "effectiveApiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "RegistryModify",
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "RegistryModify",
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "RegistryModify",
+    "FileWrite"
+  ],
+  "capabilitySignature": "RegistryModify|FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 689626,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 63,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 26,
+  "deobfuscationScore": 74,
+  "apiSequenceCoverage": "fallback_appended"
+}

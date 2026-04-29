@@ -1,0 +1,1546 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 100,
+  "ChunkSignature": "e5a0dbe72234c7cb7110a1a5a51fc81b2a1c791b42db170a2451ea764c9ff109",
+  "FileCount": 34,
+  "ChunkResult": {
+    "FailedFiles": 0,
+    "Summary": {
+      "URL": {
+        "FilesContaining": 8,
+        "TotalOccurrences": 35
+      },
+      "FilePath": {
+        "FilesContaining": 12,
+        "TotalOccurrences": 98
+      },
+      "RegKey": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 1
+      },
+      "IP": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 1
+      },
+      "FilePathRaw": {
+        "FilesContaining": 14,
+        "TotalOccurrences": 103
+      }
+    },
+    "ProcessedFiles": 34,
+    "FileDetails": [
+      {
+        "FilePath": {
+          "Values": [
+            "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FileName": "caadeb72925bfcd01737d0c914ecb439.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1854
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "%TEMP%\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Unique": 36,
+          "Total": 51
+        },
+        "FileName": "cab434853cc1ca201b0e1de46dec83aa",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://support.microsoft.com/en-us/kb/914392",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+            "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+            "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+            "http://www.greyhathacker.net/?p=738",
+            "http://stackoverflow.com/questions/9735449/how-to-verify-whether-the-share-has-write-access",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+            "http://www.fuzzysecurity.com/tutorials/16.html",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h"
+          ],
+          "Unique": 14,
+          "Total": 18
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "$env:Temp\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "c:\\Windows\\Microsoft.NET\\Framework\\",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Unique": 37,
+          "Total": 54
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 497145
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cab61a61d418f71b9d180127c48c1f00.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 11560
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cae59d229b9d386f88c17d54b3fb3c3e.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1064157
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "cae78c4253acc5c90ad7e3db4c9a7119.deob.ps1",
+        "IP": {
+          "Values": [
+            "141.148.192.43"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+            "C:\\'}else{echo $p"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1637
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cb15fcb2e575609155e6d215cccd909a.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://get.scoop.sh",
+            "https://docs.microsoft.com/en-us/powershell/scripting/setup/installing-windows-powershell",
+            "https://www.microsoft.com/net/download",
+            "https://raw.githubusercontent.com/lukesampson/scoop/master/lib/core.ps1",
+            "https://raw.githubusercontent.com/lukesampson/scoop/master/lib/core.ps1",
+            "https://github.com/lukesampson/scoop/archive/master.zip",
+            "https://github.com/lukesampson/scoop/archive/master.zip"
+          ],
+          "Unique": 5,
+          "Total": 7
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2482
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cb1836fbc42d8449a6eb860350020287.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 10480
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cb24c2341924ee5579e4167f027e6b83.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 32655
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cb72fce449ff40083cb563a168c62583",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\ProgramData\\Captain\\Injector.exe $e.ProcessId"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3844
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cb8eb8d2aaec0b71027e645afef36939.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 7628
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%WINDIR%\\System32\\test.txt",
+            "%WINDIR%\\System32\\test.txt",
+            "%TEMP%\\gds.txt",
+            "%TEMP%\\tp.bat",
+            "%WINDIR%\\System32\\cmd.exe",
+            "%TEMP%\\tp.bat",
+            "%TEMP%\\gds.txt",
+            "%TEMP%\\gds.txt"
+          ],
+          "Unique": 4,
+          "Total": 8
+        },
+        "FileName": "cba080be3d2a48a95231edb537867554.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://qgb.us/view/raw/ef3419ec"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Windows\\System32\\test.txt",
+            "C:\\Windows\\System32\\test.txt",
+            "$env:temp\\gds.txt",
+            "$env:temp\\tp.bat",
+            "C:\\Windows\\System32\\cmd.exe",
+            "$env:temp\\tp.bat",
+            "$env:temp\\gds.txt"
+          ],
+          "Unique": 4,
+          "Total": 7
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 41560
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cba190aada920935364290ffc01d00c9",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3075681
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%PUBLIC%\\hash.vbs"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "cba3e88289ab398569687f384f4dec3b.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\Public\\hash.vbs"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 501
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cba46569aa38541f393828866d8ee309",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3144800
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cbb03818ea25edb7205581c6306359ac",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 305
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%USERPROFILE%\\Documents",
+            "%USERPROFILE%\\Documents\\Call of Duty\\players",
+            "%USERPROFILE%\\Documents"
+          ],
+          "Unique": 2,
+          "Total": 3
+        },
+        "FileName": "cbc8f6dbc393510cc3c45132f9a473b0.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\hacker\\Documents",
+            "C:\\Users\\hacker\\Documents\\Call of Duty\\players"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 23015
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command"
+          ],
+          "Unique": 3,
+          "Total": 16
+        },
+        "FileName": "cbd5f67d33bdb8fcb46320f0db4ce32e",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://s3.us-east-2.amazonaws.com/qeeqq/guru.jpg",
+            "https://s3.us-east-2.amazonaws.com/qeeqq/guru.jpg"
+          ],
+          "Unique": 1,
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command"
+          ],
+          "Unique": 3,
+          "Total": 16
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1956733
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "cbf8dfe8cc78154085ce93932f03d798",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://mydatayxnhzcs.tech/file/docs/$fileName"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [
+            " HKLM:\\Software"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileSize": 10205
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc0274adbb6720e21c1fbe3e545241d6.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://google-analitycs.ngrok.app/certificate.pem",
+            "https://google-analitycs.ngrok.app/certificate.pem",
+            "https://google-analitycs.ngrok.app/proxy.pac",
+            "https://autoatendimento.bb.com.br"
+          ],
+          "Unique": 3,
+          "Total": 4
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2148
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+          ],
+          "Unique": 1,
+          "Total": 2
+        },
+        "FileName": "cc0d9e8065a0338995994e055b305e37.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+          ],
+          "Unique": 1,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 18526
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc17e0a3a15da6a83b06b425ed79d84c.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 129419
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc3fa3d9f9a0bf67182d9869e5fec1d4",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 31161
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc5e4ecc78019ab02398187259664826",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 5019177
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc62c71fc2a19920d0f0b5531e06a707.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 572694
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%PUBLIC%\\i.dat",
+            "%ProgramFiles%\\Internet Explorer\\iexplore.exe,1",
+            "%APPDATA%\\${_",
+            "%PUBLIC%\\c.lnk",
+            "%PUBLIC%\\c.lnk",
+            "%PUBLIC%\\c.lnk",
+            "%PUBLIC%\\chrome.lnk",
+            "%WINDIR%\\system32\\shutdown.exe"
+          ],
+          "Unique": 6,
+          "Total": 8
+        },
+        "FileName": "cc66f8c07f0ab19776e3c2156645b33f.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://155.138.140.53/mods/xn/md.zip"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [
+            "c:\\users\\public",
+            "c:\\users\\public\\i.dat",
+            "%ProgramFiles%\\Internet Explorer\\iexplore.exe,1",
+            "$env:APPDATA\\${_",
+            "c:\\users\\public\\c.lnk",
+            "c:\\users\\public\\c.lnk",
+            "c:\\users\\public\\c.lnk",
+            "c:\\users\\${_",
+            "c:\\users\\public\\chrome.lnk",
+            "c:\\windows\\system32\\shutdown.exe"
+          ],
+          "Unique": 8,
+          "Total": 10
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 7568
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FileName": "cc678c645c33c5d18ee4d1218946e055.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1879
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc76f6a3c735f4839e2241061eeda579",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 973357
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc86441370d68d47a773973e972dcd74.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 573756
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc8ee03f810948f56a089117589c369c.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe' , $Serv1"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 890416
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cc936c4b3876c26822528dadfba88ee1.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 10012
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "cca093cfcf506e1c281caf13027a21cc.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 10244
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "ccb301427b5607053601ceee529bc270",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 742401
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%USERPROFILE%\\Db_bh30\\Yf5be5g",
+            "%USERPROFILE%\\Db_bh30\\Yf5be5g\\A69S.dll",
+            "%USERPROFILE%\\Db_bh30\\Yf5be5g\\A69S.dll"
+          ],
+          "Unique": 2,
+          "Total": 3
+        },
+        "FileName": "cccab1e9c41465240f7acc0ac0dca041.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://admintk.com/wp-admin/L/@https://mikegeerinck.com/c/YYsa/@http://freelancerwebdesignerhyderabad.com/cgi-bin/S/@http://etdog.com/wp-content/nu/@https://www.hintup.com.br/wp-content/dE/@http://www.stmarouns.nsw.edu.au/paypal/b8G/@http://wm.mcdevelop.net/content/6F2gd/"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\hacker\\Db_bh30\\Yf5be5g\\",
+            "C:\\Users\\hacker\\Db_bh30\\Yf5be5g\\A69S.dll"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1258
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "ccd1d550865a3a2a82c5f58a83dbf1bb",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2648139
+      }
+    ],
+    "SkippedFiles": 0,
+    "Errors": [],
+    "CollectedValues": {
+      "IP": [
+        "141.148.192.43"
+      ],
+      "FilePathRaw": [
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "C:\\Windows",
+        "C:\\Windows\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "$env:Temp\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "c:\\Windows\\Microsoft.NET\\Framework\\",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "C:\\'}else{echo $p",
+        "C:\\ProgramData\\Captain\\Injector.exe $e.ProcessId",
+        "C:\\Windows\\System32\\test.txt",
+        "C:\\Windows\\System32\\test.txt",
+        "$env:temp\\gds.txt",
+        "$env:temp\\tp.bat",
+        "C:\\Windows\\System32\\cmd.exe",
+        "$env:temp\\tp.bat",
+        "$env:temp\\gds.txt",
+        "C:\\Users\\Public\\hash.vbs",
+        "C:\\Users\\hacker\\Documents",
+        "C:\\Users\\hacker\\Documents\\Call of Duty\\players",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "c:\\users\\public",
+        "c:\\users\\public\\i.dat",
+        "%ProgramFiles%\\Internet Explorer\\iexplore.exe,1",
+        "$env:APPDATA\\${_",
+        "c:\\users\\public\\c.lnk",
+        "c:\\users\\public\\c.lnk",
+        "c:\\users\\public\\c.lnk",
+        "c:\\users\\${_",
+        "c:\\users\\public\\chrome.lnk",
+        "c:\\windows\\system32\\shutdown.exe",
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe' , $Serv1",
+        "C:\\Users\\hacker\\Db_bh30\\Yf5be5g\\",
+        "C:\\Users\\hacker\\Db_bh30\\Yf5be5g\\A69S.dll"
+      ],
+      "RegKey": [
+        " HKLM:\\Software"
+      ],
+      "URL": [
+        "https://support.microsoft.com/en-us/kb/914392",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+        "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+        "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+        "http://www.greyhathacker.net/?p=738",
+        "http://stackoverflow.com/questions/9735449/how-to-verify-whether-the-share-has-write-access",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+        "http://www.fuzzysecurity.com/tutorials/16.html",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://get.scoop.sh",
+        "https://docs.microsoft.com/en-us/powershell/scripting/setup/installing-windows-powershell",
+        "https://www.microsoft.com/net/download",
+        "https://raw.githubusercontent.com/lukesampson/scoop/master/lib/core.ps1",
+        "https://raw.githubusercontent.com/lukesampson/scoop/master/lib/core.ps1",
+        "https://github.com/lukesampson/scoop/archive/master.zip",
+        "https://github.com/lukesampson/scoop/archive/master.zip",
+        "http://qgb.us/view/raw/ef3419ec",
+        "https://s3.us-east-2.amazonaws.com/qeeqq/guru.jpg",
+        "https://s3.us-east-2.amazonaws.com/qeeqq/guru.jpg",
+        "http://mydatayxnhzcs.tech/file/docs/$fileName",
+        "https://google-analitycs.ngrok.app/certificate.pem",
+        "https://google-analitycs.ngrok.app/certificate.pem",
+        "https://google-analitycs.ngrok.app/proxy.pac",
+        "https://autoatendimento.bb.com.br",
+        "http://155.138.140.53/mods/xn/md.zip",
+        "https://admintk.com/wp-admin/L/@https://mikegeerinck.com/c/YYsa/@http://freelancerwebdesignerhyderabad.com/cgi-bin/S/@http://etdog.com/wp-content/nu/@https://www.hintup.com.br/wp-content/dE/@http://www.stmarouns.nsw.edu.au/paypal/b8G/@http://wm.mcdevelop.net/content/6F2gd/"
+      ],
+      "FilePath": [
+        "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "%TEMP%\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "%WINDIR%\\System32\\test.txt",
+        "%WINDIR%\\System32\\test.txt",
+        "%TEMP%\\gds.txt",
+        "%TEMP%\\tp.bat",
+        "%WINDIR%\\System32\\cmd.exe",
+        "%TEMP%\\tp.bat",
+        "%TEMP%\\gds.txt",
+        "%TEMP%\\gds.txt",
+        "%PUBLIC%\\hash.vbs",
+        "%USERPROFILE%\\Documents",
+        "%USERPROFILE%\\Documents\\Call of Duty\\players",
+        "%USERPROFILE%\\Documents",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RUN",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\ms-settings\\Shell\\Open\\command",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "%PUBLIC%\\i.dat",
+        "%ProgramFiles%\\Internet Explorer\\iexplore.exe,1",
+        "%APPDATA%\\${_",
+        "%PUBLIC%\\c.lnk",
+        "%PUBLIC%\\c.lnk",
+        "%PUBLIC%\\c.lnk",
+        "%PUBLIC%\\chrome.lnk",
+        "%WINDIR%\\system32\\shutdown.exe",
+        "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%USERPROFILE%\\Db_bh30\\Yf5be5g",
+        "%USERPROFILE%\\Db_bh30\\Yf5be5g\\A69S.dll",
+        "%USERPROFILE%\\Db_bh30\\Yf5be5g\\A69S.dll"
+      ]
+    }
+  }
+}

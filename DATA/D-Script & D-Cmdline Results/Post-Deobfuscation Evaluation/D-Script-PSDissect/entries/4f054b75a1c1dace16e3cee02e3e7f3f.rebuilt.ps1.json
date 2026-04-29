@@ -1,0 +1,145 @@
+﻿{
+  "file": "4f054b75a1c1dace16e3cee02e3e7f3f.rebuilt.ps1",
+  "sampleId": "4f054b75a1c1dace16e3cee02e3e7f3f",
+  "rawInstructionCount": 1645,
+  "instructionCount": 1645,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-variable",
+    "set-item",
+    "set-item",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "InVoKe-REfleCTivEPeinJEctiOn",
+    "set-strictmode",
+    "main.cpl",
+    "new-object"
+  ],
+  "normalizedActionSequence": [
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "InVoKe-REfleCTivEPeinJEctiOn",
+    "main.cpl",
+    "new-object"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "InVoKe-REfleCTivEPeinJEctiOn",
+    "main.cpl",
+    "new-object",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "set-variable",
+    "set-item",
+    "set-item",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "InVoKe-REfleCTivEPeinJEctiOn",
+    "set-strictmode",
+    "main.cpl",
+    "new-object"
+  ],
+  "normalizedApiSequence": [
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "InVoKe-REfleCTivEPeinJEctiOn",
+    "main.cpl",
+    "new-object"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 4,
+  "instructionNoiseCount": 1634,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingStableStubbedCount": 1,
+  "missingStableStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingImportantStubbedCount": 1,
+  "missingImportantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "RemoteProcessOpen",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "RemoteProcessOpen",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ScriptExec|RemoteProcessOpen|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1605957,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 33555,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 45,
+  "deobfuscationScore": 55,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,98 @@
+﻿{
+  "file": "c50ff82b28ff5bced2351de3d256cf55",
+  "sampleId": "c50ff82b28ff5bced2351de3d256cf55",
+  "rawInstructionCount": 152,
+  "instructionCount": 152,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "new-object",
+    "invoke-expression",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "cmdline",
+  "normalizedMode": "script",
+  "normalizeStatus": "decoded_cmdline",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 149,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 1,
+  "missingStableStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 1,
+  "missingImportantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 87,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 57,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 25,
+  "deobfuscationScore": 75,
+  "apiSequenceCoverage": "fallback_appended"
+}

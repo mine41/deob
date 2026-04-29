@@ -1,0 +1,92 @@
+﻿{
+  "file": "51f1a9743572fd5f2a40198e623b5222.rebuilt.ps1",
+  "sampleId": "51f1a9743572fd5f2a40198e623b5222",
+  "rawInstructionCount": 194,
+  "instructionCount": 194,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "Invoke-ReflectivePEInjection",
+    "set-strictmode",
+    "main.cpl"
+  ],
+  "normalizedActionSequence": [
+    "Invoke-ReflectivePEInjection",
+    "main.cpl"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "Invoke-ReflectivePEInjection",
+    "main.cpl"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "Invoke-ReflectivePEInjection",
+    "set-strictmode",
+    "main.cpl"
+  ],
+  "normalizedApiSequence": [
+    "Invoke-ReflectivePEInjection",
+    "main.cpl"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 192,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 6,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteProcessOpen",
+    "RemoteMemoryWrite",
+    "RemoteThreadCreate",
+    "ScriptExec",
+    "ShellcodeInject"
+  ],
+  "effectiveCapabilityCount": 6,
+  "effectiveCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteProcessOpen",
+    "RemoteMemoryWrite",
+    "RemoteThreadCreate",
+    "ScriptExec",
+    "ShellcodeInject"
+  ],
+  "capabilitySignature": "RemoteMemoryAlloc|RemoteProcessOpen|RemoteMemoryWrite|RemoteThreadCreate|ScriptExec|ShellcodeInject",
+  "wrapperDepth": 0,
+  "launcherCount": 28,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 35599,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 14306,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 188,
+  "deobfuscationScore": 0,
+  "apiSequenceCoverage": "complete"
+}

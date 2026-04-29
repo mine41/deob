@@ -1,0 +1,93 @@
+﻿{
+  "file": "fba1d5493ba0795b486dcc3210db4c00.rebuilt.ps1",
+  "sampleId": "fba1d5493ba0795b486dcc3210db4c00",
+  "rawInstructionCount": 103,
+  "instructionCount": 103,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "System.IO.File.WriteAllBytes"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 101,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllBytes"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 4,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "RemoteProcessOpen",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 5,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "RemoteProcessOpen",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "FileWrite|RemoteMemoryAlloc|RemoteThreadCreate|RemoteProcessOpen|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 7,
+  "stringLiteralBytes": 802354,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 21,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 88,
+  "deobfuscationScore": 12,
+  "apiSequenceCoverage": "fallback_appended"
+}

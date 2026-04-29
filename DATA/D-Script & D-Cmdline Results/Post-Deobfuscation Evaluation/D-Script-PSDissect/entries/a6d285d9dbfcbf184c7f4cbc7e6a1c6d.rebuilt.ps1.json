@@ -1,0 +1,106 @@
+﻿{
+  "file": "a6d285d9dbfcbf184c7f4cbc7e6a1c6d.rebuilt.ps1",
+  "sampleId": "a6d285d9dbfcbf184c7f4cbc7e6a1c6d",
+  "rawInstructionCount": 216,
+  "instructionCount": 216,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "notepad.exe",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "notepad.exe",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 4,
+  "effectiveActionSequence": [
+    "notepad.exe",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 4,
+  "rawApiSequence": [
+    "notepad.exe",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "notepad.exe",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 4,
+  "apiSequence": [
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 212,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 163,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 24,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 21,
+  "deobfuscationScore": 79,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

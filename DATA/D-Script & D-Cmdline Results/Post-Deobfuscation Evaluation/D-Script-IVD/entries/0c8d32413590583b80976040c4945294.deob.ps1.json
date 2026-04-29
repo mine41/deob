@@ -1,0 +1,103 @@
+﻿{
+  "file": "0c8d32413590583b80976040c4945294.deob.ps1",
+  "sampleId": "0c8d32413590583b80976040c4945294",
+  "rawInstructionCount": 309,
+  "instructionCount": 309,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "System.IO.File.ReadAllLines",
+    "Kernel32.VirtualAlloc",
+    "Rpcrt4.UuidFromStringA",
+    "Kernel32.EnumSystemLocalesA"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "System.IO.File.ReadAllLines",
+    "Kernel32.VirtualAlloc",
+    "Rpcrt4.UuidFromStringA",
+    "Kernel32.EnumSystemLocalesA"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "add-type",
+    "System.IO.File.ReadAllLines",
+    "Kernel32.VirtualAlloc",
+    "Rpcrt4.UuidFromStringA",
+    "Kernel32.EnumSystemLocalesA"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "add-type",
+    "System.IO.File.ReadAllLines",
+    "Kernel32.VirtualAlloc",
+    "Rpcrt4.UuidFromStringA",
+    "Kernel32.EnumSystemLocalesA"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "System.IO.File.ReadAllLines",
+    "Kernel32.VirtualAlloc",
+    "Rpcrt4.UuidFromStringA",
+    "Kernel32.EnumSystemLocalesA"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 304,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryAlloc",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 555,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 67,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "fallback_appended"
+}

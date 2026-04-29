@@ -1,0 +1,110 @@
+﻿{
+  "file": "3d5b6c3a3af088572fbbc6b77cbc4739.deob.ps1",
+  "sampleId": "3d5b6c3a3af088572fbbc6b77cbc4739",
+  "rawInstructionCount": 342,
+  "instructionCount": 342,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.Start",
+    "System.Management.Automation.PSObject.AcceptTcpClient",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Management.Automation.PSObject.Stop"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "new-object",
+    "System.Diagnostics.Process.Start",
+    "System.Management.Automation.PSObject.AcceptTcpClient",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Management.Automation.PSObject.Stop"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "new-object",
+    "new-object",
+    "System.Diagnostics.Process.Start",
+    "System.Management.Automation.PSObject.AcceptTcpClient",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Management.Automation.PSObject.Stop"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.Start",
+    "System.Management.Automation.PSObject.AcceptTcpClient",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Management.Automation.PSObject.Stop"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "new-object",
+    "System.Diagnostics.Process.Start",
+    "System.Management.Automation.PSObject.AcceptTcpClient",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Management.Automation.PSObject.Stop"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "unwrapped_wrapper",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 336,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.Start"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ProcessSpawn",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 154,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 66,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 18,
+  "deobfuscationScore": 82,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

@@ -1,0 +1,150 @@
+﻿{
+  "file": "0b17d37cde53adb963541c70d99476b5.deob.ps1",
+  "sampleId": "0b17d37cde53adb963541c70d99476b5",
+  "rawInstructionCount": 610,
+  "instructionCount": 610,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "get-random",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "new-object",
+    "System.Runtime.InteropServices.Marshal.SizeOf",
+    "new-object",
+    "lIlIlI.CreateProcess"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "get-random",
+    "foreach-object",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "new-object",
+    "System.Runtime.InteropServices.Marshal.SizeOf",
+    "new-object",
+    "lIlIlI.CreateProcess"
+  ],
+  "normalizedActionCount": 12,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "get-random",
+    "foreach-object",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "new-object",
+    "System.Runtime.InteropServices.Marshal.SizeOf",
+    "new-object",
+    "lIlIlI.CreateProcess"
+  ],
+  "effectiveActionCount": 12,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "get-random",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "new-object",
+    "System.Runtime.InteropServices.Marshal.SizeOf",
+    "new-object",
+    "lIlIlI.CreateProcess"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "get-random",
+    "foreach-object",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "new-object",
+    "System.Runtime.InteropServices.Marshal.SizeOf",
+    "new-object",
+    "lIlIlI.CreateProcess"
+  ],
+  "normalizedApiCount": 12,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 598,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "Download"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "Download",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "CompileCSharp|Download|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1487,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 151,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 5,
+  "deobfuscationScore": 95,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

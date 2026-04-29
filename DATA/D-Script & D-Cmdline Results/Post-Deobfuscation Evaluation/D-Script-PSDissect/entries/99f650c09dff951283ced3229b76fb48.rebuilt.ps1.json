@@ -1,0 +1,144 @@
+﻿{
+  "file": "99f650c09dff951283ced3229b76fb48.rebuilt.ps1",
+  "sampleId": "99f650c09dff951283ced3229b76fb48",
+  "rawInstructionCount": 936,
+  "instructionCount": 936,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "test-path",
+    "get-childitem",
+    "invoke-restmethod",
+    "add-type",
+    "get-date",
+    "get-date",
+    "System.IO.Compression.ZipFile.CreateFromDirectory",
+    "invoke-restmethod",
+    "out-null",
+    "clear-history"
+  ],
+  "normalizedActionSequence": [
+    "test-path",
+    "get-childitem",
+    "invoke-restmethod",
+    "add-type",
+    "get-date",
+    "get-date",
+    "System.IO.Compression.ZipFile.CreateFromDirectory",
+    "invoke-restmethod",
+    "out-null",
+    "clear-history"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "test-path",
+    "get-childitem",
+    "invoke-restmethod",
+    "add-type",
+    "get-date",
+    "get-date",
+    "System.IO.Compression.ZipFile.CreateFromDirectory",
+    "invoke-restmethod",
+    "out-null",
+    "clear-history"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "test-path",
+    "get-childitem",
+    "invoke-restmethod",
+    "add-type",
+    "get-date",
+    "get-date",
+    "System.IO.Compression.ZipFile.CreateFromDirectory",
+    "invoke-restmethod",
+    "out-null",
+    "clear-history"
+  ],
+  "normalizedApiSequence": [
+    "test-path",
+    "get-childitem",
+    "invoke-restmethod",
+    "add-type",
+    "get-date",
+    "get-date",
+    "System.IO.Compression.ZipFile.CreateFromDirectory",
+    "invoke-restmethod",
+    "out-null",
+    "clear-history"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "invoke-restmethod",
+    "add-type",
+    "invoke-restmethod",
+    "clear-history"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 926,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "invoke-restmethod",
+    "add-type",
+    "invoke-restmethod",
+    "clear-history"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "Download",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "Download|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1174,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 256,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 5,
+  "deobfuscationScore": 95,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

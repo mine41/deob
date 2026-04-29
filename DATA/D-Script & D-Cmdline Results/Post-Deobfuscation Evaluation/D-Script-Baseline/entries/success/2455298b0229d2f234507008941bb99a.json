@@ -1,0 +1,139 @@
+﻿{
+  "file": "success\\2455298b0229d2f234507008941bb99a",
+  "sampleId": "2455298b0229d2f234507008941bb99a",
+  "rawInstructionCount": 489,
+  "instructionCount": 489,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 11,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 11,
+  "apiSequence": [
+    "invoke-expression",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 478,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 3296,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 48,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 3,
+  "deobfuscationScore": 97,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

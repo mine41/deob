@@ -1,0 +1,115 @@
+﻿{
+  "file": "b8339893d3bc944415317eba2a1bb9d1.rebuilt.ps1",
+  "sampleId": "b8339893d3bc944415317eba2a1bb9d1",
+  "rawInstructionCount": 816,
+  "instructionCount": 816,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-item",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "get-variable",
+    "new-object",
+    "get-childitem",
+    "new-object",
+    "invoke-expression",
+    "set-strictmode"
+  ],
+  "normalizedActionSequence": [
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "get-variable",
+    "new-object",
+    "get-childitem",
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "get-variable",
+    "new-object",
+    "get-childitem",
+    "new-object",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "set-item",
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "get-variable",
+    "new-object",
+    "get-childitem",
+    "new-object",
+    "invoke-expression",
+    "set-strictmode"
+  ],
+  "normalizedApiSequence": [
+    "get-variable",
+    "System.Convert.FromBase64String",
+    "get-variable",
+    "new-object",
+    "get-childitem",
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 809,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 202041,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 153,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

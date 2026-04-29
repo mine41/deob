@@ -1,0 +1,137 @@
+﻿{
+  "file": "success\\ed1ec733bc7b70ae3fa1c11d612546d0",
+  "sampleId": "ed1ec733bc7b70ae3fa1c11d612546d0",
+  "rawInstructionCount": 454,
+  "instructionCount": 454,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Windows.Forms.Application.EnableVisualStyles",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.Windows.Forms.MessageBox.Show",
+    "invoke-webrequest",
+    "convertfrom-json",
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Windows.Forms.Application.EnableVisualStyles",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.Windows.Forms.MessageBox.Show",
+    "invoke-webrequest",
+    "convertfrom-json",
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Windows.Forms.Application.EnableVisualStyles",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.Windows.Forms.MessageBox.Show",
+    "invoke-webrequest",
+    "convertfrom-json",
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Windows.Forms.Application.EnableVisualStyles",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.Windows.Forms.MessageBox.Show",
+    "invoke-webrequest",
+    "convertfrom-json",
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Windows.Forms.Application.EnableVisualStyles",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.Windows.Forms.MessageBox.Show",
+    "invoke-webrequest",
+    "convertfrom-json",
+    "System.Convert.FromBase64String",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "invoke-webrequest",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 444,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-webrequest",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 347,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 94,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 7,
+  "deobfuscationScore": 93,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

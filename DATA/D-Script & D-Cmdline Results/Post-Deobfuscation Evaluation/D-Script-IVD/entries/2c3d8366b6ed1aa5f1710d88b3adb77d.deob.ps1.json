@@ -1,0 +1,136 @@
+﻿{
+  "file": "2c3d8366b6ed1aa5f1710d88b3adb77d.deob.ps1",
+  "sampleId": "2c3d8366b6ed1aa5f1710d88b3adb77d",
+  "rawInstructionCount": 371,
+  "instructionCount": 371,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-content",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedActionSequence": [
+    "set-content",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "set-content",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "set-content",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedApiSequence": [
+    "set-content",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "set-content",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "recordedImportantApiCount": 7,
+  "importantApiCount": 7,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 363,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 7,
+  "effectiveApiSequence": [
+    "set-content",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "FileWrite",
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "Download"
+  ],
+  "capabilitySignature": "FileWrite|Download",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1090,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 114,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 13,
+  "deobfuscationScore": 87,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

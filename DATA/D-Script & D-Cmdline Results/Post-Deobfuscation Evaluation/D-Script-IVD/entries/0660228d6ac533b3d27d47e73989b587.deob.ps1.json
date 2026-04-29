@@ -1,0 +1,144 @@
+﻿{
+  "file": "0660228d6ac533b3d27d47e73989b587.deob.ps1",
+  "sampleId": "0660228d6ac533b3d27d47e73989b587",
+  "rawInstructionCount": 498,
+  "instructionCount": 498,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "test-path",
+    "new-item",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "test-path",
+    "new-item",
+    "set-content",
+    "set-content",
+    "set-content",
+    "set-content",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "test-path",
+    "new-item",
+    "set-content",
+    "set-content",
+    "set-content",
+    "set-content",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "test-path",
+    "new-item",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "test-path",
+    "new-item",
+    "set-content",
+    "set-content",
+    "set-content",
+    "set-content",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "new-item",
+    "set-content",
+    "set-content",
+    "set-content",
+    "set-content",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 6,
+  "importantApiCount": 6,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 5,
+  "instructionNoiseCount": 491,
+  "stubbedSinkCount": 6,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep",
+    "start-sleep",
+    "start-sleep",
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 6,
+  "effectiveApiSequence": [
+    "new-item",
+    "set-content",
+    "set-content",
+    "set-content",
+    "set-content",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "FileWrite|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 813809,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 96,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 52,
+  "deobfuscationScore": 48,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

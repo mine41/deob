@@ -1,0 +1,112 @@
+﻿{
+  "file": "817d07ef69119e8e565abb9a16908a18.rebuilt.ps1",
+  "sampleId": "817d07ef69119e8e565abb9a16908a18",
+  "rawInstructionCount": 1362,
+  "instructionCount": 1362,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-variable",
+    "System.Array.Reverse",
+    "set-item",
+    "add-type",
+    "get-variable",
+    "System.Math.Max",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedActionSequence": [
+    "set-variable",
+    "System.Array.Reverse",
+    "add-type",
+    "get-variable",
+    "System.Math.Max",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "set-variable",
+    "System.Array.Reverse",
+    "add-type",
+    "get-variable",
+    "System.Math.Max",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "set-variable",
+    "System.Array.Reverse",
+    "set-item",
+    "add-type",
+    "get-variable",
+    "System.Math.Max",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedApiSequence": [
+    "set-variable",
+    "System.Array.Reverse",
+    "add-type",
+    "get-variable",
+    "System.Math.Max",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1356,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 68879,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 910,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 24,
+  "deobfuscationScore": 76,
+  "apiSequenceCoverage": "fallback_appended"
+}

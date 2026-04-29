@@ -1,0 +1,108 @@
+﻿{
+  "file": "40a29f7aab0b55f7bc2ea51d2b15eb36.deob.ps1",
+  "sampleId": "40a29f7aab0b55f7bc2ea51d2b15eb36",
+  "rawInstructionCount": 379,
+  "instructionCount": 379,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "invoke-webrequest",
+    "msiexec.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "invoke-webrequest",
+    "msiexec.exe"
+  ],
+  "normalizedActionCount": 4,
+  "effectiveActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "invoke-webrequest",
+    "msiexec.exe"
+  ],
+  "effectiveActionCount": 4,
+  "rawApiSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "invoke-webrequest",
+    "msiexec.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "invoke-webrequest",
+    "msiexec.exe"
+  ],
+  "normalizedApiCount": 4,
+  "apiSequence": [
+    "invoke-webrequest"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "unwrapped_wrapper",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 375,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-webrequest"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "Download"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "Download"
+  ],
+  "capabilitySignature": "Download",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 164,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 22,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 18,
+  "deobfuscationScore": 82,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

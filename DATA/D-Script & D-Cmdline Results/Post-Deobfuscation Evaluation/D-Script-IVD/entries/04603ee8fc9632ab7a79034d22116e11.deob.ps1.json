@@ -1,0 +1,104 @@
+﻿{
+  "file": "04603ee8fc9632ab7a79034d22116e11.deob.ps1",
+  "sampleId": "04603ee8fc9632ab7a79034d22116e11",
+  "rawInstructionCount": 1193,
+  "instructionCount": 1193,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "System.IO.Path.GetDirectoryName"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "System.IO.Path.GetDirectoryName"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "System.IO.Path.GetDirectoryName"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "System.IO.Path.GetDirectoryName"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "foreach-object",
+    "new-object",
+    "System.Management.Automation.PSObject.ReadToEnd",
+    "invoke-expression",
+    "System.IO.Path.GetDirectoryName"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1187,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 208744,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 54,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 20,
+  "deobfuscationScore": 80,
+  "apiSequenceCoverage": "fallback_appended"
+}

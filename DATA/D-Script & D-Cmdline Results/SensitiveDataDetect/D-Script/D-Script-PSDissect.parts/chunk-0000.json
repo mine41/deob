@@ -1,0 +1,2355 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 0,
+  "ChunkSignature": "70703552f983e00946fb7c57880a7de1c1d832f9a7c21fdd81d2959452510223",
+  "FileCount": 34,
+  "ChunkResult": {
+    "ProcessedFiles": 34,
+    "SkippedFiles": 0,
+    "CollectedValues": {
+      "IP": [
+        "10.1.1.1",
+        "10.1.1.15",
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.15",
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.1",
+        "2.01.02.84",
+        "62.01.02.8",
+        "21.02.001.7",
+        "02.002.2.00",
+        "02.026.011.01",
+        "32.01.02.681",
+        "116.02.002.111",
+        "04.92.17.05",
+        "82.2.002.00",
+        "305.053.011.27",
+        "82.002.07.07",
+        "02.01.02.84",
+        "15.02.4.007",
+        "2.002.2.00",
+        "1.1.001.0",
+        "8.1.9.6",
+        "9.04.2.8",
+        "5.2.9.7",
+        "003.2.4.2",
+        "5.2.9.8",
+        "3.3.3.3",
+        "1.2.13.661",
+        "1.1.93.896",
+        "1.1.92.647",
+        "1.1.93.896",
+        "192.168.72.200",
+        "192.168.72.200",
+        "192.168.72.200"
+      ],
+      "RegKey": [
+        " HKLM:\\Software",
+        " HKLM:\\SOFTWARE",
+        ":HKEY_CURRENT_USER\\SOFTWARE",
+        " HKLM:\\SOFTWARE",
+        " HKLM:\\SOFTWARE",
+        " HKLM:\\Software"
+      ],
+      "FilePathRaw": [
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "C:\\WINDOWS\\system32\\sc.exe')){",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "C:\\WINDOWS\\System32\\sc.exe')) {",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "C:\\WINDOWS\\System32\\sc.exe')){",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "C:\\Windows",
+        "C:\\Windows\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "$env:Temp\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+        "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe') {",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "c:\\Windows\\Microsoft.NET\\Framework\\",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe",
+        "C:\\WINDOWS\\system32\\sc.exe",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming\\.ps1",
+        "c:\\users\\hacker\\AppData\\Roaming\\.txt",
+        "c:\\users\\hacker\\AppData\\Roaming\\system.ini",
+        "c:\\users\\hacker\\AppData\\Roaming\\win.ini",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "c:\\users\\hacker\\AppData\\Roaming",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\}}if((($i=Get-Item $p -ea $t)).length-ge5mb){Remove-Item ($w=$i.FullName.Replace('.log','.lo_')) -fo -ea $t;Rename-Item $i $w",
+        "H:\\s\\microsoft\\windows\\currentversion\\uninstall",
+        "H:\\s\\microsoft\\windows\\currentversion\\uninstall",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\7dbe9376332ea165e8428b9fdaa7143a.pdf')) {",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI' -ItemType Directory",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\' -Name PSSQLite -ItemType directory",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI\\Run\\Tools",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+        "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+        "$env:userprofile\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122",
+        "$env:userprofile\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122",
+        "M:\\SOFTWARE\\ClassesLAoVYq').'DGZKDi3vBK",
+        "M:\\SOFTWARE\\ClassesLAoVYq",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -Name 'ProductName').ProductName",
+        "C:\\Users\\hacker\\Desktop') {",
+        "$env:USERPROFILE\\Desktop",
+        "C:\\Users\\hacker\\Desktop')) {",
+        "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts') {",
+        "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts",
+        "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts' -Destination $hostsBackupFilePath -ErrorAction SilentlyContinue",
+        "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts' -Value $hosts -Force",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "C:\\Users\\hacker\\AppData\\Local\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "C:\\Users\\hacker\\AppData\\Local\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak' $spotifyExecutable",
+        "$env:APPDATA\\Spotify\\Apps\\xpui\\$name",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui\\xpui.js",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak' $spotifyExecutable",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak' $spotifyExecutable",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa' $env",
+        "$env:APPDATA\\Spotify",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk')) {",
+        "$env:APPDATA\\Spotify",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak') {",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe' $exe_bak",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify' -FilePath 'C",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify",
+        "C:\\Spotify.lnk",
+        "C:\\Users\\hacker\\AppData\\Local\\Spotify",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\SpotifyUninstall.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui\\xpui.js",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+        "C:\\Users\\hacker\\Desktop",
+        "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        "$env:userprofile\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122",
+        "C:\\ProgramData\\tneg",
+        "C:\\ProgramData\\tneg' -ItemType Directory -Force",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcfsqdumoixkczgaes.exe",
+        "C:\\ProgramData\\tneg\\sfqn.ps1",
+        "C:\\ProgramData\\tneg\\tneg.vbs",
+        "C:\\ProgramData\\tneg\\tneg.ps1",
+        "C:\\ProgramData\\tneg\\1.bat",
+        "C:\\ProgramData\\tneg\\tneg.vbs",
+        "C:\\ProgramData\\tneg\\sfqn.ps1",
+        "C:\\ProgramData\\tneg\\1.bat",
+        "C:\\ProgramData\\tneg\\tneg.ps1",
+        "C:\\ProgramData\\tneg",
+        "$env:LOCALAPPDATA\\Temp\\ip.txt",
+        "$env:LOCALAPPDATA\\Temp\\system_info.txt",
+        "c:\\windows\\system32\\hal.dll).VersionInfo.FileVersion",
+        "$env:LOCALAPPDATA\\Temp\\uuid.txt",
+        "$env:LOCALAPPDATA\\Temp\\cpu.txt",
+        "$env:LOCALAPPDATA\\Temp\\GPU.txt",
+        "$env:LOCALAPPDATA\\Temp\\mac.txt",
+        "$env:LOCALAPPDATA\\Temp\\netstat.txt",
+        "$env:temp\\WIFIPasswords.txt",
+        "$env:temp\\StartUpApps.txt",
+        "$env:LOCALAPPDATA\\Temp\\running-services.txt",
+        "$env:temp\\running-applications.txt",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "$env:temp\\Installed-Applications.txt",
+        "$env:temp\\NetworkAdapters.txt",
+        "$env:userprofile\\AppData\\Roaming\\Telegram Desktop\\tdata",
+        "$env:localappdata\\temp\\telegram-session.zip",
+        "$env:localappdata\\temp\\desktop-screenshot.png",
+        "$env:temp\\DiskInfo.txt",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').digitalproductid[0x34..0x42",
+        "$env:localappdata\\temp\\ProductKey.txt",
+        "$env:localappdata\\temp\\desktop-screenshot.png\\`",
+        "$env:LOCALAPPDATA\\Temp",
+        "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\secure.dat",
+        "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\secure.dat",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\KDOT",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\KDOT' -Type Directory",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\main.exe",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:APPDATA\\KDOT",
+        "C:\\Users\\hacker\\AppData\\Roaming\\KDOT' -Force",
+        "$env:APPDATA\\KDOT\\KDOT.ps1",
+        "%appdata%\\kdot\\kdot.ps1",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+        "C:\\browser-cookies.txt",
+        "C:\\browser-history.txt",
+        "C:\\browser-passwords.txt",
+        "C:\\CPU.txt",
+        "C:\\desktop-screenshot.png",
+        "C:\\DiskInfo.txt",
+        "C:\\GPU.txt",
+        "C:\\Installed-Applications.txt",
+        "C:\\KDOT.zip",
+        "C:\\mac.txt",
+        "C:\\main.exe",
+        "C:\\netstat.txt",
+        "C:\\NetworkAdapters.txt",
+        "C:\\ProductKey.txt",
+        "C:\\running-applications.txt",
+        "C:\\running-services.txt",
+        "C:\\StartUpApps.txt",
+        "C:\\system_info.txt",
+        "C:\\telegram-session.zip",
+        "C:\\tokens.txt",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\KDOT",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\main.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\secure.dat",
+        "C:\\Users\\hacker\\AppData\\Roaming\\KDOT",
+        "C:\\uuid.txt",
+        "C:\\WIFIPasswords.txt",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\dataset\\D-Script\\response.zip",
+        "C:\\users\\public\\fuckup.cmd",
+        "C:\\users\\public\\fuckup.cmd', $bytes",
+        "C:\\Users\\Public\\fuckup.cmd",
+        "C:\\Users\\Public\\fuckup.cmd"
+      ],
+      "URL": [
+        "https://support.microsoft.com/en-us/kb/914392",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+        "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+        "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+        "http://www.greyhathacker.net/?p=738",
+        "http://stackoverflow.com/questions/9735449/how-to-verify-whether-the-share-has-write-access",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+        "http://www.fuzzysecurity.com/tutorials/16.html",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "http://122.144.6.226/Office.zip",
+        "http://122.144.6.226/Office.zip",
+        "https://github.com/iagox86/dnscat2",
+        "http://185.82.219.51/Invoke-SharpLoader-master/amsibypass.ps1",
+        "http://185.82.219.51/Invoke-SharpLoader-master/amsibypass.ps1",
+        "http://mydatayxnhzcs.tech/file/docs/$fileName",
+        "http://mydatayxnhzcs.tech/file/docs/7dbe9376332ea165e8428b9fdaa7143a.pdf",
+        "http://mydatayxnhzcs.tech/file/docs/7dbe9376332ea165e8428b9fdaa7143a.pdf",
+        "http://support.auditionsante.fr/download/script/Outils/PSSQLite.zip",
+        "http://support.auditionsante.fr/download/Cosium/Connexion/Cookie.txt",
+        "http://support.auditionsante.fr/download/Cosium/Connexion/Cookie.txt",
+        "http://habarimoto24.com/nh@http://fenett2018.com/dobgx@http://eastend.jp/bl5kfa@http://bemnyc.com/u8erijeq@http://abakus-biuro.net//a9zqemm",
+        "http://yourmother4cancer.info/Nereidae/ZdDZ/umping?HGn3Nw=1932-05-23",
+        "http://habarimoto24.com/nh@http://fenett2018.com/dobgx@http://eastend.jp/bl5kfa@http://bemnyc.com/u8erijeq@http://abakus-biuro.net//a9zqemm",
+        "http://yourmother4cancer.info/Nereidae/ZdDZ/umping?HGn3Nw=1932-05-23",
+        "https://spotx-official.github.io/SpotX/scripts/installer-lang/$clg.ps1",
+        "https://spotx-official.github.io/SpotX/patches/Augmented%20translation/ru.json",
+        "https://download.scdn.co/upgrade/client/win32-x86/spotify_installer-$onlineFull.exe",
+        "https://docs.google.com/forms/d/e/1FAIpQLSegGsAgilgQ8Y36uw-N7zFF6Lh40cXNfyl1ecHPpZcpD8kdHg/formResponse",
+        "https://spotx-official.github.io/SpotX/patches/patches.json",
+        "https://spotx-official.github.io/SpotX/patches/patches.json",
+        "https://telegra.ph/SpotX-FAQ-09-19#Can-I-use-SpotX-and-Spicetify-together?",
+        "https://spotx-official.github.io/SpotX/patches/patches.json",
+        "http://habarimoto24.com/nh@http://fenett2018.com/dobgx@http://eastend.jp/bl5kfa@http://bemnyc.com/u8erijeq@http://abakus-biuro.net//a9zqemm",
+        "http://yourmother4cancer.info/Nereidae/ZdDZ/umping?HGn3Nw=1932-05-23",
+        "http://192.168.72.200:80",
+        "http://192.168.72.200:80/login/process.php",
+        "http://192.168.72.200:80/login/process.php",
+        "https://discord.com/api/webhooks/1105875719118139472/u76309H-l60znidmePBfEkTLUibiPMROERDPjZ7IIoi7RcusxFhKF_JwjvN7p82ZTFPL",
+        "https://api.ipify.org",
+        "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+        "https://discord.gg/vk3rBhcj2y",
+        "https://github.com/KDot227/Powershell-Token-Grabber/tree/main",
+        "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+        "https://github.com/KDot227/Powershell-Token-Grabber/releases/download/V4.1/main.exe",
+        "https://i.postimg.cc/m2SSKrBt/Logo.gif\\",
+        "https://api.ipify.org",
+        "https://github.com/KDot227/Powershell-Token-Grabber/releases/download/V4.1/main.exe",
+        "https://astonishing-gecko-378b41.netlify.app",
+        "https://astonishing-gecko-378b41.netlify.app"
+      ],
+      "FilePath": [
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.bat",
+        "C:\\Temp\\config.ini",
+        "%WINDIR%\\system32\\sc.exe')){",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe')) {",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe')){",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "%TEMP%\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe') {",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\system32\\sc.exe",
+        "%APPDATA%\\.ps1",
+        "%APPDATA%\\.txt",
+        "%APPDATA%\\system.ini",
+        "%APPDATA%\\win.ini",
+        "H:\\s\\microsoft\\windows\\currentversion\\uninstall",
+        "H:\\s\\microsoft\\windows\\currentversion\\uninstall",
+        "%TEMP%\\7dbe9376332ea165e8428b9fdaa7143a.pdf')) {",
+        "%TEMP%\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "%TEMP%\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI' -ItemType Directory",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\' -Name PSSQLite -ItemType directory",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Outils_SI",
+        "C:\\Outils_SI\\Run\\Tools",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI\\temp\\Cookie.txt",
+        "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+        "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+        "C:\\Outils_SI",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "%USERPROFILE%\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122",
+        "%USERPROFILE%\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122",
+        "M:\\SOFTWARE\\ClassesLAoVYq').'DGZKDi3vBK",
+        "M:\\SOFTWARE\\ClassesLAoVYq",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -Name 'ProductName').ProductName",
+        "%USERPROFILE%\\Desktop') {",
+        "%USERPROFILE%\\Desktop",
+        "%USERPROFILE%\\Desktop')) {",
+        "%WINDIR%\\System32\\Drivers\\Etc\\hosts') {",
+        "%WINDIR%\\System32\\Drivers\\Etc\\hosts",
+        "%APPDATA%\\Spotify\\Spotify.exe",
+        "%APPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "%LOCALAPPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "%TEMP%\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "%APPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "%LOCALAPPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "%TEMP%\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+        "%APPDATA%\\Spotify\\Spotify.bak",
+        "%APPDATA%\\Spotify\\Spotify.exe",
+        "%APPDATA%\\Spotify\\Apps\\xpui.spa",
+        "%APPDATA%\\Spotify\\Apps\\xpui\\xpui.js",
+        "%APPDATA%\\Spotify\\Apps\\xpui.spa",
+        "%APPDATA%\\Spotify\\Spotify.bak",
+        "%APPDATA%\\Spotify\\Spotify.exe",
+        "%APPDATA%\\Spotify\\Spotify.bak",
+        "%APPDATA%\\Spotify\\Spotify.exe",
+        "%APPDATA%\\Spotify",
+        "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk')) {",
+        "%APPDATA%\\Spotify",
+        "%APPDATA%\\Spotify\\Spotify.bak') {",
+        "%APPDATA%\\Spotify\\Spotify.bak",
+        "%APPDATA%\\Spotify' -FilePath 'C",
+        "%APPDATA%\\Spotify",
+        "C:\\Spotify.lnk",
+        "%LOCALAPPDATA%\\Spotify",
+        "%TEMP%\\SpotifyUninstall.exe",
+        "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk",
+        "%APPDATA%\\Spotify",
+        "%APPDATA%\\Spotify\\Apps\\xpui.spa",
+        "%APPDATA%\\Spotify\\Apps\\xpui\\xpui.js",
+        "%APPDATA%\\Spotify\\Spotify.bak",
+        "%APPDATA%\\Spotify\\Spotify.exe",
+        "%USERPROFILE%\\Desktop",
+        "%WINDIR%\\System32\\Drivers\\Etc\\hosts",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        "%APPDATA%\\Spotify",
+        "%USERPROFILE%\\Desktop\"\"\"\\Spotify.lnk",
+        "%USERPROFILE%\\Desktop",
+        "%USERPROFILE%\\Desktop\"\"\"\\Spotify.lnk",
+        "%USERPROFILE%\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122",
+        "%PROGRAMDATA%\\tneg",
+        "%PROGRAMDATA%\\tneg' -ItemType Directory -Force",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcfsqdumoixkczgaes.exe",
+        "%PROGRAMDATA%\\tneg\\sfqn.ps1",
+        "%PROGRAMDATA%\\tneg\\tneg.vbs",
+        "%PROGRAMDATA%\\tneg\\tneg.ps1",
+        "%PROGRAMDATA%\\tneg\\1.bat",
+        "%PROGRAMDATA%\\tneg\\tneg.vbs",
+        "%PROGRAMDATA%\\tneg\\sfqn.ps1",
+        "%PROGRAMDATA%\\tneg\\1.bat",
+        "%PROGRAMDATA%\\tneg\\tneg.ps1",
+        "%PROGRAMDATA%\\tneg",
+        "%PROGRAMDATA%\\tneg",
+        "%TEMP%\\ip.txt",
+        "%TEMP%\\system_info.txt",
+        "%WINDIR%\\system32\\hal.dll).VersionInfo.FileVersion",
+        "%TEMP%\\uuid.txt",
+        "%TEMP%\\cpu.txt",
+        "%TEMP%\\GPU.txt",
+        "%TEMP%\\mac.txt",
+        "%TEMP%\\netstat.txt",
+        "%TEMP%\\WIFIPasswords.txt",
+        "%TEMP%\\StartUpApps.txt",
+        "%TEMP%\\running-services.txt",
+        "%TEMP%\\running-applications.txt",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "%TEMP%\\Installed-Applications.txt",
+        "%TEMP%\\NetworkAdapters.txt",
+        "%APPDATA%\\Telegram Desktop\\tdata",
+        "%TEMP%\\telegram-session.zip",
+        "%TEMP%\\desktop-screenshot.png",
+        "%TEMP%\\DiskInfo.txt",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').digitalproductid[0x34..0x42",
+        "%TEMP%\\ProductKey.txt",
+        "%TEMP%\\desktop-screenshot.png\\`",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "%TEMP%\\KDOT",
+        "%TEMP%\\KDOT' -Type Directory",
+        "%TEMP%\\main.exe",
+        "%APPDATA%\\KDOT",
+        "%APPDATA%\\KDOT' -Force",
+        "%APPDATA%\\KDOT\\KDOT.ps1",
+        "%APPDATA%\\kdot\\kdot.ps1",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+        "C:\\browser-cookies.txt",
+        "C:\\browser-history.txt",
+        "C:\\browser-passwords.txt",
+        "C:\\CPU.txt",
+        "C:\\desktop-screenshot.png",
+        "C:\\DiskInfo.txt",
+        "C:\\GPU.txt",
+        "C:\\Installed-Applications.txt",
+        "C:\\KDOT.zip",
+        "C:\\mac.txt",
+        "C:\\main.exe",
+        "C:\\netstat.txt",
+        "C:\\NetworkAdapters.txt",
+        "C:\\ProductKey.txt",
+        "C:\\running-applications.txt",
+        "C:\\running-services.txt",
+        "C:\\StartUpApps.txt",
+        "C:\\system_info.txt",
+        "C:\\telegram-session.zip",
+        "C:\\tokens.txt",
+        "%TEMP%\\KDOT",
+        "%TEMP%\\main.exe",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "%APPDATA%\\KDOT",
+        "C:\\uuid.txt",
+        "C:\\WIFIPasswords.txt",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "%TEMP%\\telegram-session.zip",
+        "%APPDATA%\\Telegram Desktop\\tdata",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ip.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\netstat.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\system_info.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\uuid.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\mac.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-cookies.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-history.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-passwords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\desktop-screenshot.png",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\tokens.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\WIFIPasswords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\GPU.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\Installed-Applications.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\DiskInfo.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\CPU.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\NetworkAdapters.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ProductKey.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\StartUpApps.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-services.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-applications.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\telegram-session.zip",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\dataset\\D-Script\\response.zip",
+        "%PUBLIC%\\fuckup.cmd",
+        "%PUBLIC%\\fuckup.cmd",
+        "%PUBLIC%\\fuckup.cmd",
+        "%PUBLIC%\\fuckup.cmd"
+      ]
+    },
+    "FileDetails": [
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 329630,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "0007b647cbe97d3641e08e0cf8162183.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 40,
+          "Values": [
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "%WINDIR%\\system32\\sc.exe')){",
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe')) {",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe')){",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "%TEMP%\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe') {",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\system32\\sc.exe"
+          ],
+          "Total": 55
+        },
+        "FileSize": 497233,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 14,
+          "Values": [
+            "https://support.microsoft.com/en-us/kb/914392",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+            "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+            "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+            "http://www.greyhathacker.net/?p=738",
+            "http://stackoverflow.com/questions/9735449/how-to-verify-whether-the-share-has-write-access",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+            "http://www.fuzzysecurity.com/tutorials/16.html",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h"
+          ],
+          "Total": 18
+        },
+        "FilePathRaw": {
+          "Unique": 43,
+          "Values": [
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.bat",
+            "C:\\Temp\\config.ini",
+            "C:\\WINDOWS\\system32\\sc.exe')){",
+            "$env:SystemRoot\\system32\\sc.exe",
+            "C:\\WINDOWS\\System32\\sc.exe')) {",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "C:\\WINDOWS\\System32\\sc.exe')){",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "$env:Temp\\debug.bat, and writes out a hijackable .dll that launches the .bat.",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+            "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe') {",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "c:\\Windows\\Microsoft.NET\\Framework\\",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe",
+            "C:\\WINDOWS\\system32\\sc.exe"
+          ],
+          "Total": 58
+        },
+        "FileName": "000dda63a72644b2e3b4e3bc6c737fb1.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 4,
+          "Values": [
+            "%APPDATA%\\.ps1",
+            "%APPDATA%\\.txt",
+            "%APPDATA%\\system.ini",
+            "%APPDATA%\\win.ini"
+          ],
+          "Total": 4
+        },
+        "FileSize": 124414,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming\\.ps1",
+            "c:\\users\\hacker\\AppData\\Roaming\\.txt",
+            "c:\\users\\hacker\\AppData\\Roaming\\system.ini",
+            "c:\\users\\hacker\\AppData\\Roaming\\win.ini",
+            "c:\\users\\hacker\\AppData\\Roaming",
+            "c:\\users\\hacker\\AppData\\Roaming"
+          ],
+          "Total": 15
+        },
+        "FileName": "002973654d396f4375c35f2eee1ce17b.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 50076,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00360f80c411cf0a7f75f5e6371268cf.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3587,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00471727c27f50b00ba9f3ecebcd9180"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 6917,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "0048b574fff17e4dbe1968ddbccf8f16.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 914,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://122.144.6.226/Office.zip",
+            "http://122.144.6.226/Office.zip"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "004ae7ac02494f44eef74ad7f59ec7ce.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "H:\\s\\microsoft\\windows\\currentversion\\uninstall",
+            "H:\\s\\microsoft\\windows\\currentversion\\uninstall"
+          ],
+          "Total": 2
+        },
+        "FileSize": 1697,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\}}if((($i=Get-Item $p -ea $t)).length-ge5mb){Remove-Item ($w=$i.FullName.Replace('.log','.lo_')) -fo -ea $t;Rename-Item $i $w",
+            "H:\\s\\microsoft\\windows\\currentversion\\uninstall",
+            "H:\\s\\microsoft\\windows\\currentversion\\uninstall"
+          ],
+          "Total": 3
+        },
+        "FileName": "004ff34b56a5963b1f687fdb5127040a.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 187394,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00760bd7907d45d29f38d2673684942e.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1600,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "009de34c6ea3356cb0c3ae730aa89159.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 55525,
+        "IP": {
+          "Unique": 2,
+          "Values": [
+            "10.1.1.1",
+            "10.1.1.15",
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.15",
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.1"
+          ],
+          "Total": 8
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "https://github.com/iagox86/dnscat2"
+          ],
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00a8b372ea7b5eff5dd03f9664ab0f9a.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 854,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00ad3194e8110ae46b3c0c4473ce22cd.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 8816,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://185.82.219.51/Invoke-SharpLoader-master/amsibypass.ps1",
+            "http://185.82.219.51/Invoke-SharpLoader-master/amsibypass.ps1"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00c0b1216c0b0817676641393e9e9460.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\Software"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 5,
+          "Values": [
+            "%TEMP%\\7dbe9376332ea165e8428b9fdaa7143a.pdf')) {",
+            "%TEMP%\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "%TEMP%\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          ],
+          "Total": 7
+        },
+        "FileSize": 14746,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://mydatayxnhzcs.tech/file/docs/$fileName",
+            "http://mydatayxnhzcs.tech/file/docs/7dbe9376332ea165e8428b9fdaa7143a.pdf",
+            "http://mydatayxnhzcs.tech/file/docs/7dbe9376332ea165e8428b9fdaa7143a.pdf"
+          ],
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\7dbe9376332ea165e8428b9fdaa7143a.pdf')) {",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\7dbe9376332ea165e8428b9fdaa7143a.pdf",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          ],
+          "Total": 7
+        },
+        "FileName": "00cffa6a54125df1567707205c770b81.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 15,
+          "Values": [
+            "C:\\Outils_SI",
+            "C:\\Outils_SI",
+            "C:\\Outils_SI",
+            "C:\\Outils_SI' -ItemType Directory",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\' -Name PSSQLite -ItemType directory",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+            "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+            "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+            "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+            "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+            "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+            "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Outils_SI",
+            "C:\\Outils_SI\\Run\\Tools",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cookies",
+            "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+            "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+            "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+          ],
+          "Total": 47
+        },
+        "FileSize": 16837,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://support.auditionsante.fr/download/script/Outils/PSSQLite.zip",
+            "http://support.auditionsante.fr/download/Cosium/Connexion/Cookie.txt",
+            "http://support.auditionsante.fr/download/Cosium/Connexion/Cookie.txt"
+          ],
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Unique": 15,
+          "Values": [
+            "C:\\Outils_SI",
+            "C:\\Outils_SI",
+            "C:\\Outils_SI",
+            "C:\\Outils_SI' -ItemType Directory",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\' -Name PSSQLite -ItemType directory",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Outils_SI",
+            "C:\\Outils_SI\\Run\\Tools",
+            "C:\\Outils_SI\\Run\\Tools\\PSSQLite\\PSSQLite.psd1",
+            "C:\\Outils_SI\\temp\\Cookie.txt",
+            "C:\\Program Files (x86)\\Google\\chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies",
+            "C:\\Users\\hacker\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Network\\Cookies"
+          ],
+          "Total": 42
+        },
+        "FileName": "00ea4ebe62a141a478939428e69cb6f1.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%USERPROFILE%\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122"
+          ],
+          "Total": 1
+        },
+        "FileSize": 248660,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://habarimoto24.com/nh@http://fenett2018.com/dobgx@http://eastend.jp/bl5kfa@http://bemnyc.com/u8erijeq@http://abakus-biuro.net//a9zqemm",
+            "http://yourmother4cancer.info/Nereidae/ZdDZ/umping?HGn3Nw=1932-05-23"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:userprofile\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122"
+          ],
+          "Total": 1
+        },
+        "FileName": "00ed41a0d73f85a97fa9b2b79fc94c53.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1014917,
+        "IP": {
+          "Unique": 21,
+          "Values": [
+            "2.01.02.84",
+            "62.01.02.8",
+            "21.02.001.7",
+            "02.002.2.00",
+            "02.026.011.01",
+            "32.01.02.681",
+            "116.02.002.111",
+            "04.92.17.05",
+            "82.2.002.00",
+            "305.053.011.27",
+            "82.002.07.07",
+            "02.01.02.84",
+            "15.02.4.007",
+            "2.002.2.00",
+            "1.1.001.0",
+            "8.1.9.6",
+            "9.04.2.8",
+            "5.2.9.7",
+            "003.2.4.2",
+            "5.2.9.8",
+            "3.3.3.3"
+          ],
+          "Total": 21
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "00f8f2f9e167f56a6b6ab2634513bc54.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 12364,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "010cfd2b1a518581836417c00b1942f1.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%USERPROFILE%\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122"
+          ],
+          "Total": 1
+        },
+        "FileSize": 957060,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://habarimoto24.com/nh@http://fenett2018.com/dobgx@http://eastend.jp/bl5kfa@http://bemnyc.com/u8erijeq@http://abakus-biuro.net//a9zqemm",
+            "http://yourmother4cancer.info/Nereidae/ZdDZ/umping?HGn3Nw=1932-05-23"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:userprofile\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122"
+          ],
+          "Total": 1
+        },
+        "FileName": "011db5a5218a1ac6072a6c11d7d7dd37.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 60062,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "01346d4d0e5504a97412fbd3b759fbbd.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\SOFTWARE"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SOFTWARE\\ClassesLAoVYq').'DGZKDi3vBK",
+            "M:\\SOFTWARE\\ClassesLAoVYq"
+          ],
+          "Total": 2
+        },
+        "FileSize": 266,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SOFTWARE\\ClassesLAoVYq').'DGZKDi3vBK",
+            "M:\\SOFTWARE\\ClassesLAoVYq"
+          ],
+          "Total": 2
+        },
+        "FileName": "01375239f5901c2f624634b68bd0fcf9.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 197502,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "014da71bcf4c8a9e02ad358d741c5520.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3139644,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "015ed7adebe6cebde62ac1a73770580a.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 53374,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "01768c105673856ac2f91ab976ad5175.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 2,
+          "Values": [
+            ":HKEY_CURRENT_USER\\SOFTWARE",
+            " HKLM:\\SOFTWARE"
+          ],
+          "Total": 2
+        },
+        "FilePath": {
+          "Unique": 23,
+          "Values": [
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -Name 'ProductName').ProductName",
+            "%USERPROFILE%\\Desktop') {",
+            "%USERPROFILE%\\Desktop",
+            "%USERPROFILE%\\Desktop')) {",
+            "%WINDIR%\\System32\\Drivers\\Etc\\hosts') {",
+            "%WINDIR%\\System32\\Drivers\\Etc\\hosts",
+            "%APPDATA%\\Spotify\\Spotify.exe",
+            "%APPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "%LOCALAPPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "%TEMP%\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "%APPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "%LOCALAPPDATA%\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "%TEMP%\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "%APPDATA%\\Spotify\\Spotify.bak",
+            "%APPDATA%\\Spotify\\Spotify.exe",
+            "%APPDATA%\\Spotify\\Apps\\xpui.spa",
+            "%APPDATA%\\Spotify\\Apps\\xpui\\xpui.js",
+            "%APPDATA%\\Spotify\\Apps\\xpui.spa",
+            "%APPDATA%\\Spotify\\Spotify.bak",
+            "%APPDATA%\\Spotify\\Spotify.exe",
+            "%APPDATA%\\Spotify\\Spotify.bak",
+            "%APPDATA%\\Spotify\\Spotify.exe",
+            "%APPDATA%\\Spotify",
+            "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk')) {",
+            "%APPDATA%\\Spotify",
+            "%APPDATA%\\Spotify\\Spotify.bak') {",
+            "%APPDATA%\\Spotify\\Spotify.bak",
+            "%APPDATA%\\Spotify' -FilePath 'C",
+            "%APPDATA%\\Spotify",
+            "C:\\Spotify.lnk",
+            "%LOCALAPPDATA%\\Spotify",
+            "%TEMP%\\SpotifyUninstall.exe",
+            "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk",
+            "%APPDATA%\\Spotify",
+            "%APPDATA%\\Spotify\\Apps\\xpui.spa",
+            "%APPDATA%\\Spotify\\Apps\\xpui\\xpui.js",
+            "%APPDATA%\\Spotify\\Spotify.bak",
+            "%APPDATA%\\Spotify\\Spotify.exe",
+            "%USERPROFILE%\\Desktop",
+            "%WINDIR%\\System32\\Drivers\\Etc\\hosts",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+            "%APPDATA%\\Spotify",
+            "%USERPROFILE%\\Desktop\"\"\"\\Spotify.lnk",
+            "%USERPROFILE%\\Desktop",
+            "%USERPROFILE%\\Desktop\"\"\"\\Spotify.lnk"
+          ],
+          "Total": 45
+        },
+        "FileSize": 59321,
+        "IP": {
+          "Unique": 3,
+          "Values": [
+            "1.2.13.661",
+            "1.1.93.896",
+            "1.1.92.647",
+            "1.1.93.896"
+          ],
+          "Total": 4
+        },
+        "URL": {
+          "Unique": 6,
+          "Values": [
+            "https://spotx-official.github.io/SpotX/scripts/installer-lang/$clg.ps1",
+            "https://spotx-official.github.io/SpotX/patches/Augmented%20translation/ru.json",
+            "https://download.scdn.co/upgrade/client/win32-x86/spotify_installer-$onlineFull.exe",
+            "https://docs.google.com/forms/d/e/1FAIpQLSegGsAgilgQ8Y36uw-N7zFF6Lh40cXNfyl1ecHPpZcpD8kdHg/formResponse",
+            "https://spotx-official.github.io/SpotX/patches/patches.json",
+            "https://spotx-official.github.io/SpotX/patches/patches.json",
+            "https://telegra.ph/SpotX-FAQ-09-19#Can-I-use-SpotX-and-Spicetify-together?",
+            "https://spotx-official.github.io/SpotX/patches/patches.json"
+          ],
+          "Total": 8
+        },
+        "FilePathRaw": {
+          "Unique": 30,
+          "Values": [
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -Name 'ProductName').ProductName",
+            "C:\\Users\\hacker\\Desktop') {",
+            "$env:USERPROFILE\\Desktop",
+            "C:\\Users\\hacker\\Desktop')) {",
+            "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts') {",
+            "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts",
+            "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts' -Destination $hostsBackupFilePath -ErrorAction SilentlyContinue",
+            "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts' -Value $hosts -Force",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "C:\\Users\\hacker\\AppData\\Local\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "C:\\Users\\hacker\\AppData\\Local\\Spotify') { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\SpotifyUninstall.exe' ) { Remove-Item -Recurse -Force -LiteralPath 'C",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak' $spotifyExecutable",
+            "$env:APPDATA\\Spotify\\Apps\\xpui\\$name",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui\\xpui.js",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak' $spotifyExecutable",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak' $spotifyExecutable",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa' $env",
+            "$env:APPDATA\\Spotify",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk')) {",
+            "$env:APPDATA\\Spotify",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak') {",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe' $exe_bak",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify' -FilePath 'C",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify",
+            "C:\\Spotify.lnk",
+            "C:\\Users\\hacker\\AppData\\Local\\Spotify",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\SpotifyUninstall.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Spotify.lnk",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui.spa",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Apps\\xpui\\xpui.js",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.bak",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Spotify\\Spotify.exe",
+            "C:\\Users\\hacker\\Desktop",
+            "C:\\WINDOWS\\System32\\Drivers\\Etc\\hosts",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
+          ],
+          "Total": 49
+        },
+        "FileName": "01825b694e58347ba0c884f07d153336.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3136606,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "018d99c00fcacffa7918f74f9c6a3866.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3948198,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "01978908c4f670db5e7439a44db66114.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 497655,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "01ac0099a4085667221f074494760ed2.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%USERPROFILE%\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122"
+          ],
+          "Total": 1
+        },
+        "FileSize": 406026,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://habarimoto24.com/nh@http://fenett2018.com/dobgx@http://eastend.jp/bl5kfa@http://bemnyc.com/u8erijeq@http://abakus-biuro.net//a9zqemm",
+            "http://yourmother4cancer.info/Nereidae/ZdDZ/umping?HGn3Nw=1932-05-23"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:userprofile\\AppData\\LocalLow\\$(-join((48..57)+(65..90)+(97..122"
+          ],
+          "Total": 1
+        },
+        "FileName": "01c0ef4bf1b57da91867a8cb5f896424.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2137,
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "192.168.72.200",
+            "192.168.72.200",
+            "192.168.72.200"
+          ],
+          "Total": 3
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://192.168.72.200:80",
+            "http://192.168.72.200:80/login/process.php",
+            "http://192.168.72.200:80/login/process.php"
+          ],
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "01c321dabc9d5053594101a579b04918.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 7,
+          "Values": [
+            "%PROGRAMDATA%\\tneg",
+            "%PROGRAMDATA%\\tneg' -ItemType Directory -Force",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcfsqdumoixkczgaes.exe",
+            "%PROGRAMDATA%\\tneg\\sfqn.ps1",
+            "%PROGRAMDATA%\\tneg\\tneg.vbs",
+            "%PROGRAMDATA%\\tneg\\tneg.ps1",
+            "%PROGRAMDATA%\\tneg\\1.bat",
+            "%PROGRAMDATA%\\tneg\\tneg.vbs",
+            "%PROGRAMDATA%\\tneg\\sfqn.ps1",
+            "%PROGRAMDATA%\\tneg\\1.bat",
+            "%PROGRAMDATA%\\tneg\\tneg.ps1",
+            "%PROGRAMDATA%\\tneg",
+            "%PROGRAMDATA%\\tneg"
+          ],
+          "Total": 13
+        },
+        "FileSize": 235113,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 7,
+          "Values": [
+            "C:\\ProgramData\\tneg",
+            "C:\\ProgramData\\tneg' -ItemType Directory -Force",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcfsqdumoixkczgaes.exe",
+            "C:\\ProgramData\\tneg\\sfqn.ps1",
+            "C:\\ProgramData\\tneg\\tneg.vbs",
+            "C:\\ProgramData\\tneg\\tneg.ps1",
+            "C:\\ProgramData\\tneg\\1.bat",
+            "C:\\ProgramData\\tneg\\tneg.vbs",
+            "C:\\ProgramData\\tneg\\sfqn.ps1",
+            "C:\\ProgramData\\tneg\\1.bat",
+            "C:\\ProgramData\\tneg\\tneg.ps1",
+            "C:\\ProgramData\\tneg"
+          ],
+          "Total": 12
+        },
+        "FileName": "01d0307e685bae517b9f9e56a77096ba.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 2,
+          "Values": [
+            " HKLM:\\SOFTWARE",
+            " HKLM:\\Software"
+          ],
+          "Total": 2
+        },
+        "FilePath": {
+          "Unique": 78,
+          "Values": [
+            "%TEMP%\\ip.txt",
+            "%TEMP%\\system_info.txt",
+            "%WINDIR%\\system32\\hal.dll).VersionInfo.FileVersion",
+            "%TEMP%\\uuid.txt",
+            "%TEMP%\\cpu.txt",
+            "%TEMP%\\GPU.txt",
+            "%TEMP%\\mac.txt",
+            "%TEMP%\\netstat.txt",
+            "%TEMP%\\WIFIPasswords.txt",
+            "%TEMP%\\StartUpApps.txt",
+            "%TEMP%\\running-services.txt",
+            "%TEMP%\\running-applications.txt",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "%TEMP%\\Installed-Applications.txt",
+            "%TEMP%\\NetworkAdapters.txt",
+            "%APPDATA%\\Telegram Desktop\\tdata",
+            "%TEMP%\\telegram-session.zip",
+            "%TEMP%\\desktop-screenshot.png",
+            "%TEMP%\\DiskInfo.txt",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').digitalproductid[0x34..0x42",
+            "%TEMP%\\ProductKey.txt",
+            "%TEMP%\\desktop-screenshot.png\\`",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "%TEMP%\\KDOT",
+            "%TEMP%\\KDOT' -Type Directory",
+            "%TEMP%\\main.exe",
+            "%APPDATA%\\KDOT",
+            "%APPDATA%\\KDOT' -Force",
+            "%APPDATA%\\KDOT\\KDOT.ps1",
+            "%APPDATA%\\kdot\\kdot.ps1",
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+            "C:\\browser-cookies.txt",
+            "C:\\browser-history.txt",
+            "C:\\browser-passwords.txt",
+            "C:\\CPU.txt",
+            "C:\\desktop-screenshot.png",
+            "C:\\DiskInfo.txt",
+            "C:\\GPU.txt",
+            "C:\\Installed-Applications.txt",
+            "C:\\KDOT.zip",
+            "C:\\mac.txt",
+            "C:\\main.exe",
+            "C:\\netstat.txt",
+            "C:\\NetworkAdapters.txt",
+            "C:\\ProductKey.txt",
+            "C:\\running-applications.txt",
+            "C:\\running-services.txt",
+            "C:\\StartUpApps.txt",
+            "C:\\system_info.txt",
+            "C:\\telegram-session.zip",
+            "C:\\tokens.txt",
+            "%TEMP%\\KDOT",
+            "%TEMP%\\main.exe",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "%APPDATA%\\KDOT",
+            "C:\\uuid.txt",
+            "C:\\WIFIPasswords.txt",
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "%TEMP%\\telegram-session.zip",
+            "%APPDATA%\\Telegram Desktop\\tdata",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ip.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\netstat.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\system_info.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\uuid.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\mac.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-cookies.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-history.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-passwords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\desktop-screenshot.png",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\tokens.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\WIFIPasswords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\GPU.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\Installed-Applications.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\DiskInfo.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\CPU.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\NetworkAdapters.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ProductKey.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\StartUpApps.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-services.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-applications.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\telegram-session.zip",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip"
+          ],
+          "Total": 90
+        },
+        "FileSize": 17829,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 7,
+          "Values": [
+            "https://discord.com/api/webhooks/1105875719118139472/u76309H-l60znidmePBfEkTLUibiPMROERDPjZ7IIoi7RcusxFhKF_JwjvN7p82ZTFPL",
+            "https://api.ipify.org",
+            "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+            "https://discord.gg/vk3rBhcj2y",
+            "https://github.com/KDot227/Powershell-Token-Grabber/tree/main",
+            "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+            "https://github.com/KDot227/Powershell-Token-Grabber/releases/download/V4.1/main.exe",
+            "https://i.postimg.cc/m2SSKrBt/Logo.gif\\",
+            "https://api.ipify.org",
+            "https://github.com/KDot227/Powershell-Token-Grabber/releases/download/V4.1/main.exe"
+          ],
+          "Total": 10
+        },
+        "FilePathRaw": {
+          "Unique": 57,
+          "Values": [
+            "$env:LOCALAPPDATA\\Temp\\ip.txt",
+            "$env:LOCALAPPDATA\\Temp\\system_info.txt",
+            "c:\\windows\\system32\\hal.dll).VersionInfo.FileVersion",
+            "$env:LOCALAPPDATA\\Temp\\uuid.txt",
+            "$env:LOCALAPPDATA\\Temp\\cpu.txt",
+            "$env:LOCALAPPDATA\\Temp\\GPU.txt",
+            "$env:LOCALAPPDATA\\Temp\\mac.txt",
+            "$env:LOCALAPPDATA\\Temp\\netstat.txt",
+            "$env:temp\\WIFIPasswords.txt",
+            "$env:temp\\StartUpApps.txt",
+            "$env:LOCALAPPDATA\\Temp\\running-services.txt",
+            "$env:temp\\running-applications.txt",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "$env:temp\\Installed-Applications.txt",
+            "$env:temp\\NetworkAdapters.txt",
+            "$env:userprofile\\AppData\\Roaming\\Telegram Desktop\\tdata",
+            "$env:localappdata\\temp\\telegram-session.zip",
+            "$env:localappdata\\temp\\desktop-screenshot.png",
+            "$env:temp\\DiskInfo.txt",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').digitalproductid[0x34..0x42",
+            "$env:localappdata\\temp\\ProductKey.txt",
+            "$env:localappdata\\temp\\desktop-screenshot.png\\`",
+            "$env:LOCALAPPDATA\\Temp",
+            "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\secure.dat",
+            "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\secure.dat",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\KDOT",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\KDOT' -Type Directory",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\main.exe",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:APPDATA\\KDOT",
+            "C:\\Users\\hacker\\AppData\\Roaming\\KDOT' -Force",
+            "$env:APPDATA\\KDOT\\KDOT.ps1",
+            "%appdata%\\kdot\\kdot.ps1",
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+            "C:\\browser-cookies.txt",
+            "C:\\browser-history.txt",
+            "C:\\browser-passwords.txt",
+            "C:\\CPU.txt",
+            "C:\\desktop-screenshot.png",
+            "C:\\DiskInfo.txt",
+            "C:\\GPU.txt",
+            "C:\\Installed-Applications.txt",
+            "C:\\KDOT.zip",
+            "C:\\mac.txt",
+            "C:\\main.exe",
+            "C:\\netstat.txt",
+            "C:\\NetworkAdapters.txt",
+            "C:\\ProductKey.txt",
+            "C:\\running-applications.txt",
+            "C:\\running-services.txt",
+            "C:\\StartUpApps.txt",
+            "C:\\system_info.txt",
+            "C:\\telegram-session.zip",
+            "C:\\tokens.txt",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\KDOT",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\main.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "C:\\Users\\hacker\\AppData\\Roaming\\DiscordTokenProtector\\secure.dat",
+            "C:\\Users\\hacker\\AppData\\Roaming\\KDOT",
+            "C:\\uuid.txt",
+            "C:\\WIFIPasswords.txt",
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\dataset\\D-Script\\01d106f04d2858fa9d96b63fbb34fcdf",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+          ],
+          "Total": 67
+        },
+        "FileName": "01d106f04d2858fa9d96b63fbb34fcdf.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\dataset\\D-Script\\response.zip"
+          ],
+          "Total": 1
+        },
+        "FileSize": 17722,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "https://astonishing-gecko-378b41.netlify.app",
+            "https://astonishing-gecko-378b41.netlify.app"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\dataset\\D-Script\\response.zip"
+          ],
+          "Total": 1
+        },
+        "FileName": "01d709f3f8a0f75b20ee7ae37c12fe9c.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%PUBLIC%\\fuckup.cmd",
+            "%PUBLIC%\\fuckup.cmd",
+            "%PUBLIC%\\fuckup.cmd",
+            "%PUBLIC%\\fuckup.cmd"
+          ],
+          "Total": 4
+        },
+        "FileSize": 1821,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 3,
+          "Values": [
+            "C:\\users\\public\\fuckup.cmd",
+            "C:\\users\\public\\fuckup.cmd', $bytes",
+            "C:\\Users\\Public\\fuckup.cmd",
+            "C:\\Users\\Public\\fuckup.cmd"
+          ],
+          "Total": 4
+        },
+        "FileName": "01da9bb01c8ccc789b3d4484e255dbc0.rebuilt.ps1"
+      }
+    ],
+    "Errors": [],
+    "Summary": {
+      "FilePath": {
+        "TotalOccurrences": 273,
+        "FilesContaining": 14
+      },
+      "FilePathRaw": {
+        "TotalOccurrences": 263,
+        "FilesContaining": 14
+      },
+      "RegKey": {
+        "TotalOccurrences": 6,
+        "FilesContaining": 4
+      },
+      "IP": {
+        "TotalOccurrences": 36,
+        "FilesContaining": 4
+      },
+      "URL": {
+        "TotalOccurrences": 58,
+        "FilesContaining": 13
+      }
+    },
+    "FailedFiles": 0
+  }
+}

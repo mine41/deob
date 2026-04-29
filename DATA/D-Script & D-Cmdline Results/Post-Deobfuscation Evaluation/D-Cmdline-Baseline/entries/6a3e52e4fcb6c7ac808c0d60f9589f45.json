@@ -1,0 +1,90 @@
+﻿{
+  "file": "6a3e52e4fcb6c7ac808c0d60f9589f45",
+  "sampleId": "6a3e52e4fcb6c7ac808c0d60f9589f45",
+  "rawInstructionCount": 603,
+  "instructionCount": 603,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.DateTime.AddMinutes",
+    "new-object",
+    "System.DateTime.ToString",
+    "schtasks.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.DateTime.AddMinutes",
+    "new-object",
+    "System.DateTime.ToString",
+    "schtasks.exe"
+  ],
+  "normalizedActionCount": 4,
+  "effectiveActionSequence": [
+    "System.DateTime.AddMinutes",
+    "new-object",
+    "System.DateTime.ToString",
+    "schtasks.exe"
+  ],
+  "effectiveActionCount": 4,
+  "rawApiSequence": [
+    "System.DateTime.AddMinutes",
+    "new-object",
+    "System.DateTime.ToString",
+    "schtasks.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.DateTime.AddMinutes",
+    "new-object",
+    "System.DateTime.ToString",
+    "schtasks.exe"
+  ],
+  "normalizedApiCount": 4,
+  "apiSequence": [
+    "schtasks.exe"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "cmdline",
+  "normalizedMode": "script",
+  "normalizeStatus": "decoded_cmdline",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 599,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "schtasks.exe"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 0,
+  "effectiveCapabilitySequence": [],
+  "capabilitySignature": "",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 559,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 202,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 26,
+  "deobfuscationScore": 74,
+  "apiSequenceCoverage": "fallback_appended"
+}

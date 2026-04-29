@@ -1,0 +1,84 @@
+﻿{
+  "file": "be40d59f8662b58ac29fc63cd3d5abe6.rebuilt.ps1",
+  "sampleId": "be40d59f8662b58ac29fc63cd3d5abe6",
+  "rawInstructionCount": 3025,
+  "instructionCount": 3025,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "get-process",
+    "Invoke-DllInjection"
+  ],
+  "normalizedActionSequence": [
+    "get-process",
+    "Invoke-DllInjection"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "get-process",
+    "Invoke-DllInjection"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "get-process",
+    "Invoke-DllInjection"
+  ],
+  "normalizedApiSequence": [
+    "get-process",
+    "Invoke-DllInjection"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 3023,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "RemoteProcessOpen",
+    "RemoteMemoryAlloc",
+    "RemoteMemoryWrite"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "RemoteProcessOpen",
+    "RemoteMemoryAlloc",
+    "RemoteMemoryWrite"
+  ],
+  "capabilitySignature": "RemoteProcessOpen|RemoteMemoryAlloc|RemoteMemoryWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 3075,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 1212,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 21,
+  "deobfuscationScore": 79,
+  "apiSequenceCoverage": "complete"
+}

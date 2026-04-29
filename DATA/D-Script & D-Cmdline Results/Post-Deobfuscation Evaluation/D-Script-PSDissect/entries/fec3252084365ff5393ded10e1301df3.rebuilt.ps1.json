@@ -1,0 +1,97 @@
+﻿{
+  "file": "fec3252084365ff5393ded10e1301df3.rebuilt.ps1",
+  "sampleId": "fec3252084365ff5393ded10e1301df3",
+  "rawInstructionCount": 246,
+  "instructionCount": 246,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 243,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "RemoteThreadCreate|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 9,
+  "encodedCommandCount": 3,
+  "stringLiteralBytes": 19432,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 66,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 104,
+  "deobfuscationScore": 0,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

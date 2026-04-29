@@ -1,0 +1,112 @@
+﻿{
+  "file": "9a7ed090291243c28e08195cc700eaca.deob.ps1",
+  "sampleId": "9a7ed090291243c28e08195cc700eaca",
+  "rawInstructionCount": 1446,
+  "instructionCount": 1446,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "write-output",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.IntPtr.ToInt32",
+    "Win32Functions.Win32.CreateThread",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "write-output",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.IntPtr.ToInt32",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "write-output",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.IntPtr.ToInt32",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "write-output",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.IntPtr.ToInt32",
+    "Win32Functions.Win32.CreateThread",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "write-output",
+    "add-type",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.IntPtr.ToInt32",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1441,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "Win32Functions.Win32.CreateThread",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1973,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 533,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 5,
+  "deobfuscationScore": 95,
+  "apiSequenceCoverage": "fallback_appended"
+}

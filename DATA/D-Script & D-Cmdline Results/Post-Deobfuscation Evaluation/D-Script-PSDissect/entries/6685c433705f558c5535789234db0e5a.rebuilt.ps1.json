@@ -1,0 +1,127 @@
+﻿{
+  "file": "6685c433705f558c5535789234db0e5a.rebuilt.ps1",
+  "sampleId": "6685c433705f558c5535789234db0e5a",
+  "rawInstructionCount": 512,
+  "instructionCount": 512,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "start-sleep",
+    "set-itemproperty",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "mshta.exe"
+  ],
+  "normalizedActionSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-content",
+    "mshta.exe"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-content",
+    "mshta.exe"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "start-sleep",
+    "set-itemproperty",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "mshta.exe"
+  ],
+  "normalizedApiSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-content",
+    "mshta.exe"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-content"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 506,
+  "stubbedSinkCount": 3,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-content"
+  ],
+  "dynamicCapabilityCount": 3,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "RegistryModify",
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "RegistryModify",
+    "FileWrite"
+  ],
+  "capabilitySignature": "ScriptExec|RegistryModify|FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 6560,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 69,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 13,
+  "deobfuscationScore": 87,
+  "apiSequenceCoverage": "fallback_appended"
+}

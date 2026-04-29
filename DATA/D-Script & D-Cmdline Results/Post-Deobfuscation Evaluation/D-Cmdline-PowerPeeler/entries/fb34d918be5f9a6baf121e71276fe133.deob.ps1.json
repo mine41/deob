@@ -1,0 +1,147 @@
+﻿{
+  "file": "fb34d918be5f9a6baf121e71276fe133.deob.ps1",
+  "sampleId": "fb34d918be5f9a6baf121e71276fe133",
+  "rawInstructionCount": 1122,
+  "instructionCount": 1122,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "where-object",
+    "System.Management.Automation.PSObject.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "where-object",
+    "System.Management.Automation.PSObject.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 11,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "where-object",
+    "System.Management.Automation.PSObject.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "where-object",
+    "System.Management.Automation.PSObject.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "where-object",
+    "System.Management.Automation.PSObject.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 11,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 5,
+  "importantApiCount": 5,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1111,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadData"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 5,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 629,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 389,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 13,
+  "deobfuscationScore": 87,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

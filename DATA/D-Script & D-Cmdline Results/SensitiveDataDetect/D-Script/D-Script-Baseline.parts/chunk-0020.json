@@ -1,0 +1,1310 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 20,
+  "ChunkSignature": "c36da38d6843494922a6ab506e42b89006e98ee5ceba1eb0b48f2da30e92a4c5",
+  "FileCount": 34,
+  "ChunkResult": {
+    "Summary": {
+      "URL": {
+        "FilesContaining": 6,
+        "TotalOccurrences": 44
+      },
+      "RegKey": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 2
+      },
+      "IP": {
+        "FilesContaining": 3,
+        "TotalOccurrences": 12
+      },
+      "FilePath": {
+        "FilesContaining": 7,
+        "TotalOccurrences": 33
+      },
+      "FilePathRaw": {
+        "FilesContaining": 7,
+        "TotalOccurrences": 35
+      }
+    },
+    "ProcessedFiles": 34,
+    "SkippedFiles": 0,
+    "CollectedValues": {
+      "FilePath": [
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe",
+        "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --out",
+        "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --lib",
+        "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\2.0.0",
+        "C:\\Foo for ~, then go there",
+        "C:\\Foo -ItemType Directory -Force -EA 0",
+        "%USERPROFILE%\\support\\support\\Support Tools\\AirDrag\\AirDrag.psproj",
+        "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag",
+        "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag",
+        "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "%TEMP%\\targets.txt",
+        "%TEMP%\\results.txt",
+        "%TEMP%\\results.txt",
+        "%TEMP%\\meterpreter.raw",
+        "%TEMP%\\shellcode.bin",
+        "%TEMP%\\shellcode_exploit.bin",
+        "%TEMP%\\shellcode_exploit.bin",
+        "%TEMP%\\a.zip",
+        "%TEMP%\\targets.txt",
+        "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+        "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+        "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA",
+        "C:\\IDontExist.dll",
+        "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA.ps1",
+        "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA\\DARAXQUREMATRLAKSEXSSA.bat",
+        "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA.ps1"
+      ],
+      "RegKey": [
+        " HKCU\\Software",
+        " HKCU\\Software"
+      ],
+      "IP": [
+        "4.0.0.0",
+        "4.0.0.0",
+        "4.0.0.0",
+        "4.0.0.0",
+        "192.99.255.65",
+        "192.99.255.65",
+        "192.99.255.65",
+        "192.99.255.65",
+        "192.99.255.65",
+        "192.99.255.65",
+        "192.99.255.65",
+        "192.168.28.130"
+      ],
+      "FilePathRaw": [
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe",
+        "$Env:WORKSPACE\\clients\\csharp\\Beisen.Configuration\\NuGet.Config",
+        "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --out",
+        "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --lib",
+        "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\2.0.0",
+        "$ENV:WORKSPACE\\clients\\csharp\\Beisen.Configuration\\Output",
+        "$ENV:WORKSPACE\\clients\\csharp\\Beisen.Configuration\\Output\\$ENV",
+        "C:\\Foo for ~, then go there",
+        "C:\\Foo -ItemType Directory -Force -EA 0",
+        "C:\\Users\\danie\\support\\support\\Support Tools\\AirDrag\\AirDrag.psproj",
+        "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag",
+        "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag",
+        "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+        "$env:TEMP\\targets.txt",
+        "$env:Temp\\results.txt",
+        "$env:TEMP\\results.txt",
+        "$env:TEMP\\meterpreter.raw",
+        "$env:TEMP\\shellcode.bin",
+        "$env:TEMP\\shellcode_exploit.bin",
+        "$env:TEMP\\shellcode_exploit.bin",
+        "$env:TEMP\\eternalblue_exploit7.exe $result $env",
+        "$env:TEMP\\a.zip",
+        "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+        "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+        "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA",
+        "C:\\IDontExist.dll",
+        "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA.ps1",
+        "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA\\DARAXQUREMATRLAKSEXSSA.bat",
+        "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA.ps1"
+      ],
+      "URL": [
+        "http://dev.nuget.beisencorp.com/nuget",
+        "https://www.googleapis.com/calendar/v3/calendars/$PrimaryEmail/events",
+        "https://accounts.google.com/signin",
+        "https://accounts.google.com/signin/v1/lookup",
+        "https://accounts.google.com/signin/challenge/sl/password",
+        "https://calendar.google.com/calendar/render",
+        "https://calendar.google.com/calendar/render?pli=1",
+        "https://calendar.google.com/calendar/event",
+        "https://calendar.google.com/calendar/event",
+        "https://accounts.google.com/signin",
+        "https://accounts.google.com/signin/v1/lookup",
+        "https://accounts.google.com/signin/challenge/sl/password",
+        "https://mail.google.com/mail",
+        "https://mail.google.com/mail/u/0/s/?v=or",
+        "https://mail.google.com/mail/u/0/#settings/filters",
+        "https://mail.google.com/mail/u/0/?ui=2&ik=$ik&at=$at&view=tl&start=0&num=1000&mb=0&rt=c&q=$search&search=query",
+        "https://mail.google.com/mail/u/0/s/?v=or",
+        "https://accounts.google.com/signin",
+        "https://accounts.google.com/signin/v1/lookup",
+        "https://accounts.google.com/signin/challenge/sl/password",
+        "https://mail.google.com/mail/u/0/#settings/filters",
+        "https://mail.google.com/mail",
+        "https://mail.google.com/mail/u/0/s/?v=or",
+        "https://mail.google.com/render?pli=1",
+        "https://mail.google.com/mail/u/0/?ui=2&ik=$ik&jsver=a&rid=a&at=$at&view=up&act=cf&_reqid=a&pcd=1&cfact=a&cfinact=a&mb=0&rt=c&search=cf&cf1_from=no-reply%40accounts.google.com&cf1_sizeoperator=s_sl&cf1_sizeunit=s_smb",
+        "https://mail.google.com/mail/u/0/#settings/filters",
+        "https://labairlock13.airlock.lab:3129",
+        "https://airlockserver.domain.com:3129",
+        "http://192.99.255.65:8787/info/$agent",
+        "http://192.99.255.65:8787/md/$agent",
+        "http://192.99.255.65:8787/up/$agent",
+        "http://192.99.255.65:8787/img/$agent",
+        "http://192.99.255.65:8787/cm/$agent",
+        "http://192.99.255.65:8787/info/$agent",
+        "http://192.99.255.65:8787/re/$agent",
+        "http://172.16.64.1/a.zip",
+        "http://f1sk.xyz",
+        "http://jayy.xyz",
+        "https://discordapp.com/api/v6/users/@me",
+        "https://discordapp.com/api/v6/users/@me",
+        "https://discordapp.com/api/v6/users/@me",
+        "https://discordapp.com/api/v6/users/@me",
+        "https://discordapp.com/api/v6/users/@me",
+        "https://discordapp.com/api/v6/users/@me"
+      ]
+    },
+    "FileDetails": [
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 5366,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "28c041a034ea1b103e873c7ad3b522c7",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3070,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "28c5f8390749d6216843a89ef9465c33",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 792,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "28ec41761ecfaee0b45d1d629f5bbcba",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 677145,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "28ef3912c2b9d1d77f9463125c7a50e4",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2100342,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "28ef87617b6884d47b4725100d84dfa9",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 226044,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "28fa86769eb8f5ee999ea4d13649ed70",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 4727,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe"
+          ],
+          "Total": 2
+        },
+        "FileName": "28fadd80fe9a8677256450fcbc9e0640",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2617,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2919d49774ff1a0f83a1998a548cc99a",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 102841,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2931e9c48ca42e41df9d7a57e43b215b",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1683780,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "29486c8beaf1eb79c664a4f83549099a",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3076,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2955f933d027504cd8bc1961d4edfbe3",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 30262,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "29573b1fa60bce8e04dd2a4d554a7447",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 87454,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "296943d6588268df74e743c0f3c2685a",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 12113,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "296aa86b8af8fd4bf47613e0955c7fd1",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1121,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "297ddd7de0d6253397576c3188197e35",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 815,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "29948c4a68863d3f0463a3b60c679ba9",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 364353,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "29a807b64777ea215b1953e091e8ea1c",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 4691,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "29c87dd5ce6140be3696012f74ca800d",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 222,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "29f8dd18cb098dba8ce617805d0f0311",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 53079,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe"
+          ],
+          "Total": 1
+        },
+        "FileName": "2a05212555d3296639abe3e8dcefb27d",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1892,
+        "FilePath": {
+          "Unique": 3,
+          "Values": [
+            "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --out",
+            "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --lib",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\2.0.0"
+          ],
+          "Total": 3
+        },
+        "FileName": "2a104fad7e9c122bf8367f24185b36b4",
+        "FilePathRaw": {
+          "Unique": 6,
+          "Values": [
+            "$Env:WORKSPACE\\clients\\csharp\\Beisen.Configuration\\NuGet.Config",
+            "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --out",
+            "C:\\BuildScripts\\Proj\\Tools\\ilrepack.exe --internalize --renameInternalized --xmldocs --copyattrs --wildcards --lib",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\2.0.0",
+            "$ENV:WORKSPACE\\clients\\csharp\\Beisen.Configuration\\Output",
+            "$ENV:WORKSPACE\\clients\\csharp\\Beisen.Configuration\\Output\\$ENV"
+          ],
+          "Total": 6
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://dev.nuget.beisencorp.com/nuget"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2638147,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a18b9231c4ea263b673f5ad63c21ab0",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1223,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Foo for ~, then go there",
+            "C:\\Foo -ItemType Directory -Force -EA 0"
+          ],
+          "Total": 2
+        },
+        "FileName": "2a19d3bbf7ba771db208015ed73253f1",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Foo for ~, then go there",
+            "C:\\Foo -ItemType Directory -Force -EA 0"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 593983,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a2f904fa9fb764377eac00e15ae47c6",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 13,
+          "Values": [
+            "https://www.googleapis.com/calendar/v3/calendars/$PrimaryEmail/events",
+            "https://accounts.google.com/signin",
+            "https://accounts.google.com/signin/v1/lookup",
+            "https://accounts.google.com/signin/challenge/sl/password",
+            "https://calendar.google.com/calendar/render",
+            "https://calendar.google.com/calendar/render?pli=1",
+            "https://calendar.google.com/calendar/event",
+            "https://calendar.google.com/calendar/event",
+            "https://accounts.google.com/signin",
+            "https://accounts.google.com/signin/v1/lookup",
+            "https://accounts.google.com/signin/challenge/sl/password",
+            "https://mail.google.com/mail",
+            "https://mail.google.com/mail/u/0/s/?v=or",
+            "https://mail.google.com/mail/u/0/#settings/filters",
+            "https://mail.google.com/mail/u/0/?ui=2&ik=$ik&at=$at&view=tl&start=0&num=1000&mb=0&rt=c&q=$search&search=query",
+            "https://mail.google.com/mail/u/0/s/?v=or",
+            "https://accounts.google.com/signin",
+            "https://accounts.google.com/signin/v1/lookup",
+            "https://accounts.google.com/signin/challenge/sl/password",
+            "https://mail.google.com/mail/u/0/#settings/filters",
+            "https://mail.google.com/mail",
+            "https://mail.google.com/mail/u/0/s/?v=or",
+            "https://mail.google.com/render?pli=1",
+            "https://mail.google.com/mail/u/0/?ui=2&ik=$ik&jsver=a&rid=a&at=$at&view=up&act=cf&_reqid=a&pcd=1&cfact=a&cfinact=a&mb=0&rt=c&search=cf&cf1_from=no-reply%40accounts.google.com&cf1_sizeoperator=s_sl&cf1_sizeunit=s_smb",
+            "https://mail.google.com/mail/u/0/#settings/filters"
+          ],
+          "Total": 25
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 803898,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a38a8189a48b26ee932b937a8afe529",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 92406,
+        "FilePath": {
+          "Unique": 3,
+          "Values": [
+            "%USERPROFILE%\\support\\support\\Support Tools\\AirDrag\\AirDrag.psproj",
+            "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag",
+            "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag",
+            "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+            "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+            "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+            "%LOCALAPPDATA%\\Airlock Digital Pty Ltd\\Airdrag\\Config.config"
+          ],
+          "Total": 7
+        },
+        "FileName": "2a444b731657d7f2416d9b00c6271b88",
+        "FilePathRaw": {
+          "Unique": 3,
+          "Values": [
+            "C:\\Users\\danie\\support\\support\\Support Tools\\AirDrag\\AirDrag.psproj",
+            "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag",
+            "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag",
+            "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+            "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+            "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config",
+            "$env:LOCALAPPDATA\\Airlock Digital Pty Ltd\\Airdrag\\Config.config"
+          ],
+          "Total": 7
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "https://labairlock13.airlock.lab:3129",
+            "https://airlockserver.domain.com:3129"
+          ],
+          "Total": 2
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "4.0.0.0",
+            "4.0.0.0",
+            "4.0.0.0",
+            "4.0.0.0"
+          ],
+          "Total": 4
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 6684,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a445d279ba6cb5ab3cbec2b6f2496ae",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 6,
+          "Values": [
+            "http://192.99.255.65:8787/info/$agent",
+            "http://192.99.255.65:8787/md/$agent",
+            "http://192.99.255.65:8787/up/$agent",
+            "http://192.99.255.65:8787/img/$agent",
+            "http://192.99.255.65:8787/cm/$agent",
+            "http://192.99.255.65:8787/info/$agent",
+            "http://192.99.255.65:8787/re/$agent"
+          ],
+          "Total": 7
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "192.99.255.65",
+            "192.99.255.65",
+            "192.99.255.65",
+            "192.99.255.65",
+            "192.99.255.65",
+            "192.99.255.65",
+            "192.99.255.65"
+          ],
+          "Total": 7
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 11209,
+        "FilePath": {
+          "Unique": 6,
+          "Values": [
+            "%TEMP%\\targets.txt",
+            "%TEMP%\\results.txt",
+            "%TEMP%\\results.txt",
+            "%TEMP%\\meterpreter.raw",
+            "%TEMP%\\shellcode.bin",
+            "%TEMP%\\shellcode_exploit.bin",
+            "%TEMP%\\shellcode_exploit.bin",
+            "%TEMP%\\a.zip",
+            "%TEMP%\\targets.txt"
+          ],
+          "Total": 9
+        },
+        "FileName": "2a498bb7b154645afc11cf4f8d583b14",
+        "FilePathRaw": {
+          "Unique": 8,
+          "Values": [
+            "$env:TEMP\\targets.txt",
+            "$env:Temp\\results.txt",
+            "$env:TEMP\\results.txt",
+            "$env:TEMP\\meterpreter.raw",
+            "$env:TEMP\\shellcode.bin",
+            "$env:TEMP\\shellcode_exploit.bin",
+            "$env:TEMP\\shellcode_exploit.bin",
+            "$env:TEMP\\eternalblue_exploit7.exe $result $env",
+            "$env:TEMP\\a.zip"
+          ],
+          "Total": 9
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://172.16.64.1/a.zip"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "192.168.28.130"
+          ],
+          "Total": 1
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 686895,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a5ff917990045476cdaa21050390910",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 309304,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a686b6e7d64f9288364a6b9f6fc5c59",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 343207,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a6d8d7fa8f11afdaad81e9252153f81",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKCU\\Software",
+            " HKCU\\Software"
+          ],
+          "Total": 2
+        },
+        "FileSize": 689894,
+        "FilePath": {
+          "Unique": 6,
+          "Values": [
+            "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+            "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+            "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA",
+            "C:\\IDontExist.dll",
+            "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA.ps1",
+            "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA\\DARAXQUREMATRLAKSEXSSA.bat",
+            "%PROGRAMDATA%\\DARAXQUREMATRLAKSEXSSA.ps1"
+          ],
+          "Total": 9
+        },
+        "FileName": "2a7466f75ae9b62e9ad14c6b375fcd27",
+        "FilePathRaw": {
+          "Unique": 6,
+          "Values": [
+            "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+            "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+            "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA",
+            "C:\\IDontExist.dll",
+            "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA.ps1",
+            "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA\\DARAXQUREMATRLAKSEXSSA.bat",
+            "C:\\ProgramData\\DARAXQUREMATRLAKSEXSSA.ps1"
+          ],
+          "Total": 9
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1687,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a7ebbdeff042213b88409aa18b29d92",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 7291,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2a89b29d40becebf76d1fa2b58be5784",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 3,
+          "Values": [
+            "http://f1sk.xyz",
+            "http://jayy.xyz",
+            "https://discordapp.com/api/v6/users/@me",
+            "https://discordapp.com/api/v6/users/@me",
+            "https://discordapp.com/api/v6/users/@me",
+            "https://discordapp.com/api/v6/users/@me",
+            "https://discordapp.com/api/v6/users/@me",
+            "https://discordapp.com/api/v6/users/@me"
+          ],
+          "Total": 8
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      }
+    ],
+    "FailedFiles": 0,
+    "Errors": []
+  }
+}

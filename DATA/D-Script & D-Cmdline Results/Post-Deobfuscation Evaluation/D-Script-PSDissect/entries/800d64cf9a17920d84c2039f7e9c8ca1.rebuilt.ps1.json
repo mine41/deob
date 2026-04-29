@@ -1,0 +1,97 @@
+﻿{
+  "file": "800d64cf9a17920d84c2039f7e9c8ca1.rebuilt.ps1",
+  "sampleId": "800d64cf9a17920d84c2039f7e9c8ca1",
+  "rawInstructionCount": 258,
+  "instructionCount": 258,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 255,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 4,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "ScriptExec|RemoteMemoryAlloc|RemoteThreadCreate|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 5,
+  "stringLiteralBytes": 3115,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 164,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 79,
+  "deobfuscationScore": 21,
+  "apiSequenceCoverage": "fallback_appended"
+}

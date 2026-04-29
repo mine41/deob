@@ -1,0 +1,88 @@
+﻿{
+  "file": "f6ee27003b61dbecf981c78553ddf4ce.deob.ps1",
+  "sampleId": "f6ee27003b61dbecf981c78553ddf4ce",
+  "rawInstructionCount": 266,
+  "instructionCount": 266,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "set-strictmode"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "set-strictmode"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "new-object"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 264,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 4,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "RemoteMemoryAlloc|RemoteThreadCreate|CompileCSharp|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 4999,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 63,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 22,
+  "deobfuscationScore": 78,
+  "apiSequenceCoverage": "complete"
+}

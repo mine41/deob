@@ -1,0 +1,84 @@
+﻿{
+  "file": "b05c72f7c72ea88b34527843d9206862.deob.ps1",
+  "sampleId": "b05c72f7c72ea88b34527843d9206862",
+  "rawInstructionCount": 252,
+  "instructionCount": 252,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "set-strictmode"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "new-object"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "new-object",
+    "set-strictmode"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "new-object"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 250,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "RemoteMemoryAlloc|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 470993,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 59,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 34,
+  "deobfuscationScore": 66,
+  "apiSequenceCoverage": "complete"
+}

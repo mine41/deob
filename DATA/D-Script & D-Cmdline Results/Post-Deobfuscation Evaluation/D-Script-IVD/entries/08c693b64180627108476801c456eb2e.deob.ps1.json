@@ -1,0 +1,107 @@
+﻿{
+  "file": "08c693b64180627108476801c456eb2e.deob.ps1",
+  "sampleId": "08c693b64180627108476801c456eb2e",
+  "rawInstructionCount": 566,
+  "instructionCount": 566,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-strictmode",
+    "new-object",
+    "new-object",
+    "System.Collections.Specialized.StringCollection.AddRange",
+    "System.Management.Automation.PSObject.CompileAssemblyFromSource",
+    "System.Convert.FromBase64String"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "new-object",
+    "System.Collections.Specialized.StringCollection.AddRange",
+    "CompileAssemblyFromSource",
+    "System.Convert.FromBase64String"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "new-object",
+    "new-object",
+    "System.Collections.Specialized.StringCollection.AddRange",
+    "CompileAssemblyFromSource",
+    "System.Convert.FromBase64String"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "set-strictmode",
+    "new-object",
+    "new-object",
+    "System.Collections.Specialized.StringCollection.AddRange",
+    "System.Management.Automation.PSObject.CompileAssemblyFromSource",
+    "System.Convert.FromBase64String"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "new-object",
+    "System.Collections.Specialized.StringCollection.AddRange",
+    "CompileAssemblyFromSource",
+    "System.Convert.FromBase64String"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "CompileAssemblyFromSource"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 561,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "CompileAssemblyFromSource"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 2314,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 170,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 12,
+  "deobfuscationScore": 88,
+  "apiSequenceCoverage": "fallback_appended"
+}

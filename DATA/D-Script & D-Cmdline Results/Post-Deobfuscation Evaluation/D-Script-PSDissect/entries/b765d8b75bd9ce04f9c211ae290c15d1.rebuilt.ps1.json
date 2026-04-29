@@ -1,0 +1,123 @@
+﻿{
+  "file": "b765d8b75bd9ce04f9c211ae290c15d1.rebuilt.ps1",
+  "sampleId": "b765d8b75bd9ce04f9c211ae290c15d1",
+  "rawInstructionCount": 415,
+  "instructionCount": 415,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "Disable-AMSI",
+    "write-host",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "write-host",
+    "Execute-MaliciousCode",
+    "write-host",
+    "add-type"
+  ],
+  "normalizedActionSequence": [
+    "Disable-AMSI",
+    "write-host",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "write-host",
+    "Execute-MaliciousCode",
+    "write-host",
+    "add-type"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "Disable-AMSI",
+    "write-host",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "write-host",
+    "Execute-MaliciousCode",
+    "write-host",
+    "add-type"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "Disable-AMSI",
+    "write-host",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "write-host",
+    "Execute-MaliciousCode",
+    "write-host",
+    "add-type"
+  ],
+  "normalizedApiSequence": [
+    "Disable-AMSI",
+    "write-host",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "write-host",
+    "Execute-MaliciousCode",
+    "write-host",
+    "add-type"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 406,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 711,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 60,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "fallback_appended"
+}

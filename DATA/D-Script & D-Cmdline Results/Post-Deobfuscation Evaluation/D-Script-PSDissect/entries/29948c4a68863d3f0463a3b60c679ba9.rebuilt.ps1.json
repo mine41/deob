@@ -1,0 +1,143 @@
+﻿{
+  "file": "29948c4a68863d3f0463a3b60c679ba9.rebuilt.ps1",
+  "sampleId": "29948c4a68863d3f0463a3b60c679ba9",
+  "rawInstructionCount": 555,
+  "instructionCount": 555,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "getit",
+    "new-object",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "invoke-expression",
+    "getit",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "getit",
+    "new-object",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression",
+    "getit",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "getit",
+    "new-object",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression",
+    "getit",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "getit",
+    "new-object",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "invoke-expression",
+    "getit",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "getit",
+    "new-object",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression",
+    "getit",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 545,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadFile",
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadFile",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression",
+    "System.Net.WebClient.DownloadFile",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 576,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 76,
+  "dynamicExecPrimitiveCount": 3,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 21,
+  "deobfuscationScore": 79,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

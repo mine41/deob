@@ -1,0 +1,110 @@
+﻿{
+  "file": "ae9b0b80dbf2a2ab86711396228a68bf.deob.ps1",
+  "sampleId": "ae9b0b80dbf2a2ab86711396228a68bf",
+  "rawInstructionCount": 711,
+  "instructionCount": 711,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "CHECK_IF_ADMIN",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "write-output",
+    "Invoke-ANTIVM",
+    "remove-item"
+  ],
+  "normalizedActionSequence": [
+    "CHECK_IF_ADMIN",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "write-output",
+    "Invoke-ANTIVM",
+    "remove-item"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "CHECK_IF_ADMIN",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "write-output",
+    "Invoke-ANTIVM",
+    "remove-item"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "CHECK_IF_ADMIN",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "write-output",
+    "Invoke-ANTIVM",
+    "remove-item"
+  ],
+  "normalizedApiSequence": [
+    "CHECK_IF_ADMIN",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "write-output",
+    "Invoke-ANTIVM",
+    "remove-item"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "remove-item"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 705,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "remove-item"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 4,
+  "staticCapabilitySequence": [
+    "Download",
+    "CompileCSharp",
+    "ProcessSpawn",
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "CompileCSharp",
+    "ProcessSpawn",
+    "FileWrite"
+  ],
+  "capabilitySignature": "Download|CompileCSharp|ProcessSpawn|FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 8,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 14528,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 3123,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 70,
+  "deobfuscationScore": 30,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,93 @@
+﻿{
+  "file": "1c8d31af17d36b2f19fde783acc21eee.deob.ps1",
+  "sampleId": "1c8d31af17d36b2f19fde783acc21eee",
+  "rawInstructionCount": 1052,
+  "instructionCount": 1052,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "import-module",
+    "import-module",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "start-service"
+  ],
+  "normalizedActionSequence": [
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "start-service"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "start-service"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "import-module",
+    "import-module",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "start-service"
+  ],
+  "normalizedApiSequence": [
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "System.Runtime.InteropServices.Marshal.SecureStringToBSTR",
+    "start-service"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "start-service"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 1049,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "start-service"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1521,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 176,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 13,
+  "deobfuscationScore": 87,
+  "apiSequenceCoverage": "fallback_appended"
+}

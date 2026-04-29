@@ -1,0 +1,125 @@
+﻿{
+  "file": "success\\41441a9aa957a06e4155e06282898c75",
+  "sampleId": "41441a9aa957a06e4155e06282898c75",
+  "rawInstructionCount": 621,
+  "instructionCount": 621,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Collections.Hashtable.Add",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "System.Collections.Hashtable.Add",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "System.Collections.Hashtable.Add",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "System.Collections.Hashtable.Add",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "System.Collections.Hashtable.Add",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 5,
+  "importantApiCount": 5,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 615,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 5,
+  "effectiveApiSequence": [
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-webrequest",
+    "schtasks.exe",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "Download"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 607,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 87,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

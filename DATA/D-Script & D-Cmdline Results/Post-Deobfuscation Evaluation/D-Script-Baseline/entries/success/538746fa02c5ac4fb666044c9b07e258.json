@@ -1,0 +1,115 @@
+﻿{
+  "file": "success\\538746fa02c5ac4fb666044c9b07e258",
+  "sampleId": "538746fa02c5ac4fb666044c9b07e258",
+  "rawInstructionCount": 167,
+  "instructionCount": 167,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "powershell.exe",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "normalizedActionSequence": [
+    "powershell.exe",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "powershell.exe",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "powershell.exe",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "normalizedApiSequence": [
+    "powershell.exe",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "powershell.exe",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 161,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "powershell.exe",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "powershell.exe",
+    "remove-item"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 0,
+  "effectiveCapabilitySequence": [],
+  "capabilitySignature": "",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 174,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 39,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 12,
+  "deobfuscationScore": 88,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

@@ -1,0 +1,95 @@
+﻿{
+  "file": "625ee60a4b7dbabab6d7861ac587d00e.rebuilt.ps1",
+  "sampleId": "625ee60a4b7dbabab6d7861ac587d00e",
+  "rawInstructionCount": 8291,
+  "instructionCount": 8291,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.Path.Combine",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 8288,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "FileWrite|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 152,
+  "byteArrayLiteralBytes": 8193,
+  "astNodeCount": 8219,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 20,
+  "deobfuscationScore": 80,
+  "apiSequenceCoverage": "fallback_appended"
+}

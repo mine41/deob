@@ -1,0 +1,1675 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 94,
+  "ChunkSignature": "195d7a5ff3cb6592be326fb87570f3a2663ba83efdd84af5af302a6cfaec820f",
+  "FileCount": 34,
+  "ChunkResult": {
+    "FailedFiles": 0,
+    "Summary": {
+      "URL": {
+        "FilesContaining": 6,
+        "TotalOccurrences": 22
+      },
+      "FilePath": {
+        "FilesContaining": 11,
+        "TotalOccurrences": 157
+      },
+      "RegKey": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 1
+      },
+      "IP": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 10
+      },
+      "FilePathRaw": {
+        "FilesContaining": 12,
+        "TotalOccurrences": 115
+      }
+    },
+    "ProcessedFiles": 34,
+    "FileDetails": [
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf141f3e435348de520a77bdc8055f35.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1961093
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "bf220bc94cc8ba72d4d78d2feed7f909.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3926
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Unique": 23,
+          "Total": 31
+        },
+        "FileName": "bf2250d7fff015b1480fd31e87f6db54",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "c:\\Windows\\Microsoft.NET\\Framework\\",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Unique": 24,
+          "Total": 32
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 467338
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf32c6655801e13aae44c5c1b3109f98.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3615
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf3ee91d4639329312f5d617d67f2ed5",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2638043
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FileName": "bf3fa0a616f43ed5d0bed6f55e5c9719.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1749
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf51a7941ff65fbb995b5fbaf1bee5ae.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 16846
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf5e080b9f97c3a5a77d95337a19f1f2.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 7108
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf64a1805c04a60382604c320781a790",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3137980
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf8a1cd843f9204955e99f37c6662ba0.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://systemlogs.azurewebsites.net",
+            "https://systemlogs.azurewebsites.net/support.aspx?code=FRXvXushOWBpnn6PvHc8JumyAaOKaRveLZX5wyzAuwfQeZiQPH3ZuA=="
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2782
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf8e4c53dcaa4d961bb9b089f5f6a862.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://github.com/Cn33liz/p0wnedLoader",
+            "https://raw.githubusercontent.com/S3cur3Th1sSh1t/Invoke-SharpLoader/master/EncryptedCSharp/SafetyKatz.enc"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 53314
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bf9c5777512bf9b80299ef6e73ce7d1f",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3142258
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%APPDATA%\\${_",
+            "%PUBLIC%\\chrome.lnk",
+            "%WINDIR%\\explorer.exe",
+            "%WINDIR%\\explorer.exe"
+          ],
+          "Unique": 3,
+          "Total": 4
+        },
+        "FileName": "bfb23b01a337488d50d4b26002312823.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://andreabo1.myftp.biz/z1r7_7_8_0_2_4dmWmx/z1r7_7_8_0_2_4dmW/z1r7_7_8_0_2_4dmWkk/index.php",
+            "http://andreabo1.myftp.biz/z1r7_7_8_0_2_4dmWmx/z1r7_7_8_0_2_4dmWMD/z1r7_7_8_0_2_4dmWkk/md.zip",
+            "http://andreabo1.myftp.biz/z1r7_7_8_0_2_4dmWmx/z1r7_7_8_0_2_4dmWlists/z1r7_7_8_0_2_4dmWkk/index.php?list"
+          ],
+          "Unique": 3,
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Values": [
+            "c:\\users\\${_",
+            "$env:APPDATA\\${_",
+            "c:\\users\\${_",
+            "c:\\users\\public\\chrome.lnk",
+            "C:\\Windows\\explorer.exe"
+          ],
+          "Unique": 4,
+          "Total": 5
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 16890
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bfbc45b2b6355c6be0b6c749c806f9ba.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 413457
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "C:\\inputfile",
+            "C:\\outfile",
+            "C:\\outfile",
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+            "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code"
+          ],
+          "Unique": 3,
+          "Total": 6
+        },
+        "FileName": "bfbf4cf07bcd75983e4e5559142ee35a.deob.ps1",
+        "IP": {
+          "Values": [
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.15",
+            "10.1.1.15",
+            "10.1.1.1",
+            "10.1.1.1",
+            "10.1.1.1"
+          ],
+          "Unique": 2,
+          "Total": 10
+        },
+        "URL": {
+          "Values": [
+            "https://github.com/besimorhino/powercat",
+            "https://github.com/iagox86/dnscat2"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\inputfile",
+            "C:\\outfile",
+            "C:\\outfile",
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+            "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code"
+          ],
+          "Unique": 3,
+          "Total": 6
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 48210
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bfe0a74d00b0edb8059c3e5059ef80b7.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3444
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bfe3065c037c61324e843a5631a904fc.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 12279
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "bfff9ce97e9e6d31ff45a85f320ddeab",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2290543
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "c02d729b9ca61dc04d5411f58946f2bd.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 4168
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%USERPROFILE%\\Desktop",
+            "%USERPROFILE%\\Desktop\\${ShortcutName}'.lnk",
+            "%USERPROFILE%\\Desktop\\${ShortcutName",
+            "D:\\phpStudy\\phpStudy.exe",
+            "D:\\phpStudy\\phpStudy.exe",
+            "%USERPROFILE%\\Desktop"
+          ],
+          "Unique": 4,
+          "Total": 6
+        },
+        "FileName": "c03bb65f0840129dbd2d75fef28650ea.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\hacker\\Desktop",
+            "C:\\Users\\hacker\\Desktop\\${ShortcutName}'.lnk",
+            "C:\\Users\\hacker\\Desktop\\${ShortcutName",
+            "D:\\phpStudy\\phpStudy.exe",
+            "D:\\phpStudy\\phpStudy.exe"
+          ],
+          "Unique": 4,
+          "Total": 5
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 15265
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c045ded93412634a6430c9aeaaa27044.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://cabalonlinefenix.com/Base64.jpg"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 572
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c051152a13f57af651c300095ff698b6",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 551241
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c06205330011c5c892c088b8e0240aed.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 5531
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c083ea4efe6062ef30e115c1259d1374.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 14028
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%PROGRAMDATA%\\WD' -ItemType Directory -Force",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+            "%PROGRAMDATA%\\WD\\WD.PS1",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+            "%PROGRAMDATA%\\WD\\WD.PS1",
+            "%PROGRAMDATA%\\WD\\WD.bat",
+            "%PROGRAMDATA%\\WD\\WD.PS1",
+            "%PROGRAMDATA%\\WD\\WD.bat",
+            "%PROGRAMDATA%\\WD\\WD.vbs",
+            "%PROGRAMDATA%\\WD\\WD.bat",
+            "%PROGRAMDATA%\\WD\\XX.PS1",
+            "%PROGRAMDATA%\\WD\\XX.PS1",
+            "%PROGRAMDATA%\\WD\\XX.bat",
+            "%PROGRAMDATA%\\WD\\XX.PS1",
+            "%PROGRAMDATA%\\WD\\XX.bat",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.bat",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs",
+            "%PROGRAMDATA%\\WD\\XX.vbs"
+          ],
+          "Unique": 8,
+          "Total": 25
+        },
+        "FileName": "c090636c0eab0ee76e9bed810f398bab.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\ProgramData\\WD",
+            "C:\\ProgramData\\WD' -ItemType Directory -Force",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+            "C:\\ProgramData\\WD\\WD.PS1",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+            "C:\\ProgramData\\WD\\WD.PS1",
+            "C:\\ProgramData\\WD\\WD.bat",
+            "C:\\ProgramData\\WD\\WD.PS1",
+            "C:\\ProgramData\\WD\\WD.bat",
+            "C:\\ProgramData\\WD\\WD.vbs",
+            "C:\\ProgramData\\WD\\WD.bat",
+            "C:\\ProgramData\\WD\\XX.PS1'',$bytes2",
+            "C:\\ProgramData\\WD\\XX.PS1",
+            "C:\\ProgramData\\WD\\XX.PS1'',$bytes2",
+            "C:\\ProgramData\\WD\\XX.PS1",
+            "C:\\ProgramData\\WD\\XX.bat",
+            "C:\\ProgramData\\WD\\XX.PS1",
+            "C:\\ProgramData\\WD\\XX.bat",
+            "C:\\ProgramData\\WD\\XX.vbs",
+            "C:\\ProgramData\\WD\\XX.bat",
+            "C:\\ProgramData\\WD\\XX.vbs",
+            "C:\\ProgramData\\WD\\XX.vbs",
+            "C:\\ProgramData\\WD\\XX.vbs",
+            "C:\\ProgramData\\WD\\XX.vbs",
+            "C:\\ProgramData\\WD\\XX.vbs",
+            "C:\\ProgramData\\WD\\XX.vbs"
+          ],
+          "Unique": 10,
+          "Total": 26
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 504972
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c0947b2516a9f2cbf2fd2d46fcb3474b.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3184
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%WINDIR%\\system32\\CodeIntegrity; Export-ModuleMember -Function"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "c0a81eebfc4b0b1c66165d456e8e4ce6.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "c:\\windows\\system32\\CodeIntegrity; Export-ModuleMember -Function"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 61471
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c0ad6f8ded06df8b01ca87e3a4925c0f.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 339279
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c0cf686a400bee4ca4544b0c2815b86f",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe',$cbbzqwqwqqwqwwqw"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 206972
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c0ddd16a77117bd1a9351d5a6d5e6dbf.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2910
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c0ea54eee440f29d720901db3200f0bf",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1255047
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\ip.txt",
+            "%TEMP%\\system_info.txt",
+            "%TEMP%\\uuid.txt",
+            "%TEMP%\\cpu.txt",
+            "%TEMP%\\DiskInfo.txt",
+            "%TEMP%\\GPU.txt",
+            "%TEMP%\\mac.txt",
+            "%TEMP%\\netstat.txt",
+            "%TEMP%\\WIFIPasswords.txt",
+            "%TEMP%\\StartUpApps.txt",
+            "%TEMP%\\running-services.txt",
+            "%TEMP%\\running-applications.txt",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "%TEMP%\\Installed-Applications.txt",
+            "%TEMP%\\NetworkAdapters.txt",
+            "%TEMP%\\ProductKey.txt",
+            "%TEMP%\\screenshot.png",
+            "%TEMP%\\screenshot.png\\`",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "%TEMP%\\KDOT",
+            "%TEMP%\\KDOT",
+            "%TEMP%\\main.exe",
+            "%APPDATA%\\KDOT",
+            "%APPDATA%\\KDOT",
+            "%APPDATA%\\KDOT\\KDOT.ps1",
+            "%APPDATA%\\KDOT\\KDOT.ps1",
+            "%APPDATA%\\KDOT\\KDOT.bat",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+            "%APPDATA%\\KDOT\\KDOT.ps1",
+            "%APPDATA%\\KDOT\\KDOT.bat",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\ip.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ip.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\netstat.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\netstat.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\system_info.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\system_info.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\uuid.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\uuid.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\mac.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\mac.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\browser-cookies.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-cookies.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\browser-history.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-history.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\browser-passwords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-passwords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\screenshot.png",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\screenshot.png",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\tokens.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\tokens.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\WIFIPasswords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\WIFIPasswords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\GPU.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\GPU.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\Installed-Applications.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\Installed-Applications.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\DiskInfo.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\DiskInfo.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\CPU.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\CPU.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\NetworkAdapters.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\NetworkAdapters.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\ProductKey.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ProductKey.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\StartUpApps.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\StartUpApps.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\running-services.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-services.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\running-applications.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-applications.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\main.exe"
+          ],
+          "Unique": 69,
+          "Total": 79
+        },
+        "FileName": "c0ed5287f517cf47845d836359eadf65.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+            "https://api.ipify.org",
+            "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+            "https://discord.gg/vk3rBhcj2y",
+            "https://github.com/KDot227/Powershell-Token-Grabber/tree/main",
+            "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+            "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+            "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+            "https://github.com/KDot227/Powershell-Token-Grabber/releases/download/Fixed_version/main.exe",
+            "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+            "https://i.postimg.cc/m2SSKrBt/Logo.gif\\",
+            "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF"
+          ],
+          "Unique": 7,
+          "Total": 12
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:LOCALAPPDATA\\Temp\\ip.txt",
+            "$env:LOCALAPPDATA\\Temp\\system_info.txt",
+            "$env:LOCALAPPDATA\\Temp\\uuid.txt",
+            "$env:LOCALAPPDATA\\Temp\\cpu.txt",
+            "$env:temp\\DiskInfo.txt",
+            "$env:LOCALAPPDATA\\Temp\\GPU.txt",
+            "$env:LOCALAPPDATA\\Temp\\mac.txt",
+            "$env:LOCALAPPDATA\\Temp\\netstat.txt",
+            "$env:temp\\WIFIPasswords.txt",
+            "$env:temp\\StartUpApps.txt",
+            "$env:LOCALAPPDATA\\Temp\\running-services.txt",
+            "$env:temp\\running-applications.txt",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "$env:temp\\Installed-Applications.txt",
+            "$env:temp\\NetworkAdapters.txt",
+            "$env:localappdata\\temp\\ProductKey.txt",
+            "$env:localappdata\\temp\\screenshot.png",
+            "$env:localappdata\\temp\\screenshot.png\\`",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+            "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+            "$env:LOCALAPPDATA\\Temp\\KDOT",
+            "$env:LOCALAPPDATA\\Temp\\KDOT",
+            "$env:LOCALAPPDATA\\Temp\\main.exe",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:APPDATA\\KDOT",
+            "$env:APPDATA\\KDOT",
+            "$env:APPDATA\\KDOT\\KDOT.ps1",
+            "$env:APPDATA\\KDOT\\KDOT.ps1",
+            "$env:APPDATA\\KDOT\\KDOT.bat",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
+          ],
+          "Unique": 27,
+          "Total": 34
+        },
+        "RegKey": {
+          "Values": [
+            " HKLM:\\Software"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileSize": 14727
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "c0edf1ad90455b1660ad926df0977f4f",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 710460
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "M:\\SOFTWARE\\WOW6432NodeECBSGq')).'MDqFvSejE0"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "c0f5dd11f13d3456724d81e25129c577.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "M:\\SOFTWARE\\WOW6432NodeECBSGq')).'MDqFvSejE0"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 226
+      }
+    ],
+    "SkippedFiles": 0,
+    "Errors": [],
+    "CollectedValues": {
+      "IP": [
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.15",
+        "10.1.1.15",
+        "10.1.1.1",
+        "10.1.1.1",
+        "10.1.1.1"
+      ],
+      "FilePathRaw": [
+        "$env:temp\\keylogger.txt",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "c:\\Windows\\Microsoft.NET\\Framework\\",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "c:\\users\\${_",
+        "$env:APPDATA\\${_",
+        "c:\\users\\${_",
+        "c:\\users\\public\\chrome.lnk",
+        "C:\\Windows\\explorer.exe",
+        "C:\\inputfile",
+        "C:\\outfile",
+        "C:\\outfile",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "C:\\Users\\<USER>\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "$env:temp\\keylogger.txt",
+        "C:\\Users\\hacker\\Desktop",
+        "C:\\Users\\hacker\\Desktop\\${ShortcutName}'.lnk",
+        "C:\\Users\\hacker\\Desktop\\${ShortcutName",
+        "D:\\phpStudy\\phpStudy.exe",
+        "D:\\phpStudy\\phpStudy.exe",
+        "C:\\ProgramData\\WD",
+        "C:\\ProgramData\\WD' -ItemType Directory -Force",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+        "C:\\ProgramData\\WD\\WD.PS1",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+        "C:\\ProgramData\\WD\\WD.PS1",
+        "C:\\ProgramData\\WD\\WD.bat",
+        "C:\\ProgramData\\WD\\WD.PS1",
+        "C:\\ProgramData\\WD\\WD.bat",
+        "C:\\ProgramData\\WD\\WD.vbs",
+        "C:\\ProgramData\\WD\\WD.bat",
+        "C:\\ProgramData\\WD\\XX.PS1'',$bytes2",
+        "C:\\ProgramData\\WD\\XX.PS1",
+        "C:\\ProgramData\\WD\\XX.PS1'',$bytes2",
+        "C:\\ProgramData\\WD\\XX.PS1",
+        "C:\\ProgramData\\WD\\XX.bat",
+        "C:\\ProgramData\\WD\\XX.PS1",
+        "C:\\ProgramData\\WD\\XX.bat",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "C:\\ProgramData\\WD\\XX.bat",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "C:\\ProgramData\\WD\\XX.vbs",
+        "c:\\windows\\system32\\CodeIntegrity; Export-ModuleMember -Function",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe',$cbbzqwqwqqwqwwqw",
+        "$env:LOCALAPPDATA\\Temp\\ip.txt",
+        "$env:LOCALAPPDATA\\Temp\\system_info.txt",
+        "$env:LOCALAPPDATA\\Temp\\uuid.txt",
+        "$env:LOCALAPPDATA\\Temp\\cpu.txt",
+        "$env:temp\\DiskInfo.txt",
+        "$env:LOCALAPPDATA\\Temp\\GPU.txt",
+        "$env:LOCALAPPDATA\\Temp\\mac.txt",
+        "$env:LOCALAPPDATA\\Temp\\netstat.txt",
+        "$env:temp\\WIFIPasswords.txt",
+        "$env:temp\\StartUpApps.txt",
+        "$env:LOCALAPPDATA\\Temp\\running-services.txt",
+        "$env:temp\\running-applications.txt",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "$env:temp\\Installed-Applications.txt",
+        "$env:temp\\NetworkAdapters.txt",
+        "$env:localappdata\\temp\\ProductKey.txt",
+        "$env:localappdata\\temp\\screenshot.png",
+        "$env:localappdata\\temp\\screenshot.png\\`",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+        "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+        "$env:LOCALAPPDATA\\Temp\\KDOT",
+        "$env:LOCALAPPDATA\\Temp\\KDOT",
+        "$env:LOCALAPPDATA\\Temp\\main.exe",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:APPDATA\\KDOT",
+        "$env:APPDATA\\KDOT",
+        "$env:APPDATA\\KDOT\\KDOT.ps1",
+        "$env:APPDATA\\KDOT\\KDOT.ps1",
+        "$env:APPDATA\\KDOT\\KDOT.bat",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        "M:\\SOFTWARE\\WOW6432NodeECBSGq')).'MDqFvSejE0"
+      ],
+      "RegKey": [
+        " HKLM:\\Software"
+      ],
+      "URL": [
+        "https://systemlogs.azurewebsites.net",
+        "https://systemlogs.azurewebsites.net/support.aspx?code=FRXvXushOWBpnn6PvHc8JumyAaOKaRveLZX5wyzAuwfQeZiQPH3ZuA==",
+        "https://github.com/Cn33liz/p0wnedLoader",
+        "https://raw.githubusercontent.com/S3cur3Th1sSh1t/Invoke-SharpLoader/master/EncryptedCSharp/SafetyKatz.enc",
+        "http://andreabo1.myftp.biz/z1r7_7_8_0_2_4dmWmx/z1r7_7_8_0_2_4dmW/z1r7_7_8_0_2_4dmWkk/index.php",
+        "http://andreabo1.myftp.biz/z1r7_7_8_0_2_4dmWmx/z1r7_7_8_0_2_4dmWMD/z1r7_7_8_0_2_4dmWkk/md.zip",
+        "http://andreabo1.myftp.biz/z1r7_7_8_0_2_4dmWmx/z1r7_7_8_0_2_4dmWlists/z1r7_7_8_0_2_4dmWkk/index.php?list",
+        "https://github.com/besimorhino/powercat",
+        "https://github.com/iagox86/dnscat2",
+        "http://cabalonlinefenix.com/Base64.jpg",
+        "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+        "https://api.ipify.org",
+        "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+        "https://discord.gg/vk3rBhcj2y",
+        "https://github.com/KDot227/Powershell-Token-Grabber/tree/main",
+        "https://i.postimg.cc/m2SSKrBt/Logo.gif",
+        "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+        "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+        "https://github.com/KDot227/Powershell-Token-Grabber/releases/download/Fixed_version/main.exe",
+        "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF",
+        "https://i.postimg.cc/m2SSKrBt/Logo.gif\\",
+        "https://discord.com/api/webhooks/1098074323471835186/XiZMSDN06HNHKuEhBlMpEzaSR3Lfkh5Y3P6BIso9SXjxeiYh9RBEzs53YsVHOlN9FZQF"
+      ],
+      "FilePath": [
+        "%TEMP%\\keylogger.txt",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%APPDATA%\\${_",
+        "%PUBLIC%\\chrome.lnk",
+        "%WINDIR%\\explorer.exe",
+        "%WINDIR%\\explorer.exe",
+        "C:\\inputfile",
+        "C:\\outfile",
+        "C:\\outfile",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "%USERPROFILE%\\Documents\\ArtifactRoot\\Invoke-Deobfuscation\\Code",
+        "%TEMP%\\keylogger.txt",
+        "%USERPROFILE%\\Desktop",
+        "%USERPROFILE%\\Desktop\\${ShortcutName}'.lnk",
+        "%USERPROFILE%\\Desktop\\${ShortcutName",
+        "D:\\phpStudy\\phpStudy.exe",
+        "D:\\phpStudy\\phpStudy.exe",
+        "%USERPROFILE%\\Desktop",
+        "%PROGRAMDATA%\\WD' -ItemType Directory -Force",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+        "%PROGRAMDATA%\\WD\\WD.PS1",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe''}catch{",
+        "%PROGRAMDATA%\\WD\\WD.PS1",
+        "%PROGRAMDATA%\\WD\\WD.bat",
+        "%PROGRAMDATA%\\WD\\WD.PS1",
+        "%PROGRAMDATA%\\WD\\WD.bat",
+        "%PROGRAMDATA%\\WD\\WD.vbs",
+        "%PROGRAMDATA%\\WD\\WD.bat",
+        "%PROGRAMDATA%\\WD\\XX.PS1",
+        "%PROGRAMDATA%\\WD\\XX.PS1",
+        "%PROGRAMDATA%\\WD\\XX.bat",
+        "%PROGRAMDATA%\\WD\\XX.PS1",
+        "%PROGRAMDATA%\\WD\\XX.bat",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.bat",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%PROGRAMDATA%\\WD\\XX.vbs",
+        "%WINDIR%\\system32\\CodeIntegrity; Export-ModuleMember -Function",
+        "%TEMP%\\ip.txt",
+        "%TEMP%\\system_info.txt",
+        "%TEMP%\\uuid.txt",
+        "%TEMP%\\cpu.txt",
+        "%TEMP%\\DiskInfo.txt",
+        "%TEMP%\\GPU.txt",
+        "%TEMP%\\mac.txt",
+        "%TEMP%\\netstat.txt",
+        "%TEMP%\\WIFIPasswords.txt",
+        "%TEMP%\\StartUpApps.txt",
+        "%TEMP%\\running-services.txt",
+        "%TEMP%\\running-applications.txt",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "%TEMP%\\Installed-Applications.txt",
+        "%TEMP%\\NetworkAdapters.txt",
+        "%TEMP%\\ProductKey.txt",
+        "%TEMP%\\screenshot.png",
+        "%TEMP%\\screenshot.png\\`",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "%TEMP%\\KDOT",
+        "%TEMP%\\KDOT",
+        "%TEMP%\\main.exe",
+        "%APPDATA%\\KDOT",
+        "%APPDATA%\\KDOT",
+        "%APPDATA%\\KDOT\\KDOT.ps1",
+        "%APPDATA%\\KDOT\\KDOT.ps1",
+        "%APPDATA%\\KDOT\\KDOT.bat",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        "%APPDATA%\\KDOT\\KDOT.ps1",
+        "%APPDATA%\\KDOT\\KDOT.bat",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\ip.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ip.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\netstat.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\netstat.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\system_info.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\system_info.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\uuid.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\uuid.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\mac.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\mac.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\browser-cookies.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-cookies.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\browser-history.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-history.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\browser-passwords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\browser-passwords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\screenshot.png",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\screenshot.png",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\tokens.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\tokens.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\WIFIPasswords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\WIFIPasswords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\GPU.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\GPU.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\Installed-Applications.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\Installed-Applications.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\DiskInfo.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\DiskInfo.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\CPU.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\CPU.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\NetworkAdapters.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\NetworkAdapters.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\ProductKey.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\ProductKey.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\StartUpApps.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\StartUpApps.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\running-services.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-services.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\running-applications.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT\\running-applications.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT.zip",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\KDOT",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\main.exe",
+        "M:\\SOFTWARE\\WOW6432NodeECBSGq')).'MDqFvSejE0"
+      ]
+    }
+  }
+}

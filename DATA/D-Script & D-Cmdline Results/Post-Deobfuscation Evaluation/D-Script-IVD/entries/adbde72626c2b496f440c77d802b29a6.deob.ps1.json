@@ -1,0 +1,113 @@
+﻿{
+  "file": "adbde72626c2b496f440c77d802b29a6.deob.ps1",
+  "sampleId": "adbde72626c2b496f440c77d802b29a6",
+  "rawInstructionCount": 585,
+  "instructionCount": 585,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 580,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ScriptExec|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 4,
+  "encodedCommandCount": 2,
+  "stringLiteralBytes": 112240,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 47,
+  "dynamicExecPrimitiveCount": 3,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 81,
+  "deobfuscationScore": 19,
+  "apiSequenceCoverage": "fallback_appended"
+}

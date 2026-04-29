@@ -1,0 +1,1983 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 22,
+  "ChunkSignature": "dac7e534d9ba2976d076df247bbe2d099ddcb19de7aa74edfd1c569bbfea248f",
+  "FileCount": 34,
+  "ChunkResult": {
+    "Summary": {
+      "URL": {
+        "FilesContaining": 7,
+        "TotalOccurrences": 51
+      },
+      "RegKey": {
+        "FilesContaining": 2,
+        "TotalOccurrences": 5
+      },
+      "IP": {
+        "FilesContaining": 2,
+        "TotalOccurrences": 3
+      },
+      "FilePath": {
+        "FilesContaining": 14,
+        "TotalOccurrences": 189
+      },
+      "FilePathRaw": {
+        "FilesContaining": 16,
+        "TotalOccurrences": 206
+      }
+    },
+    "ProcessedFiles": 34,
+    "SkippedFiles": 0,
+    "CollectedValues": {
+      "FilePath": [
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\Drivers\\Vmmouse.sys",
+        "%WINDIR%\\System32\\Drivers\\vmtray.dll",
+        "%WINDIR%\\System32\\Drivers\\VMToolsHook.dll",
+        "%WINDIR%\\System32\\Drivers\\vmmousever.dll",
+        "%WINDIR%\\System32\\Drivers\\vmhgfs.dll",
+        "%WINDIR%\\System32\\Drivers\\vmGuestLib.dll",
+        "%WINDIR%\\System32\\Drivers\\VBoxMouse.sys",
+        "%WINDIR%\\System32\\Drivers\\VBoxGuest.sys",
+        "%WINDIR%\\System32\\Drivers\\VBoxSF.sys",
+        "%WINDIR%\\System32\\Drivers\\VBoxVideo.sys",
+        "%WINDIR%\\System32\\vboxdisp.dll",
+        "%WINDIR%\\System32\\vboxhook.dll",
+        "%WINDIR%\\System32\\vboxoglerrorspu.dll",
+        "%WINDIR%\\System32\\vboxoglpassthroughspu.dll",
+        "%WINDIR%\\System32\\vboxservice.exe",
+        "%WINDIR%\\System32\\vboxtray.exe",
+        "%WINDIR%\\System32\\VBoxControl.exe",
+        "C:\\Temp\\blah.exe",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\ -Recurse",
+        "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\temp\\backup.exe",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\, C",
+        "C:\\Documents and Settings\\, or C",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "%PROGRAMDATA%\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+        "U:\\Software\\Policies\\Microsoft\\Windows",
+        "U:\\Software\\Policies\\Microsoft\\Windows\\Explorer",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
+        "M:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+        "U:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow\\dupe C",
+        "C:\\brokenshadow\\dupe.zip",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\brokenshadow\\dupe.zip",
+        "C:\\brokenshadow\\key4.db",
+        "C:\\brokenshadow\\logins.json",
+        "C:\\brokenshadow\\Web Data",
+        "C:\\aoi.ps1",
+        "%WINDIR%\\System32\\LogFiles",
+        "%WINDIR%\\System32\\LogFiles",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\system32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "%WINDIR%\\System32\\sc.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%PROGRAMDATA%\\Nothing",
+        "%PROGRAMDATA%\\Nothing\\Nothing.vbs",
+        "%PROGRAMDATA%\\Nothing\\x.ps1",
+        "%PROGRAMDATA%\\Nothing\\1.bat",
+        "%PROGRAMDATA%\\Nothing\\Nothing.vbs",
+        "%PROGRAMDATA%\\Nothing\\Nothing.ps1",
+        "%PROGRAMDATA%\\Nothing\\1.bat",
+        "%WINDIR%\\Mic",
+        "%PROGRAMDATA%\\Nothing\\Nothing.ps1",
+        "%PROGRAMDATA%\\Nothing\\x.ps1",
+        "%PROGRAMDATA%\\Nothing",
+        "%PUBLIC%\\Music\\msg.txt",
+        "%PUBLIC%\\Music\\runpe.txt",
+        "%PUBLIC%\\masag.txt",
+        "%PUBLIC%\\highwaype.txt",
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\Common7\\IDE\\devenv.exe",
+        "%TEMP%\\TestCoreApp",
+        "%TEMP%\\TestCoreApp",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI",
+        "C:\\IDontExist.dll",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI\\AZZWQIWUFGFJSKLANXBVPI.bat",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+        "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+        "%TEMP%\\keylogger.txt",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').'User Agent",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').ProxyServer",
+        "%TEMP%\\PowerCrypter\\bits.ps1",
+        "P:\\PowerShell\\DATA\\Workloads.csv",
+        "P:\\PowerShell\\DATA\\Workloads.csv"
+      ],
+      "RegKey": [
+        " HKLM\\SOFTWARE",
+        ":HKEY_LOCAL_MACHINE\\SOFTWARE ",
+        ":HKEY_CURRENT_USER\\SOFTWARE",
+        " HKCU\\Software",
+        " HKCU\\Software"
+      ],
+      "IP": [
+        "5.2.1.100",
+        "4.0.0.0",
+        "3.5.0.0"
+      ],
+      "FilePathRaw": [
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\$q",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "c:\\Windows\\Microsoft.NET\\Framework\\",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\windows\\System32\\Drivers\\Vmmouse.sys",
+        "C:\\windows\\System32\\Drivers\\vmtray.dll",
+        "C:\\windows\\System32\\Drivers\\VMToolsHook.dll",
+        "C:\\windows\\System32\\Drivers\\vmmousever.dll",
+        "C:\\windows\\System32\\Drivers\\vmhgfs.dll",
+        "C:\\windows\\System32\\Drivers\\vmGuestLib.dll",
+        "C:\\windows\\System32\\Drivers\\VBoxMouse.sys",
+        "C:\\windows\\System32\\Drivers\\VBoxGuest.sys",
+        "C:\\windows\\System32\\Drivers\\VBoxSF.sys",
+        "C:\\windows\\System32\\Drivers\\VBoxVideo.sys",
+        "C:\\windows\\System32\\vboxdisp.dll",
+        "C:\\windows\\System32\\vboxhook.dll",
+        "C:\\windows\\System32\\vboxoglerrorspu.dll",
+        "C:\\windows\\System32\\vboxoglpassthroughspu.dll",
+        "C:\\windows\\System32\\vboxservice.exe",
+        "C:\\windows\\System32\\vboxtray.exe",
+        "C:\\windows\\System32\\VBoxControl.exe",
+        "C:\\Temp\\blah.exe",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\ -Recurse",
+        "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\temp\\backup.exe",
+        "C:\\Windows",
+        "C:\\Windows\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\Microsoft.NET\\Framework",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\, C",
+        "C:\\Documents and Settings\\, or C",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "C:\\ProgramData\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+        "U:\\Software\\Policies\\Microsoft\\Windows",
+        "U:\\Software\\Policies\\Microsoft\\Windows\\Explorer",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
+        "M:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+        "U:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow\\dupe C",
+        "C:\\brokenshadow\\dupe.zip",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\brokenshadow",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\brokenshadow\\dupe.zip",
+        "C:\\brokenshadow\\key4.db",
+        "C:\\brokenshadow\\logins.json",
+        "C:\\brokenshadow\\Web Data",
+        "C:\\aoi.ps1",
+        "$env:windir\\System32\\LogFiles",
+        "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\Modules\\Defender\\AMSI.dll",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$env:SystemRoot\\system32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "$Env:SystemRoot\\System32\\sc.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "c:\\Windows\\Microsoft.NET\\Framework\\",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$env:APPDATA\\$xxx",
+        "$env:APPDATA\\$xxx.gpg",
+        "$env:APPDATA\\gpg.exe --batch --yes --passphrase-fd 0 --decrypt --output $env",
+        "$env:APPDATA\\$xxx.gpg",
+        "$env:APPDATA\\$xxx.rar",
+        "$env:APPDATA\\$xxx",
+        "$env:APPDATA\\$xxx\\team\\TPAutoConnect.exe",
+        "C:\\ProgramData\\Nothing",
+        "C:\\ProgramData\\Nothing\\Nothing.vbs",
+        "C:\\ProgramData\\Nothing\\x.ps1",
+        "C:\\ProgramData\\Nothing\\1.bat",
+        "C:\\ProgramData\\Nothing\\Nothing.vbs",
+        "C:\\ProgramData\\Nothing\\Nothing.ps1",
+        "C:\\ProgramData\\Nothing\\1.bat",
+        "C:\\Windows\\Mic",
+        "C:\\ProgramData\\Nothing\\Nothing.ps1",
+        "C:\\ProgramData\\Nothing\\x.ps1",
+        "C:\\Users\\Public\\Music\\msg.txt",
+        "C:\\Users\\Public\\Music\\runpe.txt",
+        "C:\\Users\\Public\\masag.txt",
+        "C:\\Users\\Public\\highwaype.txt",
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\Common7\\IDE\\devenv.exe",
+        "$env:temp\\TestCoreApp",
+        "$env:ProgramFiles\\dotnet\\dotnet.exe new console",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI",
+        "C:\\IDontExist.dll",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI\\AZZWQIWUFGFJSKLANXBVPI.bat",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+        "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+        "$env:temp\\keylogger.txt",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').'User Agent",
+        "$Env:windir\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').ProxyServer",
+        "$env:TEMP\\PowerCrypter\\bits.ps1",
+        "$env:TEMP\\$rand\\$rand.exe",
+        "$env:TEMP\\$rand\\$rand.exe",
+        "$env:TEMP\\$rand\\$rand.exe",
+        "P:\\PowerShell\\DATA\\Workloads.csv",
+        "P:\\PowerShell\\DATA\\Workloads.csv"
+      ],
+      "URL": [
+        "https://github.com/nemosminer/ccminer-x22i/releases/download/v2.3.1.1/ccminerx22i2311.7z",
+        "https://raw.githubusercontent.com/KDot227/Powershell-Token-Grabber/main/main.",
+        "http://schemas.microsoft.com/winfx/2006/xaml/presentation",
+        "http://schemas.microsoft.com/winfx/2006/xaml",
+        "http://schemas.microsoft.com/expression/blend/2008",
+        "http://schemas.openxmlformats.org/markup-compatibility/2006",
+        "https://github.com/KDot227/Somalifuscator/archive/refs/heads/main.zip",
+        "https://github.com/KDot227/Somalifuscator/archive/refs/heads/main.zip",
+        "https://raw.githubusercontent.com/mattifestation/PSReflect/master/PSReflect.psm1",
+        "http://poshcode.org/2189",
+        "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa446671",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379624",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379554",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/ms681987",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+        "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+        "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+        "http://www.greyhathacker.net/?p=738",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+        "http://www.fuzzysecurity.com/tutorials/16.html",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "https://funoverip.net/2016/02/mcafee-sitelist-xml-password-decryption/",
+        "https://github.com/tfairane/HackStory/blob/master/McAfeePrivesc.md",
+        "https://www.syss.de/fileadmin/dokumente/Publikationen/2011/SySS_2011_Deeg_Privilege_Escalation_via_Antivirus_Software.pdf",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "http://www.obscuresecurity.blogspot.com/2012/05/gpp-password-retrieval-with-powershell.html",
+        "https://github.com/mattifestation/PowerSploit/blob/master/Recon/Get-GPPPassword.ps1",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/gpp.rb",
+        "http://esec-pentest.sogeti.com/exploiting-windows-2008-group-policy-preferences",
+        "http://rewtdance.blogspot.com/2012/06/exploiting-windows-2008-group-policy.html",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+        "http://stackoverflow.com/questions/9735449/how-to-verify-whether-the-share-has-write-access",
+        "https://11234jkhfkujhs.top",
+        "https://robo-claim.site/order/team.tar.gpg",
+        "https://docs.microsoft.com/en-us/visualstudio/install/workload-component-id-vs-community?vs-2019&view=vs-2019",
+        "https://aka.ms/vs/16/pre/vs_community.exe",
+        "https://aka.ms/vs/16/release/vs_community.exe",
+        "http://poshcode.org/1118"
+      ]
+    },
+    "FileDetails": [
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1986,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2cd28fe4c4fdd827937f2480aa9e2234",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 227317,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2cfdce6747609bae2a9b948ca15967cf",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2638351,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2cfe9813b2776ce902bc2e65997f5b17",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1514,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d0296dfe10024641d6d5c1adce8c211",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\$q"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "5.2.1.100"
+          ],
+          "Total": 1
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 469449,
+        "FilePath": {
+          "Unique": 23,
+          "Values": [
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Total": 31
+        },
+        "FileName": "2d04bb637c1ca3687836c1f716ceb88a",
+        "FilePathRaw": {
+          "Unique": 24,
+          "Values": [
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "c:\\Windows\\Microsoft.NET\\Framework\\",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Total": 32
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 5700,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d10cf06299ff04df4799d87e1975b92",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2031,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d12c5a8ab2f370cd2ec527961363f79",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 26801,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d13a5a2d77b5a1716684bb6363f37b7",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 7441,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d161b6ba71c48854e3d0c5255ba9794",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1112,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d2d962f5eff12d9394f15e9bf327760",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "https://github.com/nemosminer/ccminer-x22i/releases/download/v2.3.1.1/ccminerx22i2311.7z"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 9036,
+        "FilePath": {
+          "Unique": 17,
+          "Values": [
+            "%WINDIR%\\System32\\Drivers\\Vmmouse.sys",
+            "%WINDIR%\\System32\\Drivers\\vmtray.dll",
+            "%WINDIR%\\System32\\Drivers\\VMToolsHook.dll",
+            "%WINDIR%\\System32\\Drivers\\vmmousever.dll",
+            "%WINDIR%\\System32\\Drivers\\vmhgfs.dll",
+            "%WINDIR%\\System32\\Drivers\\vmGuestLib.dll",
+            "%WINDIR%\\System32\\Drivers\\VBoxMouse.sys",
+            "%WINDIR%\\System32\\Drivers\\VBoxGuest.sys",
+            "%WINDIR%\\System32\\Drivers\\VBoxSF.sys",
+            "%WINDIR%\\System32\\Drivers\\VBoxVideo.sys",
+            "%WINDIR%\\System32\\vboxdisp.dll",
+            "%WINDIR%\\System32\\vboxhook.dll",
+            "%WINDIR%\\System32\\vboxoglerrorspu.dll",
+            "%WINDIR%\\System32\\vboxoglpassthroughspu.dll",
+            "%WINDIR%\\System32\\vboxservice.exe",
+            "%WINDIR%\\System32\\vboxtray.exe",
+            "%WINDIR%\\System32\\VBoxControl.exe"
+          ],
+          "Total": 17
+        },
+        "FileName": "2d311cfcc8db3ae7b13ca7ddce1138d5",
+        "FilePathRaw": {
+          "Unique": 17,
+          "Values": [
+            "C:\\windows\\System32\\Drivers\\Vmmouse.sys",
+            "C:\\windows\\System32\\Drivers\\vmtray.dll",
+            "C:\\windows\\System32\\Drivers\\VMToolsHook.dll",
+            "C:\\windows\\System32\\Drivers\\vmmousever.dll",
+            "C:\\windows\\System32\\Drivers\\vmhgfs.dll",
+            "C:\\windows\\System32\\Drivers\\vmGuestLib.dll",
+            "C:\\windows\\System32\\Drivers\\VBoxMouse.sys",
+            "C:\\windows\\System32\\Drivers\\VBoxGuest.sys",
+            "C:\\windows\\System32\\Drivers\\VBoxSF.sys",
+            "C:\\windows\\System32\\Drivers\\VBoxVideo.sys",
+            "C:\\windows\\System32\\vboxdisp.dll",
+            "C:\\windows\\System32\\vboxhook.dll",
+            "C:\\windows\\System32\\vboxoglerrorspu.dll",
+            "C:\\windows\\System32\\vboxoglpassthroughspu.dll",
+            "C:\\windows\\System32\\vboxservice.exe",
+            "C:\\windows\\System32\\vboxtray.exe",
+            "C:\\windows\\System32\\VBoxControl.exe"
+          ],
+          "Total": 17
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 10218,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d36a69d499151e888bcbbb2f505a728",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 6,
+          "Values": [
+            "https://raw.githubusercontent.com/KDot227/Powershell-Token-Grabber/main/main.",
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation",
+            "http://schemas.microsoft.com/winfx/2006/xaml",
+            "http://schemas.microsoft.com/expression/blend/2008",
+            "http://schemas.openxmlformats.org/markup-compatibility/2006",
+            "https://github.com/KDot227/Somalifuscator/archive/refs/heads/main.zip",
+            "https://github.com/KDot227/Somalifuscator/archive/refs/heads/main.zip"
+          ],
+          "Total": 7
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 562908,
+        "FilePath": {
+          "Unique": 46,
+          "Values": [
+            "C:\\Temp\\blah.exe",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\ -Recurse",
+            "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\temp\\backup.exe",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\, C",
+            "C:\\Documents and Settings\\, or C",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "%PROGRAMDATA%\\Microsoft\\Group Policy\\History\\{32C4C89F-7"
+          ],
+          "Total": 52
+        },
+        "FileName": "2d3a32b45510eb0912758bb7ee15214b",
+        "FilePathRaw": {
+          "Unique": 48,
+          "Values": [
+            "C:\\Temp\\blah.exe",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\ -Recurse",
+            "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\temp\\backup.exe",
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\Microsoft.NET\\Framework",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\, C",
+            "C:\\Documents and Settings\\, or C",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "C:\\ProgramData\\Microsoft\\Group Policy\\History\\{32C4C89F-7"
+          ],
+          "Total": 55
+        },
+        "URL": {
+          "Unique": 28,
+          "Values": [
+            "https://raw.githubusercontent.com/mattifestation/PSReflect/master/PSReflect.psm1",
+            "http://poshcode.org/2189",
+            "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa446671",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379624",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379554",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/ms681987",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+            "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+            "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+            "http://www.greyhathacker.net/?p=738",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+            "http://www.fuzzysecurity.com/tutorials/16.html",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+            "https://funoverip.net/2016/02/mcafee-sitelist-xml-password-decryption/",
+            "https://github.com/tfairane/HackStory/blob/master/McAfeePrivesc.md",
+            "https://www.syss.de/fileadmin/dokumente/Publikationen/2011/SySS_2011_Deeg_Privilege_Escalation_via_Antivirus_Software.pdf",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+            "http://www.obscuresecurity.blogspot.com/2012/05/gpp-password-retrieval-with-powershell.html",
+            "https://github.com/mattifestation/PowerSploit/blob/master/Recon/Get-GPPPassword.ps1",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/gpp.rb",
+            "http://esec-pentest.sogeti.com/exploiting-windows-2008-group-policy-preferences",
+            "http://rewtdance.blogspot.com/2012/06/exploiting-windows-2008-group-policy.html",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/"
+          ],
+          "Total": 35
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1687,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d41dfc42664e734843649c87a749dec",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 125166,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d593d43977aa4a87291dcaabd8cf7f1",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 65152,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2d65b02d03465b089da2e71c1eda04cb",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 3,
+          "Values": [
+            " HKLM\\SOFTWARE",
+            ":HKEY_LOCAL_MACHINE\\SOFTWARE ",
+            ":HKEY_CURRENT_USER\\SOFTWARE"
+          ],
+          "Total": 3
+        },
+        "FileSize": 7335,
+        "FilePath": {
+          "Unique": 14,
+          "Values": [
+            "U:\\Software\\Policies\\Microsoft\\Windows",
+            "U:\\Software\\Policies\\Microsoft\\Windows\\Explorer",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
+            "M:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+            "U:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow\\dupe C",
+            "C:\\brokenshadow\\dupe.zip",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\brokenshadow\\dupe.zip",
+            "C:\\brokenshadow\\key4.db",
+            "C:\\brokenshadow\\logins.json",
+            "C:\\brokenshadow\\Web Data",
+            "C:\\aoi.ps1"
+          ],
+          "Total": 22
+        },
+        "FileName": "2d78c0470462e70dfdf6440ffbfeb08a",
+        "FilePathRaw": {
+          "Unique": 14,
+          "Values": [
+            "U:\\Software\\Policies\\Microsoft\\Windows",
+            "U:\\Software\\Policies\\Microsoft\\Windows\\Explorer",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
+            "M:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+            "U:\\SOFTWARE\\Mozilla\\Mozilla Firefox",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow\\dupe C",
+            "C:\\brokenshadow\\dupe.zip",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\brokenshadow",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\brokenshadow\\dupe.zip",
+            "C:\\brokenshadow\\key4.db",
+            "C:\\brokenshadow\\logins.json",
+            "C:\\brokenshadow\\Web Data",
+            "C:\\aoi.ps1"
+          ],
+          "Total": 22
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1089,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%WINDIR%\\System32\\LogFiles",
+            "%WINDIR%\\System32\\LogFiles"
+          ],
+          "Total": 2
+        },
+        "FileName": "2d7c5acbe4afb4d9ce637b099cd52656",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "$env:windir\\System32\\LogFiles",
+            "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\Modules\\Defender\\AMSI.dll"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 475363,
+        "FilePath": {
+          "Unique": 23,
+          "Values": [
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\system32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "%WINDIR%\\System32\\sc.exe",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Total": 31
+        },
+        "FileName": "2d8bbd00a37df9f9ac6d3f6ab47876bd",
+        "FilePathRaw": {
+          "Unique": 24,
+          "Values": [
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$env:SystemRoot\\system32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "$Env:SystemRoot\\System32\\sc.exe",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "c:\\Windows\\Microsoft.NET\\Framework\\",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir"
+          ],
+          "Total": 32
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+            "http://stackoverflow.com/questions/9735449/how-to-verify-whether-the-share-has-write-access"
+          ],
+          "Total": 2
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1324485,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2da8414d9a70ee6836d9d34e2c8933d6",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2746,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2daa51ce0d5e48ff9ab9118facaf81ab",
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "$env:APPDATA\\$xxx",
+            "$env:APPDATA\\$xxx.gpg",
+            "$env:APPDATA\\gpg.exe --batch --yes --passphrase-fd 0 --decrypt --output $env",
+            "$env:APPDATA\\$xxx.gpg",
+            "$env:APPDATA\\$xxx.rar",
+            "$env:APPDATA\\$xxx",
+            "$env:APPDATA\\$xxx\\team\\TPAutoConnect.exe"
+          ],
+          "Total": 7
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "https://11234jkhfkujhs.top",
+            "https://robo-claim.site/order/team.tar.gpg"
+          ],
+          "Total": 2
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 216636,
+        "FilePath": {
+          "Unique": 6,
+          "Values": [
+            "%PROGRAMDATA%\\Nothing",
+            "%PROGRAMDATA%\\Nothing\\Nothing.vbs",
+            "%PROGRAMDATA%\\Nothing\\x.ps1",
+            "%PROGRAMDATA%\\Nothing\\1.bat",
+            "%PROGRAMDATA%\\Nothing\\Nothing.vbs",
+            "%PROGRAMDATA%\\Nothing\\Nothing.ps1",
+            "%PROGRAMDATA%\\Nothing\\1.bat",
+            "%WINDIR%\\Mic",
+            "%PROGRAMDATA%\\Nothing\\Nothing.ps1",
+            "%PROGRAMDATA%\\Nothing\\x.ps1",
+            "%PROGRAMDATA%\\Nothing"
+          ],
+          "Total": 11
+        },
+        "FileName": "2db3713a8df0569d1108106045553d72",
+        "FilePathRaw": {
+          "Unique": 6,
+          "Values": [
+            "C:\\ProgramData\\Nothing",
+            "C:\\ProgramData\\Nothing\\Nothing.vbs",
+            "C:\\ProgramData\\Nothing\\x.ps1",
+            "C:\\ProgramData\\Nothing\\1.bat",
+            "C:\\ProgramData\\Nothing\\Nothing.vbs",
+            "C:\\ProgramData\\Nothing\\Nothing.ps1",
+            "C:\\ProgramData\\Nothing\\1.bat",
+            "C:\\Windows\\Mic",
+            "C:\\ProgramData\\Nothing\\Nothing.ps1",
+            "C:\\ProgramData\\Nothing\\x.ps1"
+          ],
+          "Total": 10
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1023972,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2db7d0b562645f993cc03582781da417",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2005,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "%PUBLIC%\\Music\\msg.txt",
+            "%PUBLIC%\\Music\\runpe.txt"
+          ],
+          "Total": 2
+        },
+        "FileName": "2dbb3f1f063c6d4043cbba0d049ab4c4",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Users\\Public\\Music\\msg.txt",
+            "C:\\Users\\Public\\Music\\runpe.txt"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2001,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "%PUBLIC%\\masag.txt",
+            "%PUBLIC%\\highwaype.txt"
+          ],
+          "Total": 2
+        },
+        "FileName": "2dd0bca0919b8b7edfeb22fa1947fe10",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Users\\Public\\masag.txt",
+            "C:\\Users\\Public\\highwaype.txt"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1332,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2de285d1c86d07067a30f50818d1135e",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 14690,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\Common7\\IDE\\devenv.exe",
+            "%TEMP%\\TestCoreApp",
+            "%TEMP%\\TestCoreApp"
+          ],
+          "Total": 3
+        },
+        "FileName": "2df355fa1a67ffe43529fc87bb3f4584",
+        "FilePathRaw": {
+          "Unique": 3,
+          "Values": [
+            "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\Common7\\IDE\\devenv.exe",
+            "$env:temp\\TestCoreApp",
+            "$env:ProgramFiles\\dotnet\\dotnet.exe new console"
+          ],
+          "Total": 3
+        },
+        "URL": {
+          "Unique": 3,
+          "Values": [
+            "https://docs.microsoft.com/en-us/visualstudio/install/workload-component-id-vs-community?vs-2019&view=vs-2019",
+            "https://aka.ms/vs/16/pre/vs_community.exe",
+            "https://aka.ms/vs/16/release/vs_community.exe"
+          ],
+          "Total": 3
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKCU\\Software",
+            " HKCU\\Software"
+          ],
+          "Total": 2
+        },
+        "FileSize": 310158,
+        "FilePath": {
+          "Unique": 6,
+          "Values": [
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI",
+            "C:\\IDontExist.dll",
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI\\AZZWQIWUFGFJSKLANXBVPI.bat",
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+            "%PROGRAMDATA%\\AZZWQIWUFGFJSKLANXBVPI.ps1"
+          ],
+          "Total": 10
+        },
+        "FileName": "2df511a432067d0ec728a39941e707d8",
+        "FilePathRaw": {
+          "Unique": 6,
+          "Values": [
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI",
+            "C:\\IDontExist.dll",
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI\\AZZWQIWUFGFJSKLANXBVPI.bat",
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI.ps1",
+            "C:\\ProgramData\\AZZWQIWUFGFJSKLANXBVPI.ps1"
+          ],
+          "Total": 10
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3404,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2dfab051873de1bef2f62aa3945b1529",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://poshcode.org/1118"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3035,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "FileName": "2e012ed5da6bc435362d3c73ea0be5aa",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3147860,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2e1050e663914211c6c3cfac4666cfa4",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 682072,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "2e153ce344755acae622221caf33aff8",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 403795,
+        "FilePath": {
+          "Unique": 3,
+          "Values": [
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').'User Agent",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').ProxyServer",
+            "%TEMP%\\PowerCrypter\\bits.ps1"
+          ],
+          "Total": 3
+        },
+        "FileName": "2e1d1c7bf2735ccdb96a4bc03fd21cf9",
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').'User Agent",
+            "$Env:windir\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').ProxyServer",
+            "$env:TEMP\\PowerCrypter\\bits.ps1",
+            "$env:TEMP\\$rand\\$rand.exe",
+            "$env:TEMP\\$rand\\$rand.exe",
+            "$env:TEMP\\$rand\\$rand.exe"
+          ],
+          "Total": 7
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 223946,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "P:\\PowerShell\\DATA\\Workloads.csv",
+            "P:\\PowerShell\\DATA\\Workloads.csv"
+          ],
+          "Total": 2
+        },
+        "FileName": "2e3fbfc329db8eb41d57307648680c0e",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "P:\\PowerShell\\DATA\\Workloads.csv",
+            "P:\\PowerShell\\DATA\\Workloads.csv"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 2,
+          "Values": [
+            "4.0.0.0",
+            "3.5.0.0"
+          ],
+          "Total": 2
+        }
+      }
+    ],
+    "FailedFiles": 0,
+    "Errors": []
+  }
+}

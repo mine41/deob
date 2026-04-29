@@ -1,0 +1,128 @@
+﻿{
+  "file": "b67cc6bd2b08aaff1f142503d76b21eb.rebuilt.ps1",
+  "sampleId": "b67cc6bd2b08aaff1f142503d76b21eb",
+  "rawInstructionCount": 645,
+  "instructionCount": 645,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": false,
+  "timedOut": true,
+  "runtimeError": "The result type 'System.Management.Automation.Deobfuscation.NaNObject' of the dynamic binding produced by the object with type 'System.Management.Automation.Deobfuscation.NaNObject' for the binder 'System.Management.Automation.Language.PSConvertBinder' is not compatible with the result type 'System.Int32' expected by the call site.",
+  "rawActionSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "new-item",
+    "new-item",
+    "start-sleep",
+    "System.IO.File.WriteAllText",
+    "start-sleep",
+    "pyx",
+    "where-object",
+    "System.Convert.ToInt32"
+  ],
+  "normalizedActionSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "new-item",
+    "new-item",
+    "System.IO.File.WriteAllText",
+    "pyx",
+    "where-object",
+    "System.Convert.ToInt32"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "new-item",
+    "new-item",
+    "System.IO.File.WriteAllText",
+    "pyx",
+    "where-object",
+    "System.Convert.ToInt32"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "new-item",
+    "new-item",
+    "start-sleep",
+    "System.IO.File.WriteAllText",
+    "start-sleep",
+    "pyx",
+    "where-object",
+    "System.Convert.ToInt32"
+  ],
+  "normalizedApiSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "new-item",
+    "new-item",
+    "System.IO.File.WriteAllText",
+    "pyx",
+    "where-object",
+    "System.Convert.ToInt32"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "new-item",
+    "new-item",
+    "System.IO.File.WriteAllText"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "unsafe_timeout",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 637,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "new-item",
+    "new-item",
+    "System.IO.File.WriteAllText"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "FileWrite|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 585364,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 121,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

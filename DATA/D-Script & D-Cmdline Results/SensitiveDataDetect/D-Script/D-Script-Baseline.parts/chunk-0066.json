@@ -1,0 +1,1295 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 66,
+  "ChunkSignature": "822cc903b0a551afe29d9c23c44b85641a4dc74d120c300289ace419254c0f92",
+  "FileCount": 34,
+  "ChunkResult": {
+    "Summary": {
+      "URL": {
+        "FilesContaining": 5,
+        "TotalOccurrences": 23
+      },
+      "RegKey": {
+        "FilesContaining": 3,
+        "TotalOccurrences": 7
+      },
+      "IP": {
+        "FilesContaining": 3,
+        "TotalOccurrences": 6
+      },
+      "FilePath": {
+        "FilesContaining": 6,
+        "TotalOccurrences": 42
+      },
+      "FilePathRaw": {
+        "FilesContaining": 8,
+        "TotalOccurrences": 40
+      }
+    },
+    "ProcessedFiles": 34,
+    "SkippedFiles": 0,
+    "CollectedValues": {
+      "FilePath": [
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\libiconv2.dll",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\libintl3.dll",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\regex2.dll",
+        "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\EGS",
+        "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\WindowsNoEditor",
+        "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\WindowsClient",
+        "%LOCALAPPDATA%\\FortniteGame\\Saved\\Config\\WindowsClient",
+        "U:\\SOFTWARE\\miHoYo",
+        "%LOCALAPPDATA%\\Roblox",
+        "%LOCALAPPDATA%\\Valorant\\Saved\\Config\\Windows\\riotlocalmachine.ini",
+        "%LOCALAPPDATA%\\Valorant\\Saved\\Config",
+        "%APPDATA%\\.Minecraft",
+        "%LOCALAPPDATA%\\Programs\\lunarclient\\Lunar Client.exe",
+        "%LOCALAPPDATA%\\Packages\\Microsoft.254428597CFE2_8wekyb3d8bbwe\\LocalCache\\Local\\HaloInfinite\\Settings",
+        "%LOCALAPPDATA%\\HaloInfinite\\Settings",
+        "%APPDATA%\\Bungie\\DestinyPC\\prefs",
+        "%USERPROFILE%\\Saved Games\\Respawn\\Apex\\local",
+        "%LOCALAPPDATA%\\osu!",
+        "%LOCALAPPDATA%\\TslGame\\Saved\\Config\\WindowsNoEditor",
+        "%LOCALAPPDATA%\\Valorant\\Saved\\Config",
+        "%LOCALAPPDATA%\\TslGame\\Saved\\Config\\WindowsNoEditor",
+        "%APPDATA%\\Bungie\\DestinyPC\\prefs",
+        "%APPDATA%\\.Minecraft",
+        "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\WindowsClient",
+        "%LOCALAPPDATA%\\Valorant\\Saved\\Config\\Windows\\riotlocalmachine.ini",
+        "%TEMP%\\keylogger.txt",
+        "M:\\SAM\\SAM\\Domains\\Account",
+        "M:\\SAM\\SAM\\Domains\\Account\\Users",
+        "C:\\MyFolder -Action Encrypt",
+        "C:\\MyFolder -Action Decrypt",
+        "%WINDIR%\\System32\\rundll32.exe",
+        "%WINDIR%\\SysWOW64\\rundll32.exe",
+        "%WINDIR%\\System32\\rundll32.exe",
+        "%WINDIR%\\SysWOW64\\rundll32.exe",
+        "M:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest -Name UseLogonCredential -Type DWORD -Value 1",
+        "C:\\test\\pwd.txt"
+      ],
+      "RegKey": [
+        ":HKCR\\Local Settings",
+        ":HKCR\\steam",
+        ":HKCU\\Software",
+        " HKLM:\\SAM",
+        " HKLM:\\SAM",
+        " HKLM:\\SAM",
+        " HKLM:\\SYSTEM"
+      ],
+      "IP": [
+        "4.0.0.0",
+        "071.0.7.0",
+        "221.0.7.0",
+        "226.0.0.0",
+        "192.168.49.181",
+        "212.83.46.50"
+      ],
+      "FilePathRaw": [
+        "$env:temp\\#`",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\libiconv2.dll",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\libintl3.dll",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\regex2.dll",
+        "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+        "$env:LOCALAPPDATA\\DeadByDaylight\\Saved\\Config\\EGS",
+        "$env:LOCALAPPDATA\\DeadByDaylight\\Saved\\Config\\WindowsNoEditor",
+        "$env:LOCALAPPDATA\\DeadByDaylight\\Saved\\Config\\WindowsClient",
+        "$env:LOCALAPPDATA\\FortniteGame\\Saved\\Config\\WindowsClient",
+        "U:\\SOFTWARE\\miHoYo",
+        "$env:LOCALAPPDATA\\Roblox",
+        "$env:LOCALAPPDATA\\Valorant\\Saved\\Config\\Windows\\riotlocalmachine.ini",
+        "$env:LOCALAPPDATA\\Valorant\\Saved\\Config",
+        "$env:APPDATA\\.Minecraft",
+        "$env:LOCALAPPDATA\\Programs\\lunarclient\\Lunar Client.exe",
+        "$env:PROGRAMFILES\\Feather Launcher\\Feather Launcher.exe",
+        "$env:LOCALAPPDATA\\Packages\\Microsoft.254428597CFE2_8wekyb3d8bbwe\\LocalCache\\Local\\HaloInfinite\\Settings",
+        "$env:LOCALAPPDATA\\HaloInfinite\\Settings",
+        "$env:APPDATA\\Bungie\\DestinyPC\\prefs",
+        "$env:USERPROFILE\\Saved Games\\Respawn\\Apex\\local",
+        "$env:LOCALAPPDATA\\osu!",
+        "$env:LOCALAPPDATA\\TslGame\\Saved\\Config\\WindowsNoEditor",
+        "$env:temp\\keylogger.txt",
+        "M:\\SAM\\SAM\\Domains\\Account",
+        "M:\\SAM\\SAM\\Domains\\Account\\Users",
+        "M:\\SAM\\SAM\\Domains $acl",
+        "C:\\MyFolder -Action Encrypt",
+        "C:\\MyFolder -Action Decrypt",
+        "C:\\Windows\\System32\\rundll32.exe",
+        "C:\\Windows\\SysWOW64\\rundll32.exe",
+        "C:\\Windows\\System32\\rundll32.exe",
+        "C:\\Windows\\SysWOW64\\rundll32.exe",
+        "M:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest -Name UseLogonCredential -Type DWORD -Value 1",
+        "C:\\test\\pwd.txt",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe',$H2"
+      ],
+      "URL": [
+        "https://static.hone.gg/GenshinCfg.exe",
+        "https://static.hone.gg/libiconv2.dll",
+        "https://static.hone.gg/libintl3.dll",
+        "https://static.hone.gg/regex2.dll",
+        "https://static.hone.gg/sed.exe",
+        "https://api.ipify.org/",
+        "http://www.exploit-monday.com/",
+        "http://www.exploit-monday.com/",
+        "http://msdn.microsoft.com/en-us/magazine/cc301808.aspx",
+        "http://p.beahh.com/upgrade.php?ver=3&mac=",
+        "http://mydatayxnhzcs.tech/file/docs/$fileName",
+        "http://blog.gentilkiwi.com",
+        "http://creativecommons.org/licenses/by/3.0/fr/",
+        "https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectivePEInjection",
+        "http://blog.gentilkiwi.com",
+        "http://clymb3r.wordpress.com/2013/04/09/modifying-mimikatz-to-be-loaded-using-invoke-reflectivedllinjection-ps1/",
+        "http://www.exploit-monday.com/2012/07/structs-and-enums-using-reflection.html",
+        "http://www.exploit-monday.com/",
+        "http://www.exploit-monday.com/",
+        "http://msdn.microsoft.com/en-us/magazine/cc301808.aspx",
+        "https://www.virustotal.com/en/file/1e67476281c1ec1cf40e17d7fc28a3ab3250b474ef41cb10a72130990f0be6a0/analysis/1450152636/",
+        "https://www.virustotal.com/en/file/c20f30326fcebad25446cf2e267c341ac34664efad5c50ff07f0738ae2390eae/analysis/1450152913/",
+        "http://212.83.46.50/Le_vb_ou1/Server.txt"
+      ]
+    },
+    "FileDetails": [
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 15133,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83477e83a8907a993b3dfd4f078b32c5",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:temp\\#`"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 4949,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83498f56f6fd0dc2c38f1e538cdf9f8e",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 5749,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83663c862833f163ef04533a5cde3fe8",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 506,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "8367d1caeec60c342a5936575028f6d8",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 118898,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "8388a1e237a65664b6df2ee91fc1e6d8",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 4,
+          "Values": [
+            "4.0.0.0",
+            "071.0.7.0",
+            "221.0.7.0",
+            "226.0.0.0"
+          ],
+          "Total": 4
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 3,
+          "Values": [
+            ":HKCR\\Local Settings",
+            ":HKCR\\steam",
+            ":HKCU\\Software"
+          ],
+          "Total": 3
+        },
+        "FileSize": 13151,
+        "FilePath": {
+          "Unique": 22,
+          "Values": [
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\libiconv2.dll",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\libintl3.dll",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\regex2.dll",
+            "%LOCALAPPDATA%\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+            "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\EGS",
+            "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\WindowsNoEditor",
+            "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\WindowsClient",
+            "%LOCALAPPDATA%\\FortniteGame\\Saved\\Config\\WindowsClient",
+            "U:\\SOFTWARE\\miHoYo",
+            "%LOCALAPPDATA%\\Roblox",
+            "%LOCALAPPDATA%\\Valorant\\Saved\\Config\\Windows\\riotlocalmachine.ini",
+            "%LOCALAPPDATA%\\Valorant\\Saved\\Config",
+            "%APPDATA%\\.Minecraft",
+            "%LOCALAPPDATA%\\Programs\\lunarclient\\Lunar Client.exe",
+            "%LOCALAPPDATA%\\Packages\\Microsoft.254428597CFE2_8wekyb3d8bbwe\\LocalCache\\Local\\HaloInfinite\\Settings",
+            "%LOCALAPPDATA%\\HaloInfinite\\Settings",
+            "%APPDATA%\\Bungie\\DestinyPC\\prefs",
+            "%USERPROFILE%\\Saved Games\\Respawn\\Apex\\local",
+            "%LOCALAPPDATA%\\osu!",
+            "%LOCALAPPDATA%\\TslGame\\Saved\\Config\\WindowsNoEditor",
+            "%LOCALAPPDATA%\\Valorant\\Saved\\Config",
+            "%LOCALAPPDATA%\\TslGame\\Saved\\Config\\WindowsNoEditor",
+            "%APPDATA%\\Bungie\\DestinyPC\\prefs",
+            "%APPDATA%\\.Minecraft",
+            "%LOCALAPPDATA%\\DeadByDaylight\\Saved\\Config\\WindowsClient",
+            "%LOCALAPPDATA%\\Valorant\\Saved\\Config\\Windows\\riotlocalmachine.ini"
+          ],
+          "Total": 31
+        },
+        "FileName": "838b4b6cdfe8b4dbb7ffa74355330e4f",
+        "FilePathRaw": {
+          "Unique": 23,
+          "Values": [
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\GenshinCfg.exe",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\libiconv2.dll",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\libintl3.dll",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\regex2.dll",
+            "$Env:LOCALAPPDATA\\Programs\\Hone\\resources\\assets\\hone-resources\\sed.exe",
+            "$env:LOCALAPPDATA\\DeadByDaylight\\Saved\\Config\\EGS",
+            "$env:LOCALAPPDATA\\DeadByDaylight\\Saved\\Config\\WindowsNoEditor",
+            "$env:LOCALAPPDATA\\DeadByDaylight\\Saved\\Config\\WindowsClient",
+            "$env:LOCALAPPDATA\\FortniteGame\\Saved\\Config\\WindowsClient",
+            "U:\\SOFTWARE\\miHoYo",
+            "$env:LOCALAPPDATA\\Roblox",
+            "$env:LOCALAPPDATA\\Valorant\\Saved\\Config\\Windows\\riotlocalmachine.ini",
+            "$env:LOCALAPPDATA\\Valorant\\Saved\\Config",
+            "$env:APPDATA\\.Minecraft",
+            "$env:LOCALAPPDATA\\Programs\\lunarclient\\Lunar Client.exe",
+            "$env:PROGRAMFILES\\Feather Launcher\\Feather Launcher.exe",
+            "$env:LOCALAPPDATA\\Packages\\Microsoft.254428597CFE2_8wekyb3d8bbwe\\LocalCache\\Local\\HaloInfinite\\Settings",
+            "$env:LOCALAPPDATA\\HaloInfinite\\Settings",
+            "$env:APPDATA\\Bungie\\DestinyPC\\prefs",
+            "$env:USERPROFILE\\Saved Games\\Respawn\\Apex\\local",
+            "$env:LOCALAPPDATA\\osu!",
+            "$env:LOCALAPPDATA\\TslGame\\Saved\\Config\\WindowsNoEditor"
+          ],
+          "Total": 26
+        },
+        "URL": {
+          "Unique": 5,
+          "Values": [
+            "https://static.hone.gg/GenshinCfg.exe",
+            "https://static.hone.gg/libiconv2.dll",
+            "https://static.hone.gg/libintl3.dll",
+            "https://static.hone.gg/regex2.dll",
+            "https://static.hone.gg/sed.exe"
+          ],
+          "Total": 5
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3153,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "FileName": "838fab2d88a652f5d4d3d93d94554f50",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\SAM",
+            " HKLM:\\SAM",
+            " HKLM:\\SAM"
+          ],
+          "Total": 3
+        },
+        "FileSize": 2876411,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SAM\\SAM\\Domains\\Account",
+            "M:\\SAM\\SAM\\Domains\\Account\\Users"
+          ],
+          "Total": 2
+        },
+        "FileName": "839843f13452834b0a0a257f46614728",
+        "FilePathRaw": {
+          "Unique": 3,
+          "Values": [
+            "M:\\SAM\\SAM\\Domains\\Account",
+            "M:\\SAM\\SAM\\Domains\\Account\\Users",
+            "M:\\SAM\\SAM\\Domains $acl"
+          ],
+          "Total": 3
+        },
+        "URL": {
+          "Unique": 4,
+          "Values": [
+            "https://api.ipify.org/",
+            "http://www.exploit-monday.com/",
+            "http://www.exploit-monday.com/",
+            "http://msdn.microsoft.com/en-us/magazine/cc301808.aspx",
+            "http://p.beahh.com/upgrade.php?ver=3&mac="
+          ],
+          "Total": 5
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 4285,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83a253ec374aca6c1f028b20209259d1",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 9756,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83c69102455a866ba9baacf0aa4d2455",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3913,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "C:\\MyFolder -Action Encrypt",
+            "C:\\MyFolder -Action Decrypt"
+          ],
+          "Total": 2
+        },
+        "FileName": "83c913e2349119736f02ab8866e900ed",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\MyFolder -Action Encrypt",
+            "C:\\MyFolder -Action Decrypt"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3134588,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83cfb711616bb222cb0baa0a4eb7f64a",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 4359,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83d0d727140661ae7052136f80d1cef7",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 27293,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "83dd1a775cfe314fe80f1e2219aab76a",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2647807,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "844e6dcc07375a0fdd01d2d8686db74e",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 4021,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "844f506bc7f8d0814b09accb29d8ef9b",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://mydatayxnhzcs.tech/file/docs/$fileName"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 18711,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "84647a96fa729f3561e7e09cf6618605",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2568,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "846530376cbbb80ccee5f5c1deca7bf8",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2517,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "8465cb911e8f653284f1a991f0d952cc",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 145038,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "848314610035282d20386baeb15ea022",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 200001,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "8483ed6bdc072436f9f7760d3a7cbe77",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 176400,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "849085811af502b958b30cb73faf7e91",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 688,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "84ad21843ed898f20f68f7f9ff349102",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "192.168.49.181"
+          ],
+          "Total": 1
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 684,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "84aff99271b9059b2de17be3c5d466b1",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 11254,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "%WINDIR%\\System32\\rundll32.exe",
+            "%WINDIR%\\SysWOW64\\rundll32.exe",
+            "%WINDIR%\\System32\\rundll32.exe",
+            "%WINDIR%\\SysWOW64\\rundll32.exe"
+          ],
+          "Total": 4
+        },
+        "FileName": "84e1a5a3f0a7727fdffca6f4485725e7",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Windows\\System32\\rundll32.exe",
+            "C:\\Windows\\SysWOW64\\rundll32.exe",
+            "C:\\Windows\\System32\\rundll32.exe",
+            "C:\\Windows\\SysWOW64\\rundll32.exe"
+          ],
+          "Total": 4
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 30369,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "84e9d107be9c6a346a6cf0fe3c39438d",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3546045,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "84f687520c3069110e4f3421d7c08dbf",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2764,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "84fdf8a14f141c5e4aaa9b779f3cbe7c",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\SYSTEM"
+          ],
+          "Total": 1
+        },
+        "FileSize": 1359109,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest -Name UseLogonCredential -Type DWORD -Value 1",
+            "C:\\test\\pwd.txt"
+          ],
+          "Total": 2
+        },
+        "FileName": "85006daa415451e8584577cfcb1e9f23",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest -Name UseLogonCredential -Type DWORD -Value 1",
+            "C:\\test\\pwd.txt"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 9,
+          "Values": [
+            "http://blog.gentilkiwi.com",
+            "http://creativecommons.org/licenses/by/3.0/fr/",
+            "https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectivePEInjection",
+            "http://blog.gentilkiwi.com",
+            "http://clymb3r.wordpress.com/2013/04/09/modifying-mimikatz-to-be-loaded-using-invoke-reflectivedllinjection-ps1/",
+            "http://www.exploit-monday.com/2012/07/structs-and-enums-using-reflection.html",
+            "http://www.exploit-monday.com/",
+            "http://www.exploit-monday.com/",
+            "http://msdn.microsoft.com/en-us/magazine/cc301808.aspx",
+            "https://www.virustotal.com/en/file/1e67476281c1ec1cf40e17d7fc28a3ab3250b474ef41cb10a72130990f0be6a0/analysis/1450152636/",
+            "https://www.virustotal.com/en/file/c20f30326fcebad25446cf2e267c341ac34664efad5c50ff07f0738ae2390eae/analysis/1450152913/"
+          ],
+          "Total": 11
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2506175,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "8501bc2900158097e25be9b5fc3a761a",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2078232,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "850cf68af94c1562884d72e5a6529b96",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 187800,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "8516c4592d8de8b25df3a5e9aeff12e0",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2638491,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "851bf8df96899b2cc50af8047e9fbe5c",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 63516,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "852c1ba620657fb29c8e2e4456879255",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe',$H2"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://212.83.46.50/Le_vb_ou1/Server.txt"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "212.83.46.50"
+          ],
+          "Total": 1
+        }
+      }
+    ],
+    "FailedFiles": 0,
+    "Errors": []
+  }
+}

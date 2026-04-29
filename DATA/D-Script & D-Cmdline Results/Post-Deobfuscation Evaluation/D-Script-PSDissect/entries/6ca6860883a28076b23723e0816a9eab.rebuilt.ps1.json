@@ -1,0 +1,148 @@
+﻿{
+  "file": "6ca6860883a28076b23723e0816a9eab.rebuilt.ps1",
+  "sampleId": "6ca6860883a28076b23723e0816a9eab",
+  "rawInstructionCount": 759,
+  "instructionCount": 759,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "System.Management.Automation.PSObject.GetNetworkCredential",
+    "invoke-expression",
+    "foreach-object",
+    "System.Convert.ToInt16",
+    "invoke-expression",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "System.Management.Automation.ScriptBlock.Create",
+    "invoke-command",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "System.Management.Automation.PSObject.GetNetworkCredential",
+    "invoke-expression",
+    "foreach-object",
+    "System.Convert.ToInt16",
+    "invoke-expression",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Management.Automation.ScriptBlock.Create",
+    "invoke-command"
+  ],
+  "normalizedActionCount": 11,
+  "effectiveActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "System.Management.Automation.PSObject.GetNetworkCredential",
+    "invoke-expression",
+    "foreach-object",
+    "System.Convert.ToInt16",
+    "invoke-expression",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Management.Automation.ScriptBlock.Create",
+    "invoke-command"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "System.Management.Automation.PSObject.GetNetworkCredential",
+    "invoke-expression",
+    "foreach-object",
+    "System.Convert.ToInt16",
+    "invoke-expression",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "System.Management.Automation.ScriptBlock.Create",
+    "invoke-command",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "System.Management.Automation.PSObject.GetNetworkCredential",
+    "invoke-expression",
+    "foreach-object",
+    "System.Convert.ToInt16",
+    "invoke-expression",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Management.Automation.ScriptBlock.Create",
+    "invoke-command"
+  ],
+  "normalizedApiCount": 11,
+  "apiSequence": [
+    "invoke-expression",
+    "invoke-expression",
+    "System.Net.WebClient.DownloadString",
+    "invoke-command"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 748,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "invoke-expression",
+    "System.Net.WebClient.DownloadString",
+    "invoke-command"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "Download"
+  ],
+  "capabilitySignature": "ScriptExec|Download",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 11824,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 30,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 18,
+  "deobfuscationScore": 82,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

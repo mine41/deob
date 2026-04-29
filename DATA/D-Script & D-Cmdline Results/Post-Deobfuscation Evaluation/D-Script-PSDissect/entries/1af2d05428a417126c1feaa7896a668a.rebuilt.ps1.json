@@ -1,0 +1,113 @@
+﻿{
+  "file": "1af2d05428a417126c1feaa7896a668a.rebuilt.ps1",
+  "sampleId": "1af2d05428a417126c1feaa7896a668a",
+  "rawInstructionCount": 839,
+  "instructionCount": 839,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object"
+  ],
+  "normalizedActionSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object"
+  ],
+  "normalizedApiSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "add-type"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 832,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "CompileCSharp|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 825,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 213,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,90 @@
+﻿{
+  "file": "4323fb65ae179c97fc53ece74bd80a3f.deob.ps1",
+  "sampleId": "4323fb65ae179c97fc53ece74bd80a3f",
+  "rawInstructionCount": 743,
+  "instructionCount": 743,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "System.Math.Max"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "System.Math.Max"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "add-type",
+    "System.Math.Max"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "add-type",
+    "System.Math.Max"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "System.Math.Max"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "add-type"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 741,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 2230,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 917,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 6,
+  "deobfuscationScore": 94,
+  "apiSequenceCoverage": "fallback_appended"
+}

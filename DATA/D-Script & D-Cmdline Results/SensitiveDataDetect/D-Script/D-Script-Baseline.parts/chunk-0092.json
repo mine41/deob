@@ -1,0 +1,1796 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 92,
+  "ChunkSignature": "dda9f98c69e7c089835af6195a824de2cf9083a5c59cacdf98c1d162cea17980",
+  "FileCount": 34,
+  "ChunkResult": {
+    "Summary": {
+      "URL": {
+        "FilesContaining": 7,
+        "TotalOccurrences": 23
+      },
+      "RegKey": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 9
+      },
+      "IP": {
+        "FilesContaining": 2,
+        "TotalOccurrences": 2
+      },
+      "FilePath": {
+        "FilesContaining": 6,
+        "TotalOccurrences": 220
+      },
+      "FilePathRaw": {
+        "FilesContaining": 10,
+        "TotalOccurrences": 114
+      }
+    },
+    "ProcessedFiles": 34,
+    "SkippedFiles": 0,
+    "CollectedValues": {
+      "FilePath": [
+        "%APPDATA%\\KDOT\\DATA",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients",
+        "%APPDATA%\\KDOT\\DATA\\Email Clients",
+        "%APPDATA%\\KDOT\\DATA\\Important Files",
+        "%APPDATA%\\KDOT\\DATA\\Browser Data",
+        "%WINDIR%\\system32\\hal.dll).VersionInfo.FileVersion",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SoftwareProtectionPlatform",
+        "%APPDATA%\\Telegram Desktop\\tdata",
+        "%APPDATA%\\Element",
+        "%APPDATA%\\ICQ",
+        "%APPDATA%\\Signal",
+        "%APPDATA%\\ViberPC",
+        "%LOCALAPPDATA%\\Packages",
+        "%LOCALAPPDATA%\\EpicGamesLauncher",
+        "%LOCALAPPDATA%\\Ubisoft Game Launcher",
+        "%LOCALAPPDATA%\\Electronic Arts",
+        "%LOCALAPPDATA%\\Growtopia",
+        "%LOCALAPPDATA%\\nordvpn",
+        "%LOCALAPPDATA%\\protonvpn",
+        "%APPDATA%\\Surfshark",
+        "%APPDATA%\\Thunderbird\\Profiles",
+        "%APPDATA%\\Thunderbird\\Profiles",
+        "%APPDATA%\\Armory",
+        "%APPDATA%\\Armory",
+        "%APPDATA%\\Atomic",
+        "%APPDATA%\\Atomic\\Local Storage\\leveldb",
+        "%APPDATA%\\bytecoin",
+        "%APPDATA%\\bytecoin",
+        "%LOCALAPPDATA%\\Coinomi",
+        "%LOCALAPPDATA%\\Coinomi\\Coinomi\\wallets",
+        "%APPDATA%\\Electrum",
+        "%APPDATA%\\Electrum\\wallets",
+        "%APPDATA%\\Ethereum",
+        "%APPDATA%\\Ethereum\\keystore",
+        "%APPDATA%\\Exodus",
+        "%APPDATA%\\exodus.wallet",
+        "%APPDATA%\\Guarda",
+        "%APPDATA%\\Guarda\\IndexedDB",
+        "%APPDATA%\\com.liberty.jaxx",
+        "%APPDATA%\\com.liberty.jaxx\\IndexedDB\\file__0.indexeddb.leveldb",
+        "%APPDATA%\\Zcash",
+        "%APPDATA%\\Zcash",
+        "%USERPROFILE%\\Downloads",
+        "%USERPROFILE%\\Documents",
+        "%USERPROFILE%\\Desktop",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Discord' -Force",
+        "%TEMP%\\main.exe",
+        "%TEMP%\\main.exe",
+        "%TEMP%\\KDOT.zip",
+        "%TEMP%\\KDOT.zip",
+        "%TEMP%\\KDOT.zip",
+        "%APPDATA%\\KDOT",
+        "%APPDATA%\\KDOT",
+        "%APPDATA%\\KDOT",
+        "%APPDATA%\\KDOT\\KDOT.ps1",
+        "%APPDATA%\\kdot\\kdot.ps1",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\ICQ",
+        "%APPDATA%\\KDOT\\DATA\\Important Files",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Minecraft",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Element",
+        "%LOCALAPPDATA%\\protonvpn",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Signal",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Ubisoft",
+        "%APPDATA%\\KDOT\\DATA\\Browser Data",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\EpicGames",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\NordVPN",
+        "%LOCALAPPDATA%\\EpicGamesLauncher",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Steam",
+        "%LOCALAPPDATA%\\Ubisoft Game Launcher",
+        "%USERPROFILE%\\Downloads\"\"\"\", \"\"\"\"C:\\Users\\<USER>\\Documents\"\"\"\", \"\"\"\"C:\\Users\\<USER>\\Desktop",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Whatsapp",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Telegram.zip",
+        "%LOCALAPPDATA%\\Electronic Arts",
+        "%APPDATA%\\KDOT\\DATA\\Important Files",
+        "%APPDATA%\\Signal",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets",
+        "%APPDATA%\\Surfshark",
+        "%APPDATA%\\ICQ",
+        "%APPDATA%\\Telegram Desktop\\tdata",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\Surfshark",
+        "%APPDATA%\\Element",
+        "%APPDATA%\\KDOT\\DATA",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\ProtonVPN",
+        "%LOCALAPPDATA%\\nordvpn",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions",
+        "%APPDATA%\\KDOT\\DATA\\Email Clients",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Electronic Arts",
+        "%APPDATA%\\ViberPC",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Growtopia",
+        "%LOCALAPPDATA%\\Growtopia",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Viber",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\ip.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\system_info.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\uuid.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\cpu.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\GPU.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\mac.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\netstat.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\WIFIPasswords.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\StartUpApps.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\running-services.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\running-applications.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\Installed-Applications.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\NetworkAdapters.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\diskinfo.txt",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\desktop-screenshot.png",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\productkey.txt",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Telegram.zip",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Element",
+        "%APPDATA%\\Element\"\"\"\\databases",
+        "%APPDATA%\\Element\"\"\"\\Local Storage",
+        "%APPDATA%\\Element\"\"\"\\Session Storage",
+        "%APPDATA%\\Element\"\"\"\\IndexedDB",
+        "%APPDATA%\\Element\"\"\"\\sso-sessions.json",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\ICQ",
+        "%APPDATA%\\ICQ\"\"\"\\0001",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Signal",
+        "%APPDATA%\\Signal\"\"\"\\databases",
+        "%APPDATA%\\Signal\"\"\"\\Local Storage",
+        "%APPDATA%\\Signal\"\"\"\\Session Storage",
+        "%APPDATA%\\Signal\"\"\"\\sql",
+        "%APPDATA%\\Signal\"\"\"\\config.json",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Viber",
+        "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Whatsapp",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Steam",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Minecraft",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\EpicGames",
+        "%LOCALAPPDATA%\\EpicGamesLauncher\"\"\"\\Saved\\Config",
+        "%LOCALAPPDATA%\\EpicGamesLauncher\"\"\"\\Saved\\Logs",
+        "%LOCALAPPDATA%\\EpicGamesLauncher\"\"\"\\Saved\\Data",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Ubisoft",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Electronic Arts",
+        "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Growtopia",
+        "%LOCALAPPDATA%\\Growtopia\"\"\"\\save.dat",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\NordVPN",
+        "%LOCALAPPDATA%\\nordvpn\"\"\"\\ProfileOptimization",
+        "%LOCALAPPDATA%\\nordvpn\"\"\"\\libmoose.db",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\ProtonVPN",
+        "%LOCALAPPDATA%\\protonvpn\"\"\"\\Startup.profile",
+        "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\Surfshark",
+        "%APPDATA%\\KDOT\\DATA\\Email Clients\"\"\"\\Thunderbird",
+        "%APPDATA%\\KDOT\\DATA\\Email Clients\"\"\"\\Thunderbird",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Armory",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Armory",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Atomic",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Atomic",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\BitcoinCore",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\BitcoinCore",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\bytecoin",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\bytecoin",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Coinomi",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Coinomi",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\DashCore",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\DashCore",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Electrum",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Electrum",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Ethereum",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Ethereum",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\exodus.wallet",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\exodus.wallet",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Guarda",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Guarda",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\liberty.jaxx",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\liberty.jaxx",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Litecoin",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Litecoin",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Monero",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Monero",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Zcash",
+        "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Zcash",
+        "%APPDATA%\\KDOT\\DATA\"\"\"\\desktop-screenshot.png\\`",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\tokens.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\browser-cookies.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\browser-history.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\browser-passwords.txt",
+        "%LOCALAPPDATA%\\Temp\"\"\"\\main.exe",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "%TEMP%\\keylogger.txt",
+        "%PROGRAMDATA%\\MEMEMAN",
+        "%PROGRAMDATA%\\MEMEMAN\"\"\"\\WindowsDEFENDERUPDATE.js",
+        "%WINDIR%\\System32`r`n",
+        "%APPDATA%\\${_",
+        "%WINDIR%\\System32`r`n",
+        "%APPDATA%\\${_",
+        "%TEMP%\\keylogger.txt"
+      ],
+      "RegKey": [
+        " HKLM:\\Software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software",
+        ":HKEY_CURRENT_USER\\software"
+      ],
+      "IP": [
+        "185.118.167.120",
+        "149.202.242.84"
+      ],
+      "FilePathRaw": [
+        "$env:APPDATA\\KDOT\\DATA",
+        "$env:APPDATA\\KDOT\\DATA\\Messaging Sessions",
+        "$env:APPDATA\\KDOT\\DATA\\Gaming Sessions",
+        "$env:APPDATA\\KDOT\\DATA\\Crypto Wallets",
+        "$env:APPDATA\\KDOT\\DATA\\VPN Clients",
+        "$env:APPDATA\\KDOT\\DATA\\Email Clients",
+        "$env:APPDATA\\KDOT\\DATA\\Important Files",
+        "$env:APPDATA\\KDOT\\DATA\\Browser Data",
+        "c:\\windows\\system32\\hal.dll).VersionInfo.FileVersion",
+        "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SoftwareProtectionPlatform",
+        "$env:userprofile\\AppData\\Roaming\\Telegram Desktop\\tdata",
+        "$env:userprofile\\AppData\\Roaming\\Element",
+        "$env:userprofile\\AppData\\Roaming\\ICQ",
+        "$env:userprofile\\AppData\\Roaming\\Signal",
+        "$env:userprofile\\AppData\\Roaming\\ViberPC",
+        "$env:localappdata\\Packages",
+        "$env:localappdata\\EpicGamesLauncher",
+        "$env:localappdata\\Ubisoft Game Launcher",
+        "$env:localappdata\\Electronic Arts",
+        "$env:localappdata\\Growtopia",
+        "$env:localappdata\\nordvpn",
+        "$env:localappdata\\protonvpn",
+        "$env:appdata\\Surfshark",
+        "$env:USERPROFILE\\AppData\\Roaming\\Thunderbird\\Profiles",
+        "$env:USERPROFILE\\AppData\\Roaming\\Thunderbird\\Profiles",
+        "$env:userprofile\\AppData\\Roaming\\Armory",
+        "$env:userprofile\\AppData\\Roaming\\Armory",
+        "$env:userprofile\\AppData\\Roaming\\Atomic",
+        "$env:userprofile\\AppData\\Roaming\\Atomic\\Local Storage\\leveldb",
+        "$env:userprofile\\AppData\\Roaming\\bytecoin",
+        "$env:userprofile\\AppData\\Roaming\\bytecoin",
+        "$env:userprofile\\AppData\\Local\\Coinomi",
+        "$env:userprofile\\AppData\\Local\\Coinomi\\Coinomi\\wallets",
+        "$env:userprofile\\AppData\\Roaming\\Electrum",
+        "$env:userprofile\\AppData\\Roaming\\Electrum\\wallets",
+        "$env:userprofile\\AppData\\Roaming\\Ethereum",
+        "$env:userprofile\\AppData\\Roaming\\Ethereum\\keystore",
+        "$env:userprofile\\AppData\\Roaming\\Exodus",
+        "$env:userprofile\\AppData\\Roaming\\exodus.wallet",
+        "$env:userprofile\\AppData\\Roaming\\Guarda",
+        "$env:userprofile\\AppData\\Roaming\\Guarda\\IndexedDB",
+        "$env:userprofile\\AppData\\Roaming\\com.liberty.jaxx",
+        "$env:userprofile\\AppData\\Roaming\\com.liberty.jaxx\\IndexedDB\\file__0.indexeddb.leveldb",
+        "$env:userprofile\\AppData\\Roaming\\Zcash",
+        "$env:userprofile\\AppData\\Roaming\\Zcash",
+        "$env:userprofile\\Downloads",
+        "$env:userprofile\\Documents",
+        "$env:userprofile\\Desktop",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+        "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+        "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+        "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Discord' -Force",
+        "$env:LOCALAPPDATA\\Temp\\main.exe",
+        "$env:LOCALAPPDATA\\Temp\\main.exe",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:LOCALAPPDATA\\Temp\\KDOT.zip",
+        "$env:LOCALAPPDATA\\Temp\\KDOT.zip",
+        "$env:LOCALAPPDATA\\Temp\\KDOT.zip",
+        "$env:LOCALAPPDATA\\Temp",
+        "$env:APPDATA\\KDOT",
+        "$env:APPDATA\\KDOT",
+        "$env:APPDATA\\KDOT",
+        "$env:APPDATA\\KDOT\\KDOT.ps1",
+        "%appdata%\\kdot\\kdot.ps1",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\Microsoft.NET\\Framework",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "$env:temp\\keylogger.txt",
+        "$env:APPDATA\\$xxx",
+        "$env:APPDATA\\$xxx.gpg",
+        "$env:APPDATA\\gpg.exe --batch --yes --passphrase-fd 0 --decrypt --output $env",
+        "$env:APPDATA\\$xxx.gpg",
+        "$env:APPDATA\\$xxx.rar",
+        "$env:APPDATA\\$xxx",
+        "$env:APPDATA\\$xxx\\h\\VBox.exe",
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\$q",
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\$q",
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\$q",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name $ranome -Value $fstrng  -PropertyType 'String'; #_uBaDhOMEPDjaq+NfH^o6MsDWE4p+h^u98(DAY!Fzkr%PC_9E^I0NDwNyJTDIzIbEOYYt-M1huBF3vefi3!RVfHsQHBtsBFEky7&vd%sDjVk$8uc-f&h0UV@+9W1aYfhGxbIHoK(S#gn-ATfmG72jFzcnkuAwp^I!(2JRVAU_ZpWMtGF7esV#EqHzJswP6cS&5=FY6qnfH_#jbVEuQHVZ!U=n-BLp-E6T9(l#@L3&eIpL(qb!YeyfaN0V(U!XfX5&I+F(_iitT-S()NAQ",
+        "%SystemRoot%\\System32`r`n",
+        "$env:APPDATA\\${_",
+        "%SystemRoot%\\System32`r`n",
+        "$env:APPDATA\\${_",
+        "$env:temp\\keylogger.txt"
+      ],
+      "URL": [
+        "https://api.ipify.org",
+        "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/mac_list.txt",
+        "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/ip_list.txt",
+        "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/hwid_list.txt",
+        "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/pc_username_list.txt",
+        "https://api.ipify.org",
+        "https://i.postimg.cc/k58gQ03t/PTG.gif",
+        "https://discord.gg/vk3rBhcj2y",
+        "https://github.com/ChildrenOfYahweh/Powershell-Token-Grabber/tree/main",
+        "https://i.postimg.cc/k58gQ03t/PTG.gif",
+        "https://github.com/stefanstranger/PowerShell/blob/master/Get-WebCamp.ps1",
+        "https://github.com/ChildrenOfYahweh/Powershell-Token-Grabber/releases/download/V4.2/main.exe",
+        "https://i.postimg.cc/k58gQ03t/PTG.gif\\",
+        "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "https://backuphotelall.blogspot.com/atom.xml",
+        "https://zevodayback.blogspot.com/atom.xml",
+        "http://185.118.167.120/",
+        "https://999-ads-info.top",
+        "https://newrosesnet.com/1.jpg",
+        "https://newrosesnet.com/2.tar.gpg",
+        "http://149.202.242.84:443/",
+        "https://www.snappyshop.it/img/index.php"
+      ]
+    },
+    "FileDetails": [
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3310814,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb03d1590ed28590b715d8e5bad1a73d",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 2,
+          "Values": [
+            " HKLM:\\Software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software",
+            ":HKEY_CURRENT_USER\\software"
+          ],
+          "Total": 9
+        },
+        "FileSize": 46122,
+        "FilePath": {
+          "Unique": 124,
+          "Values": [
+            "%APPDATA%\\KDOT\\DATA",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients",
+            "%APPDATA%\\KDOT\\DATA\\Email Clients",
+            "%APPDATA%\\KDOT\\DATA\\Important Files",
+            "%APPDATA%\\KDOT\\DATA\\Browser Data",
+            "%WINDIR%\\system32\\hal.dll).VersionInfo.FileVersion",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SoftwareProtectionPlatform",
+            "%APPDATA%\\Telegram Desktop\\tdata",
+            "%APPDATA%\\Element",
+            "%APPDATA%\\ICQ",
+            "%APPDATA%\\Signal",
+            "%APPDATA%\\ViberPC",
+            "%LOCALAPPDATA%\\Packages",
+            "%LOCALAPPDATA%\\EpicGamesLauncher",
+            "%LOCALAPPDATA%\\Ubisoft Game Launcher",
+            "%LOCALAPPDATA%\\Electronic Arts",
+            "%LOCALAPPDATA%\\Growtopia",
+            "%LOCALAPPDATA%\\nordvpn",
+            "%LOCALAPPDATA%\\protonvpn",
+            "%APPDATA%\\Surfshark",
+            "%APPDATA%\\Thunderbird\\Profiles",
+            "%APPDATA%\\Thunderbird\\Profiles",
+            "%APPDATA%\\Armory",
+            "%APPDATA%\\Armory",
+            "%APPDATA%\\Atomic",
+            "%APPDATA%\\Atomic\\Local Storage\\leveldb",
+            "%APPDATA%\\bytecoin",
+            "%APPDATA%\\bytecoin",
+            "%LOCALAPPDATA%\\Coinomi",
+            "%LOCALAPPDATA%\\Coinomi\\Coinomi\\wallets",
+            "%APPDATA%\\Electrum",
+            "%APPDATA%\\Electrum\\wallets",
+            "%APPDATA%\\Ethereum",
+            "%APPDATA%\\Ethereum\\keystore",
+            "%APPDATA%\\Exodus",
+            "%APPDATA%\\exodus.wallet",
+            "%APPDATA%\\Guarda",
+            "%APPDATA%\\Guarda\\IndexedDB",
+            "%APPDATA%\\com.liberty.jaxx",
+            "%APPDATA%\\com.liberty.jaxx\\IndexedDB\\file__0.indexeddb.leveldb",
+            "%APPDATA%\\Zcash",
+            "%APPDATA%\\Zcash",
+            "%USERPROFILE%\\Downloads",
+            "%USERPROFILE%\\Documents",
+            "%USERPROFILE%\\Desktop",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "%APPDATA%\\DiscordTokenProtector\\secure.dat",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Discord' -Force",
+            "%TEMP%\\main.exe",
+            "%TEMP%\\main.exe",
+            "%TEMP%\\KDOT.zip",
+            "%TEMP%\\KDOT.zip",
+            "%TEMP%\\KDOT.zip",
+            "%APPDATA%\\KDOT",
+            "%APPDATA%\\KDOT",
+            "%APPDATA%\\KDOT",
+            "%APPDATA%\\KDOT\\KDOT.ps1",
+            "%APPDATA%\\kdot\\kdot.ps1",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\ICQ",
+            "%APPDATA%\\KDOT\\DATA\\Important Files",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Minecraft",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Element",
+            "%LOCALAPPDATA%\\protonvpn",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Signal",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Ubisoft",
+            "%APPDATA%\\KDOT\\DATA\\Browser Data",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\EpicGames",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\NordVPN",
+            "%LOCALAPPDATA%\\EpicGamesLauncher",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Steam",
+            "%LOCALAPPDATA%\\Ubisoft Game Launcher",
+            "%USERPROFILE%\\Downloads\"\"\"\", \"\"\"\"C:\\Users\\<USER>\\Documents\"\"\"\", \"\"\"\"C:\\Users\\<USER>\\Desktop",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Whatsapp",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Telegram.zip",
+            "%LOCALAPPDATA%\\Electronic Arts",
+            "%APPDATA%\\KDOT\\DATA\\Important Files",
+            "%APPDATA%\\Signal",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets",
+            "%APPDATA%\\Surfshark",
+            "%APPDATA%\\ICQ",
+            "%APPDATA%\\Telegram Desktop\\tdata",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\Surfshark",
+            "%APPDATA%\\Element",
+            "%APPDATA%\\KDOT\\DATA",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\ProtonVPN",
+            "%LOCALAPPDATA%\\nordvpn",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions",
+            "%APPDATA%\\KDOT\\DATA\\Email Clients",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Electronic Arts",
+            "%APPDATA%\\ViberPC",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Growtopia",
+            "%LOCALAPPDATA%\\Growtopia",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Viber",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\ip.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\system_info.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\uuid.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\cpu.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\GPU.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\mac.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\netstat.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\WIFIPasswords.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\StartUpApps.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\running-services.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\running-applications.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\Installed-Applications.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\NetworkAdapters.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\diskinfo.txt",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\desktop-screenshot.png",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\productkey.txt",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Telegram.zip",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Element",
+            "%APPDATA%\\Element\"\"\"\\databases",
+            "%APPDATA%\\Element\"\"\"\\Local Storage",
+            "%APPDATA%\\Element\"\"\"\\Session Storage",
+            "%APPDATA%\\Element\"\"\"\\IndexedDB",
+            "%APPDATA%\\Element\"\"\"\\sso-sessions.json",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\ICQ",
+            "%APPDATA%\\ICQ\"\"\"\\0001",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Signal",
+            "%APPDATA%\\Signal\"\"\"\\databases",
+            "%APPDATA%\\Signal\"\"\"\\Local Storage",
+            "%APPDATA%\\Signal\"\"\"\\Session Storage",
+            "%APPDATA%\\Signal\"\"\"\\sql",
+            "%APPDATA%\\Signal\"\"\"\\config.json",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Viber",
+            "%APPDATA%\\KDOT\\DATA\\Messaging Sessions\"\"\"\\Whatsapp",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Steam",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Minecraft",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\EpicGames",
+            "%LOCALAPPDATA%\\EpicGamesLauncher\"\"\"\\Saved\\Config",
+            "%LOCALAPPDATA%\\EpicGamesLauncher\"\"\"\\Saved\\Logs",
+            "%LOCALAPPDATA%\\EpicGamesLauncher\"\"\"\\Saved\\Data",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Ubisoft",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Electronic Arts",
+            "%APPDATA%\\KDOT\\DATA\\Gaming Sessions\"\"\"\\Growtopia",
+            "%LOCALAPPDATA%\\Growtopia\"\"\"\\save.dat",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\NordVPN",
+            "%LOCALAPPDATA%\\nordvpn\"\"\"\\ProfileOptimization",
+            "%LOCALAPPDATA%\\nordvpn\"\"\"\\libmoose.db",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\ProtonVPN",
+            "%LOCALAPPDATA%\\protonvpn\"\"\"\\Startup.profile",
+            "%APPDATA%\\KDOT\\DATA\\VPN Clients\"\"\"\\Surfshark",
+            "%APPDATA%\\KDOT\\DATA\\Email Clients\"\"\"\\Thunderbird",
+            "%APPDATA%\\KDOT\\DATA\\Email Clients\"\"\"\\Thunderbird",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Armory",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Armory",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Atomic",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Atomic",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\BitcoinCore",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\BitcoinCore",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\bytecoin",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\bytecoin",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Coinomi",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Coinomi",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\DashCore",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\DashCore",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Electrum",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Electrum",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Ethereum",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Ethereum",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\exodus.wallet",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\exodus.wallet",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Guarda",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Guarda",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\liberty.jaxx",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\liberty.jaxx",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Litecoin",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Litecoin",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Monero",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Monero",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Zcash",
+            "%APPDATA%\\KDOT\\DATA\\Crypto Wallets\"\"\"\\Zcash",
+            "%APPDATA%\\KDOT\\DATA\"\"\"\\desktop-screenshot.png\\`",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\tokens.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\browser-cookies.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\browser-history.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\browser-passwords.txt",
+            "%LOCALAPPDATA%\\Temp\"\"\"\\main.exe"
+          ],
+          "Total": 186
+        },
+        "FileName": "bb057cd27f9b348ec34035484d3fed0b",
+        "FilePathRaw": {
+          "Unique": 54,
+          "Values": [
+            "$env:APPDATA\\KDOT\\DATA",
+            "$env:APPDATA\\KDOT\\DATA\\Messaging Sessions",
+            "$env:APPDATA\\KDOT\\DATA\\Gaming Sessions",
+            "$env:APPDATA\\KDOT\\DATA\\Crypto Wallets",
+            "$env:APPDATA\\KDOT\\DATA\\VPN Clients",
+            "$env:APPDATA\\KDOT\\DATA\\Email Clients",
+            "$env:APPDATA\\KDOT\\DATA\\Important Files",
+            "$env:APPDATA\\KDOT\\DATA\\Browser Data",
+            "c:\\windows\\system32\\hal.dll).VersionInfo.FileVersion",
+            "M:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            "M:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SoftwareProtectionPlatform",
+            "$env:userprofile\\AppData\\Roaming\\Telegram Desktop\\tdata",
+            "$env:userprofile\\AppData\\Roaming\\Element",
+            "$env:userprofile\\AppData\\Roaming\\ICQ",
+            "$env:userprofile\\AppData\\Roaming\\Signal",
+            "$env:userprofile\\AppData\\Roaming\\ViberPC",
+            "$env:localappdata\\Packages",
+            "$env:localappdata\\EpicGamesLauncher",
+            "$env:localappdata\\Ubisoft Game Launcher",
+            "$env:localappdata\\Electronic Arts",
+            "$env:localappdata\\Growtopia",
+            "$env:localappdata\\nordvpn",
+            "$env:localappdata\\protonvpn",
+            "$env:appdata\\Surfshark",
+            "$env:USERPROFILE\\AppData\\Roaming\\Thunderbird\\Profiles",
+            "$env:USERPROFILE\\AppData\\Roaming\\Thunderbird\\Profiles",
+            "$env:userprofile\\AppData\\Roaming\\Armory",
+            "$env:userprofile\\AppData\\Roaming\\Armory",
+            "$env:userprofile\\AppData\\Roaming\\Atomic",
+            "$env:userprofile\\AppData\\Roaming\\Atomic\\Local Storage\\leveldb",
+            "$env:userprofile\\AppData\\Roaming\\bytecoin",
+            "$env:userprofile\\AppData\\Roaming\\bytecoin",
+            "$env:userprofile\\AppData\\Local\\Coinomi",
+            "$env:userprofile\\AppData\\Local\\Coinomi\\Coinomi\\wallets",
+            "$env:userprofile\\AppData\\Roaming\\Electrum",
+            "$env:userprofile\\AppData\\Roaming\\Electrum\\wallets",
+            "$env:userprofile\\AppData\\Roaming\\Ethereum",
+            "$env:userprofile\\AppData\\Roaming\\Ethereum\\keystore",
+            "$env:userprofile\\AppData\\Roaming\\Exodus",
+            "$env:userprofile\\AppData\\Roaming\\exodus.wallet",
+            "$env:userprofile\\AppData\\Roaming\\Guarda",
+            "$env:userprofile\\AppData\\Roaming\\Guarda\\IndexedDB",
+            "$env:userprofile\\AppData\\Roaming\\com.liberty.jaxx",
+            "$env:userprofile\\AppData\\Roaming\\com.liberty.jaxx\\IndexedDB\\file__0.indexeddb.leveldb",
+            "$env:userprofile\\AppData\\Roaming\\Zcash",
+            "$env:userprofile\\AppData\\Roaming\\Zcash",
+            "$env:userprofile\\Downloads",
+            "$env:userprofile\\Documents",
+            "$env:userprofile\\Desktop",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "$env:APPDATA\\DiscordTokenProtector\\DiscordTokenProtector.exe",
+            "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+            "$env:APPDATA\\DiscordTokenProtector\\secure.dat",
+            "U:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Discord' -Force",
+            "$env:LOCALAPPDATA\\Temp\\main.exe",
+            "$env:LOCALAPPDATA\\Temp\\main.exe",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:LOCALAPPDATA\\Temp\\KDOT.zip",
+            "$env:LOCALAPPDATA\\Temp\\KDOT.zip",
+            "$env:LOCALAPPDATA\\Temp\\KDOT.zip",
+            "$env:LOCALAPPDATA\\Temp",
+            "$env:APPDATA\\KDOT",
+            "$env:APPDATA\\KDOT",
+            "$env:APPDATA\\KDOT",
+            "$env:APPDATA\\KDOT\\KDOT.ps1",
+            "%appdata%\\kdot\\kdot.ps1"
+          ],
+          "Total": 67
+        },
+        "URL": {
+          "Unique": 11,
+          "Values": [
+            "https://api.ipify.org",
+            "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/mac_list.txt",
+            "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/ip_list.txt",
+            "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/hwid_list.txt",
+            "https://raw.githubusercontent.com/6nz/virustotal-vm-blacklist/main/pc_username_list.txt",
+            "https://api.ipify.org",
+            "https://i.postimg.cc/k58gQ03t/PTG.gif",
+            "https://discord.gg/vk3rBhcj2y",
+            "https://github.com/ChildrenOfYahweh/Powershell-Token-Grabber/tree/main",
+            "https://i.postimg.cc/k58gQ03t/PTG.gif",
+            "https://github.com/stefanstranger/PowerShell/blob/master/Get-WebCamp.ps1",
+            "https://github.com/ChildrenOfYahweh/Powershell-Token-Grabber/releases/download/V4.2/main.exe",
+            "https://i.postimg.cc/k58gQ03t/PTG.gif\\"
+          ],
+          "Total": 13
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 7345,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb1e35f6e362bba0b6bdce4fd58a5c83",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 516625,
+        "FilePath": {
+          "Unique": 23,
+          "Values": [
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C"
+          ],
+          "Total": 26
+        },
+        "FileName": "bb27de0d5cb9214c36b00f8f2e3f8221",
+        "FilePathRaw": {
+          "Unique": 24,
+          "Values": [
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\Microsoft.NET\\Framework",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C"
+          ],
+          "Total": 27
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/"
+          ],
+          "Total": 2
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3134,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "FileName": "bb329126116c33d4106f5384c94e356b",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 541497,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "%PROGRAMDATA%\\MEMEMAN",
+            "%PROGRAMDATA%\\MEMEMAN\"\"\"\\WindowsDEFENDERUPDATE.js"
+          ],
+          "Total": 2
+        },
+        "FileName": "bb3afc961cd9b132922db723407508e7",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "https://backuphotelall.blogspot.com/atom.xml",
+            "https://zevodayback.blogspot.com/atom.xml"
+          ],
+          "Total": 2
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2745,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb723b0a8566a0ab6b77f5e8f9f619b9",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 12781,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb73b531f82eb835d5526802a11b18f3",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1442,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb7f4ad22fa8ee15d9785ec1a71be37f",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 451,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb8b86b63d34879942e7bab842577122",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://185.118.167.120/"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "185.118.167.120"
+          ],
+          "Total": 1
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 12217,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bb9f9a7a90aea6ceb1b5601ddd5fc201",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2234,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbb70c23e2a1903556ffbdf50850615e",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 864992,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbbe664dee7a222912c88e0079ce6f32",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2038,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbc72ec484c1d025992ec804bf3cfbf1",
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "$env:APPDATA\\$xxx",
+            "$env:APPDATA\\$xxx.gpg",
+            "$env:APPDATA\\gpg.exe --batch --yes --passphrase-fd 0 --decrypt --output $env",
+            "$env:APPDATA\\$xxx.gpg",
+            "$env:APPDATA\\$xxx.rar",
+            "$env:APPDATA\\$xxx",
+            "$env:APPDATA\\$xxx\\h\\VBox.exe"
+          ],
+          "Total": 7
+        },
+        "URL": {
+          "Unique": 3,
+          "Values": [
+            "https://999-ads-info.top",
+            "https://newrosesnet.com/1.jpg",
+            "https://newrosesnet.com/2.tar.gpg"
+          ],
+          "Total": 3
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 222784,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbcf35c3a7acc5e31284fb3a10c72c33",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1594,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbe7c27a955a667888dd3e8091540545",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\$q"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 11973,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbee1661c8cce47e845450fac5da2175",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1300762,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bbf9bc67eee8143901457547b0f38527",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 7342,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc006685bee752d0615f04c6bdb5bd45",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 119350,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc01ff54189a4d4014484b181624dbeb",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2244,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc0af744657883b5faeb163530fe3f4e",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 50702,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc18db8c18cfa624c244bcedaf5c2629",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 274158,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc1d551f612259e52c1174e799b6e342",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1653,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc1fa0c443bbe63efc0e7e09cbac0c4a",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\$q"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1603,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc23dca585c8b509c036e87b26334f9b",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea $t)\\$(($q='PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\$q"
+          ],
+          "Total": 2
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 443,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc64955c5c91f6f9f5428f4bf6d8add9",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "http://149.202.242.84:443/"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "149.202.242.84"
+          ],
+          "Total": 1
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1908,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc6f99dd5fb6677397a8b7e598418b40",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 7895,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc70ccb95df0397dc0c2b8680b71ddf8",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 115121,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc75b3d4c22e84096d4549a1be9e3703",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 595,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc83c38dc0a32b6923c26635334eb70e",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2035,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc870faa333c9d23cb8908f71f4a2513",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name $ranome -Value $fstrng  -PropertyType 'String'; #_uBaDhOMEPDjaq+NfH^o6MsDWE4p+h^u98(DAY!Fzkr%PC_9E^I0NDwNyJTDIzIbEOYYt-M1huBF3vefi3!RVfHsQHBtsBFEky7&vd%sDjVk$8uc-f&h0UV@+9W1aYfhGxbIHoK(S#gn-ATfmG72jFzcnkuAwp^I!(2JRVAU_ZpWMtGF7esV#EqHzJswP6cS&5=FY6qnfH_#jbVEuQHVZ!U=n-BLp-E6T9(l#@L3&eIpL(qb!YeyfaN0V(U!XfX5&I+F(_iitT-S()NAQ"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "https://www.snappyshop.it/img/index.php"
+          ],
+          "Total": 1
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2302,
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "bc8c43f3c7e41ba0b00340029141156c",
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 22221,
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "%WINDIR%\\System32`r`n",
+            "%APPDATA%\\${_",
+            "%WINDIR%\\System32`r`n",
+            "%APPDATA%\\${_"
+          ],
+          "Total": 4
+        },
+        "FileName": "bc996fdc706dd7df7d8479ade97b9301",
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "%SystemRoot%\\System32`r`n",
+            "$env:APPDATA\\${_",
+            "%SystemRoot%\\System32`r`n",
+            "$env:APPDATA\\${_"
+          ],
+          "Total": 4
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3169,
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "FileName": "bca181e6034295fb7150e469a02d7296",
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        }
+      }
+    ],
+    "FailedFiles": 0,
+    "Errors": []
+  }
+}

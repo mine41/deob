@@ -1,0 +1,172 @@
+﻿{
+  "file": "04ec255bd803628d6b504fa53e0e5bef.rebuilt.ps1",
+  "sampleId": "04ec255bd803628d6b504fa53e0e5bef",
+  "rawInstructionCount": 1782,
+  "instructionCount": 1782,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-item",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-item",
+    "System.Convert.FromBase64String",
+    "INVOke-reFlEcTIvePeINjECtion",
+    "set-strictmode",
+    "main.cpl",
+    "new-object",
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "INVOke-reFlEcTIvePeINjECtion",
+    "main.cpl",
+    "new-object",
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 14,
+  "effectiveActionSequence": [
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "INVOke-reFlEcTIvePeINjECtion",
+    "main.cpl",
+    "new-object",
+    "new-object",
+    "invoke-expression",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "effectiveActionCount": 15,
+  "rawApiSequence": [
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-item",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-variable",
+    "set-variable",
+    "set-item",
+    "set-item",
+    "System.Convert.FromBase64String",
+    "INVOke-reFlEcTIvePeINjECtion",
+    "set-strictmode",
+    "main.cpl",
+    "new-object",
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "set-variable",
+    "System.Convert.FromBase64String",
+    "INVOke-reFlEcTIvePeINjECtion",
+    "main.cpl",
+    "new-object",
+    "new-object",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 14,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 6,
+  "instructionNoiseCount": 1767,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingStableStubbedCount": 1,
+  "missingStableStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingImportantStubbedCount": 1,
+  "missingImportantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ScriptExec|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 1609077,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 32779,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 60,
+  "deobfuscationScore": 40,
+  "apiSequenceCoverage": "fallback_appended"
+}

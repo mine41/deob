@@ -1,0 +1,93 @@
+﻿{
+  "file": "16e4ba505278d53d2d7c0df44ddfc62c.rebuilt.ps1",
+  "sampleId": "16e4ba505278d53d2d7c0df44ddfc62c",
+  "rawInstructionCount": 155,
+  "instructionCount": 155,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "Bypass-AMSI",
+    "add-type",
+    "AmsiUtils.Bypass"
+  ],
+  "normalizedActionSequence": [
+    "Bypass-AMSI",
+    "add-type",
+    "amsiUtils.Bypass"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "Bypass-AMSI",
+    "add-type",
+    "amsiUtils.Bypass"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "Bypass-AMSI",
+    "add-type",
+    "AmsiUtils.Bypass"
+  ],
+  "normalizedApiSequence": [
+    "Bypass-AMSI",
+    "add-type",
+    "amsiUtils.Bypass"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "add-type",
+    "amsiUtils.Bypass"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 152,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "amsiUtils.Bypass"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 652,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 18,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 10,
+  "deobfuscationScore": 90,
+  "apiSequenceCoverage": "fallback_appended"
+}

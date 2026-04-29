@@ -1,0 +1,144 @@
+﻿{
+  "file": "b4f20c62da2bf67f4bf22913628475ea.rebuilt.ps1",
+  "sampleId": "b4f20c62da2bf67f4bf22913628475ea",
+  "rawInstructionCount": 779,
+  "instructionCount": 779,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "invoke-restmethod",
+    "write-output",
+    "System.Management.Automation.ScriptBlock.Create",
+    "write-output",
+    "add-type",
+    "add-type",
+    "VirtualAlloc",
+    "Win32Functions.Kernel32.VirtualAlloc",
+    "System.Type.GetType",
+    "System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer"
+  ],
+  "normalizedActionSequence": [
+    "invoke-restmethod",
+    "write-output",
+    "System.Management.Automation.ScriptBlock.Create",
+    "write-output",
+    "add-type",
+    "add-type",
+    "N.A.VirtualAlloc",
+    "Win32Functions.Kernel32.VirtualAlloc",
+    "System.Type.GetType",
+    "System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "invoke-restmethod",
+    "write-output",
+    "System.Management.Automation.ScriptBlock.Create",
+    "write-output",
+    "add-type",
+    "add-type",
+    "N.A.VirtualAlloc",
+    "Win32Functions.Kernel32.VirtualAlloc",
+    "System.Type.GetType",
+    "System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "invoke-restmethod",
+    "write-output",
+    "System.Management.Automation.ScriptBlock.Create",
+    "write-output",
+    "add-type",
+    "add-type",
+    "VirtualAlloc",
+    "Win32Functions.Kernel32.VirtualAlloc",
+    "System.Type.GetType",
+    "System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer"
+  ],
+  "normalizedApiSequence": [
+    "invoke-restmethod",
+    "write-output",
+    "System.Management.Automation.ScriptBlock.Create",
+    "write-output",
+    "add-type",
+    "add-type",
+    "N.A.VirtualAlloc",
+    "Win32Functions.Kernel32.VirtualAlloc",
+    "System.Type.GetType",
+    "System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "invoke-restmethod",
+    "add-type",
+    "add-type",
+    "N.A.VirtualAlloc"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 769,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "invoke-restmethod"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "invoke-restmethod"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "invoke-restmethod"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "invoke-restmethod",
+    "add-type",
+    "add-type",
+    "N.A.VirtualAlloc"
+  ],
+  "dynamicCapabilityCount": 3,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "CompileCSharp",
+    "RemoteMemoryAlloc"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "Download",
+    "CompileCSharp",
+    "RemoteMemoryAlloc"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "CompileCSharp",
+    "RemoteMemoryAlloc"
+  ],
+  "capabilitySignature": "Download|CompileCSharp|RemoteMemoryAlloc",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 690,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 173,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 8,
+  "deobfuscationScore": 92,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

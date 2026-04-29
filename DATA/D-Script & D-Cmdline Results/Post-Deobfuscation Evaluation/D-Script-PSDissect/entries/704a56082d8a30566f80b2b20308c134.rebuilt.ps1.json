@@ -1,0 +1,103 @@
+﻿{
+  "file": "704a56082d8a30566f80b2b20308c134.rebuilt.ps1",
+  "sampleId": "704a56082d8a30566f80b2b20308c134",
+  "rawInstructionCount": 268,
+  "instructionCount": 268,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "WinApi.LoadLibrary",
+    "WinApi.GetProcAddress",
+    "WinApi.VirtualProtect",
+    "WinApi.VirtualProtect"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "WinApi.LoadLibrary",
+    "WinApi.GetProcAddress",
+    "WinApi.VirtualProtect",
+    "WinApi.VirtualProtect"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "add-type",
+    "WinApi.LoadLibrary",
+    "WinApi.GetProcAddress",
+    "WinApi.VirtualProtect",
+    "WinApi.VirtualProtect"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "add-type",
+    "WinApi.LoadLibrary",
+    "WinApi.GetProcAddress",
+    "WinApi.VirtualProtect",
+    "WinApi.VirtualProtect"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "WinApi.LoadLibrary",
+    "WinApi.GetProcAddress",
+    "WinApi.VirtualProtect",
+    "WinApi.VirtualProtect"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 263,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "CompileCSharp|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1207,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 79,
+  "dynamicExecPrimitiveCount": 4,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 45,
+  "deobfuscationScore": 55,
+  "apiSequenceCoverage": "fallback_appended"
+}

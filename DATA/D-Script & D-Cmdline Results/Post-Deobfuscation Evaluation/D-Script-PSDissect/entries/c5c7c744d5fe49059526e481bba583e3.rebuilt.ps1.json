@@ -1,0 +1,87 @@
+﻿{
+  "file": "c5c7c744d5fe49059526e481bba583e3.rebuilt.ps1",
+  "sampleId": "c5c7c744d5fe49059526e481bba583e3",
+  "rawInstructionCount": 1121,
+  "instructionCount": 1121,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "Start-WebcamRecorder",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load",
+    "write-verbose"
+  ],
+  "normalizedActionSequence": [
+    "Start-WebcamRecorder",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "Start-WebcamRecorder",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "Start-WebcamRecorder",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load",
+    "write-verbose"
+  ],
+  "normalizedApiSequence": [
+    "Start-WebcamRecorder",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "System.Reflection.Assembly.Load"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1118,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.Reflection.Assembly.Load"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 0,
+  "effectiveCapabilitySequence": [],
+  "capabilitySignature": "",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 101569,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 226,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 32,
+  "deobfuscationScore": 68,
+  "apiSequenceCoverage": "fallback_appended"
+}

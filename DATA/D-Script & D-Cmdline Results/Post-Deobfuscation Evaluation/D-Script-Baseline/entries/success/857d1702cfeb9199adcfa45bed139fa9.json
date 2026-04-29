@@ -1,0 +1,153 @@
+﻿{
+  "file": "success\\857d1702cfeb9199adcfa45bed139fa9",
+  "sampleId": "857d1702cfeb9199adcfa45bed139fa9",
+  "rawInstructionCount": 1544,
+  "instructionCount": 1544,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.String.Normalize",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetFields",
+    "foreach-object",
+    "System.String.Contains",
+    "System.Management.Automation.PSObject.SetValue",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest",
+    "get-process",
+    "calc.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.String.Normalize",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetFields",
+    "foreach-object",
+    "System.String.Contains",
+    "System.Management.Automation.PSObject.SetValue",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest",
+    "get-process",
+    "calc.exe"
+  ],
+  "normalizedActionCount": 12,
+  "effectiveActionSequence": [
+    "System.String.Normalize",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetFields",
+    "foreach-object",
+    "System.String.Contains",
+    "System.Management.Automation.PSObject.SetValue",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest",
+    "get-process",
+    "calc.exe"
+  ],
+  "effectiveActionCount": 12,
+  "rawApiSequence": [
+    "System.String.Normalize",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetFields",
+    "foreach-object",
+    "System.String.Contains",
+    "System.Management.Automation.PSObject.SetValue",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest",
+    "get-process",
+    "calc.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.String.Normalize",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetFields",
+    "foreach-object",
+    "System.String.Contains",
+    "System.Management.Automation.PSObject.SetValue",
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest",
+    "get-process",
+    "calc.exe"
+  ],
+  "normalizedApiCount": 12,
+  "apiSequence": [
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1532,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "invoke-webrequest",
+    "invoke-expression",
+    "invoke-expression",
+    "invoke-webrequest"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1077,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 465,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 15,
+  "deobfuscationScore": 85,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

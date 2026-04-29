@@ -1,0 +1,145 @@
+﻿{
+  "file": "4c0fa7bd3eb7177d0fcd0d52a0d3bbd7.deob.ps1",
+  "sampleId": "4c0fa7bd3eb7177d0fcd0d52a0d3bbd7",
+  "rawInstructionCount": 535,
+  "instructionCount": 535,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "set-location",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "Unzip",
+    "System.IO.Compression.ZipFile.ExtractToDirectory",
+    "set-location",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "Unzip",
+    "System.IO.Compression.ZipFile.ExtractToDirectory",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "add-type",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "Unzip",
+    "System.IO.Compression.ZipFile.ExtractToDirectory",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "add-type",
+    "set-location",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadFile",
+    "Unzip",
+    "System.IO.Compression.ZipFile.ExtractToDirectory",
+    "set-location",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "new-object",
+    "System.Net.WebClient.DownloadFile",
+    "Unzip",
+    "System.IO.Compression.ZipFile.ExtractToDirectory",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "add-type",
+    "System.Net.WebClient.DownloadFile",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "recordedImportantApiCount": 6,
+  "importantApiCount": 6,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 526,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadFile"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadFile"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 6,
+  "effectiveApiSequence": [
+    "add-type",
+    "System.Net.WebClient.DownloadFile",
+    "remove-item",
+    "remove-item",
+    "remove-item",
+    "remove-item"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "Download"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "Download",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "CompileCSharp|Download|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 708,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 110,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

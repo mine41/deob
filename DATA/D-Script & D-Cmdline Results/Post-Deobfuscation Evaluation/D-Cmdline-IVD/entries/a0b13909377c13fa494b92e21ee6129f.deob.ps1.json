@@ -1,0 +1,101 @@
+﻿{
+  "file": "a0b13909377c13fa494b92e21ee6129f.deob.ps1",
+  "sampleId": "a0b13909377c13fa494b92e21ee6129f",
+  "rawInstructionCount": 168,
+  "instructionCount": 168,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "out-file"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "out-file"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "out-file"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "out-file"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "out-file"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "System.Net.WebClient.DownloadString",
+    "out-file"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "unwrapped_wrapper",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 165,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadString",
+    "out-file"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "FileWrite"
+  ],
+  "capabilitySignature": "Download|FileWrite",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 102,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 25,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 18,
+  "deobfuscationScore": 82,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

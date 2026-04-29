@@ -1,0 +1,91 @@
+﻿{
+  "file": "success\\6745eb149d6d5fcee3be9bd756f50f7c",
+  "sampleId": "6745eb149d6d5fcee3be9bd756f50f7c",
+  "rawInstructionCount": 88378,
+  "instructionCount": 88378,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "Check-Mutex",
+    "System.Threading.Mutex.OpenExisting",
+    "write-host"
+  ],
+  "normalizedActionSequence": [
+    "Check-Mutex",
+    "System.Threading.Mutex.OpenExisting",
+    "write-host"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "Check-Mutex",
+    "System.Threading.Mutex.OpenExisting",
+    "write-host"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "Check-Mutex",
+    "System.Threading.Mutex.OpenExisting",
+    "write-host"
+  ],
+  "normalizedApiSequence": [
+    "Check-Mutex",
+    "System.Threading.Mutex.OpenExisting",
+    "write-host"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 88375,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 4,
+  "staticCapabilitySequence": [
+    "ProcessSpawn",
+    "FileWrite",
+    "ScriptExec",
+    "RegistryModify"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn",
+    "FileWrite",
+    "ScriptExec",
+    "RegistryModify"
+  ],
+  "capabilitySignature": "ProcessSpawn|FileWrite|ScriptExec|RegistryModify",
+  "wrapperDepth": 0,
+  "launcherCount": 12,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 3276,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 85170,
+  "dynamicExecPrimitiveCount": 3,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 96,
+  "deobfuscationScore": 4,
+  "apiSequenceCoverage": "complete"
+}

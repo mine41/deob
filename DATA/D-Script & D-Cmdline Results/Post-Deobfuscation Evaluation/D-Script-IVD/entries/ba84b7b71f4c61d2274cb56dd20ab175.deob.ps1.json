@@ -1,0 +1,131 @@
+﻿{
+  "file": "ba84b7b71f4c61d2274cb56dd20ab175.deob.ps1",
+  "sampleId": "ba84b7b71f4c61d2274cb56dd20ab175",
+  "rawInstructionCount": 921,
+  "instructionCount": 921,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "System.Management.Automation.ScriptBlock.ToString",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "System.Management.Automation.ScriptBlock.ToString",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "new-object",
+    "System.Management.Automation.ScriptBlock.ToString",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "new-object",
+    "System.Management.Automation.ScriptBlock.ToString",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "System.Management.Automation.ScriptBlock.ToString",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 912,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "ScriptExec|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 2149,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 231,
+  "dynamicExecPrimitiveCount": 4,
+  "compilePrimitiveCount": 3,
+  "obfuscationScore": 68,
+  "deobfuscationScore": 32,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

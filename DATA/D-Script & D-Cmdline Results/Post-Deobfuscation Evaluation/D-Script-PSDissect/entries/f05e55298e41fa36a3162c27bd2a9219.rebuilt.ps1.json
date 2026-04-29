@@ -1,0 +1,117 @@
+﻿{
+  "file": "f05e55298e41fa36a3162c27bd2a9219.rebuilt.ps1",
+  "sampleId": "f05e55298e41fa36a3162c27bd2a9219",
+  "rawInstructionCount": 297,
+  "instructionCount": 297,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AmsiScan",
+    "System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace",
+    "System.Management.Automation.Runspaces.LocalRunspace.Open",
+    "System.Management.Automation.Runspaces.LocalRunspace.CreatePipeline",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.Runspaces.SessionStateProxy.SetVariable",
+    "System.Management.Automation.Runspaces.CommandCollection.Add",
+    "System.Management.Automation.Runspaces.LocalPipeline.Invoke",
+    "System.Management.Automation.Runspaces.LocalRunspace.Close"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AmsiScan",
+    "System.Management.Automation.PowerShell.AddScript"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AmsiScan",
+    "System.Management.Automation.PowerShell.AddScript"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AmsiScan",
+    "System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace",
+    "System.Management.Automation.Runspaces.LocalRunspace.Open",
+    "System.Management.Automation.Runspaces.LocalRunspace.CreatePipeline",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.Runspaces.SessionStateProxy.SetVariable",
+    "System.Management.Automation.Runspaces.CommandCollection.Add",
+    "System.Management.Automation.Runspaces.LocalPipeline.Invoke",
+    "System.Management.Automation.Runspaces.LocalRunspace.Close"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AmsiScan",
+    "System.Management.Automation.PowerShell.AddScript"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Management.Automation.PowerShell.AddScript"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 7,
+  "instructionNoiseCount": 292,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Management.Automation.PowerShell.AddScript"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 258,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 102,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 19,
+  "deobfuscationScore": 81,
+  "apiSequenceCoverage": "fallback_appended"
+}

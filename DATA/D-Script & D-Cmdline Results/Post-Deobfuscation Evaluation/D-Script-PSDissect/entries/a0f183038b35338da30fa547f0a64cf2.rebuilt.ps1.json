@@ -1,0 +1,147 @@
+﻿{
+  "file": "a0f183038b35338da30fa547f0a64cf2.rebuilt.ps1",
+  "sampleId": "a0f183038b35338da30fa547f0a64cf2",
+  "rawInstructionCount": 566,
+  "instructionCount": 566,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "start-sleep",
+    "set-itemproperty",
+    "set-itemproperty",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "start-sleep",
+    "set-itemproperty",
+    "set-itemproperty",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "set-content",
+    "start-sleep",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 7,
+  "importantApiCount": 7,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 4,
+  "instructionNoiseCount": 559,
+  "stubbedSinkCount": 5,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep",
+    "start-sleep",
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 7,
+  "effectiveApiSequence": [
+    "System.IO.Directory.CreateDirectory",
+    "set-itemproperty",
+    "set-itemproperty",
+    "set-content",
+    "set-content",
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 3,
+  "dynamicCapabilitySequence": [
+    "RegistryModify",
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "RegistryModify",
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "RegistryModify",
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "RegistryModify|FileWrite|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 727884,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 477,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

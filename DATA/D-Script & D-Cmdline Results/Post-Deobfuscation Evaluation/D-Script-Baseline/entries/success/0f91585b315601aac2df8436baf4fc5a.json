@@ -1,0 +1,143 @@
+﻿{
+  "file": "success\\0f91585b315601aac2df8436baf4fc5a",
+  "sampleId": "0f91585b315601aac2df8436baf4fc5a",
+  "rawInstructionCount": 2474,
+  "instructionCount": 2474,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "test-path",
+    "test-path",
+    "new-item",
+    "out-null",
+    "write-host",
+    "get-childitem",
+    "invoke-restmethod",
+    "write-host",
+    "foreach-object",
+    "convertto-json",
+    "write-host"
+  ],
+  "normalizedActionSequence": [
+    "test-path",
+    "test-path",
+    "new-item",
+    "out-null",
+    "write-host",
+    "get-childitem",
+    "invoke-restmethod",
+    "write-host",
+    "foreach-object",
+    "convertto-json",
+    "write-host"
+  ],
+  "normalizedActionCount": 11,
+  "effectiveActionSequence": [
+    "test-path",
+    "test-path",
+    "new-item",
+    "out-null",
+    "write-host",
+    "get-childitem",
+    "invoke-restmethod",
+    "write-host",
+    "foreach-object",
+    "convertto-json",
+    "write-host"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "test-path",
+    "test-path",
+    "new-item",
+    "out-null",
+    "write-host",
+    "get-childitem",
+    "invoke-restmethod",
+    "write-host",
+    "foreach-object",
+    "convertto-json",
+    "write-host"
+  ],
+  "normalizedApiSequence": [
+    "test-path",
+    "test-path",
+    "new-item",
+    "out-null",
+    "write-host",
+    "get-childitem",
+    "invoke-restmethod",
+    "write-host",
+    "foreach-object",
+    "convertto-json",
+    "write-host"
+  ],
+  "normalizedApiCount": 11,
+  "apiSequence": [
+    "new-item",
+    "invoke-restmethod"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 2463,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "invoke-restmethod"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "invoke-restmethod"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "invoke-restmethod"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "new-item",
+    "invoke-restmethod"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "Download",
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "Download|FileWrite|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1293,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 343,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 1,
+  "deobfuscationScore": 99,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

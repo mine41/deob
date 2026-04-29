@@ -1,0 +1,121 @@
+﻿{
+  "file": "a48a46b7bc25e91f99a7acbfd50b1d9c.rebuilt.ps1",
+  "sampleId": "a48a46b7bc25e91f99a7acbfd50b1d9c",
+  "rawInstructionCount": 301,
+  "instructionCount": 301,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AMSI",
+    "System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace",
+    "System.Management.Automation.Runspaces.LocalRunspace.Open",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke",
+    "write-host",
+    "System.Management.Automation.Runspaces.LocalRunspace.Close"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AMSI",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke",
+    "write-host"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AMSI",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke",
+    "write-host"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AMSI",
+    "System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace",
+    "System.Management.Automation.Runspaces.LocalRunspace.Open",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke",
+    "write-host",
+    "System.Management.Automation.Runspaces.LocalRunspace.Close"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "Bypass-AMSI",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke",
+    "write-host"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 294,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Management.Automation.PowerShell.AddScript",
+    "System.Management.Automation.PowerShell.Invoke"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 5,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 201,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 85,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 37,
+  "deobfuscationScore": 63,
+  "apiSequenceCoverage": "fallback_appended"
+}

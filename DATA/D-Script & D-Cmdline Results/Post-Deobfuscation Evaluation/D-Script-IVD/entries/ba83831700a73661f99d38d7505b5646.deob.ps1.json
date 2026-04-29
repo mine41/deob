@@ -1,0 +1,143 @@
+﻿{
+  "file": "ba83831700a73661f99d38d7505b5646.deob.ps1",
+  "sampleId": "ba83831700a73661f99d38d7505b5646",
+  "rawInstructionCount": 753,
+  "instructionCount": 753,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "System.Convert.FromBase64String",
+    "mxNtsUqBzBmtpyKuBlbxf",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "OkdltfOXjQhBtOwrASrBv",
+    "sFmDgKwChKVhBXGcivcal",
+    "TTaMqZXZnzhlwUTshGYGT",
+    "YKkVVXrFxmphywdXZpeCo.CreateThread",
+    "YKkVVXrFxmphywdXZpeCo.WaitForSingleObject"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "System.Convert.FromBase64String",
+    "mxNtsUqBzBmtpyKuBlbxf",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "OkdltfOXjQhBtOwrASrBv",
+    "sFmDgKwChKVhBXGcivcal",
+    "TTaMqZXZnzhlwUTshGYGT",
+    "YKkVVXrFxmphywdXZpeCo.CreateThread",
+    "YKkVVXrFxmphywdXZpeCo.WaitForSingleObject"
+  ],
+  "normalizedActionCount": 11,
+  "effectiveActionSequence": [
+    "add-type",
+    "System.Convert.FromBase64String",
+    "mxNtsUqBzBmtpyKuBlbxf",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "OkdltfOXjQhBtOwrASrBv",
+    "sFmDgKwChKVhBXGcivcal",
+    "TTaMqZXZnzhlwUTshGYGT",
+    "YKkVVXrFxmphywdXZpeCo.CreateThread",
+    "YKkVVXrFxmphywdXZpeCo.WaitForSingleObject"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "add-type",
+    "System.Convert.FromBase64String",
+    "mxNtsUqBzBmtpyKuBlbxf",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "OkdltfOXjQhBtOwrASrBv",
+    "sFmDgKwChKVhBXGcivcal",
+    "TTaMqZXZnzhlwUTshGYGT",
+    "YKkVVXrFxmphywdXZpeCo.CreateThread",
+    "YKkVVXrFxmphywdXZpeCo.WaitForSingleObject"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "System.Convert.FromBase64String",
+    "mxNtsUqBzBmtpyKuBlbxf",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "YKkVVXrFxmphywdXZpeCo.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "OkdltfOXjQhBtOwrASrBv",
+    "sFmDgKwChKVhBXGcivcal",
+    "TTaMqZXZnzhlwUTshGYGT",
+    "YKkVVXrFxmphywdXZpeCo.CreateThread",
+    "YKkVVXrFxmphywdXZpeCo.WaitForSingleObject"
+  ],
+  "normalizedApiCount": 11,
+  "apiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 742,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "YKkVVXrFxmphywdXZpeCo.CreateThread"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "YKkVVXrFxmphywdXZpeCo.CreateThread"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryWrite|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 6395,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 201,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 10,
+  "deobfuscationScore": 90,
+  "apiSequenceCoverage": "fallback_appended"
+}

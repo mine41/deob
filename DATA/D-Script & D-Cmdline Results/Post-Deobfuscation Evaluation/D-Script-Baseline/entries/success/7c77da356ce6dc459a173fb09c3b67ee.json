@@ -1,0 +1,99 @@
+﻿{
+  "file": "success\\7c77da356ce6dc459a173fb09c3b67ee",
+  "sampleId": "7c77da356ce6dc459a173fb09c3b67ee",
+  "rawInstructionCount": 177,
+  "instructionCount": 177,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "powershell.exe",
+    "Bypass-AMSI",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "powershell.exe",
+    "Bypass-AMSI",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "powershell.exe",
+    "Bypass-AMSI",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "powershell.exe",
+    "Bypass-AMSI",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "powershell.exe",
+    "Bypass-AMSI",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "powershell.exe",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 174,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "powershell.exe",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 174,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 22,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 13,
+  "deobfuscationScore": 87,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

@@ -1,0 +1,97 @@
+﻿{
+  "file": "0525d03b0959eb8982270c7c7d25abdf.deob.ps1",
+  "sampleId": "0525d03b0959eb8982270c7c7d25abdf",
+  "rawInstructionCount": 170,
+  "instructionCount": 170,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-content",
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "set-content",
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 168,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "start-sleep",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "set-content",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "FileWrite"
+  ],
+  "capabilitySignature": "FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 5846,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 30,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 11,
+  "deobfuscationScore": 89,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

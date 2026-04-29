@@ -1,0 +1,119 @@
+﻿{
+  "file": "ab57005ec2261f158587dee2faec281a.rebuilt.ps1",
+  "sampleId": "ab57005ec2261f158587dee2faec281a",
+  "rawInstructionCount": 813,
+  "instructionCount": 813,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-location",
+    "get-random",
+    "get-random",
+    "new-object",
+    "System.Management.Automation.PSObject.Next",
+    "get-item",
+    "remove-item",
+    "set-location",
+    "new-itemproperty"
+  ],
+  "normalizedActionSequence": [
+    "get-random",
+    "get-random",
+    "new-object",
+    "System.Management.Automation.PSObject.Next",
+    "get-item",
+    "remove-item",
+    "new-itemproperty"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "get-random",
+    "get-random",
+    "new-object",
+    "System.Management.Automation.PSObject.Next",
+    "get-item",
+    "remove-item",
+    "new-itemproperty"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "set-location",
+    "get-random",
+    "get-random",
+    "new-object",
+    "System.Management.Automation.PSObject.Next",
+    "get-item",
+    "remove-item",
+    "set-location",
+    "new-itemproperty"
+  ],
+  "normalizedApiSequence": [
+    "get-random",
+    "get-random",
+    "new-object",
+    "System.Management.Automation.PSObject.Next",
+    "get-item",
+    "remove-item",
+    "new-itemproperty"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "remove-item",
+    "new-itemproperty"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 806,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "remove-item",
+    "new-itemproperty"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ProcessSpawn",
+    "RegistryModify"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "RegistryModify",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "RegistryModify|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 464,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 154,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "fallback_appended"
+}

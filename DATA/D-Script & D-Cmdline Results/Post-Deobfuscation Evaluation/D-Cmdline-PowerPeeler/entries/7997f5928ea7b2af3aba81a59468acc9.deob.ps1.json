@@ -1,0 +1,108 @@
+﻿{
+  "file": "7997f5928ea7b2af3aba81a59468acc9.deob.ps1",
+  "sampleId": "7997f5928ea7b2af3aba81a59468acc9",
+  "rawInstructionCount": 246,
+  "instructionCount": 246,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-item",
+    "set-location",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedActionSequence": [
+    "new-item",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "new-item",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "new-item",
+    "set-location",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedApiSequence": [
+    "new-item",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "new-item",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 243,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "new-item",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "Download",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "Download|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 189,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 73,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 6,
+  "deobfuscationScore": 94,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

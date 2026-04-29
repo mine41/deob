@@ -1,0 +1,117 @@
+﻿{
+  "file": "3a01732797b0ef7d91af8cd711510d72.deob.ps1",
+  "sampleId": "3a01732797b0ef7d91af8cd711510d72",
+  "rawInstructionCount": 1611,
+  "instructionCount": 1611,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "join-path",
+    "test-path",
+    "set-itemproperty",
+    "add-type",
+    "Console.Window.Hide",
+    "set-itemproperty",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "join-path",
+    "test-path",
+    "set-itemproperty",
+    "add-type",
+    "Console.Window.Hide",
+    "set-itemproperty"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "join-path",
+    "test-path",
+    "set-itemproperty",
+    "add-type",
+    "Console.Window.Hide",
+    "set-itemproperty"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "join-path",
+    "test-path",
+    "set-itemproperty",
+    "add-type",
+    "Console.Window.Hide",
+    "set-itemproperty",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "join-path",
+    "test-path",
+    "set-itemproperty",
+    "add-type",
+    "Console.Window.Hide",
+    "set-itemproperty"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "set-itemproperty",
+    "add-type",
+    "set-itemproperty"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1605,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "set-itemproperty",
+    "add-type",
+    "set-itemproperty"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "RegistryModify",
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "RegistryModify",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "RegistryModify",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "RegistryModify|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 4,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 2045,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 378,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 29,
+  "deobfuscationScore": 71,
+  "apiSequenceCoverage": "fallback_appended"
+}

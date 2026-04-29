@@ -1,0 +1,143 @@
+﻿{
+  "file": "success\\1af2d05428a417126c1feaa7896a668a",
+  "sampleId": "1af2d05428a417126c1feaa7896a668a",
+  "rawInstructionCount": 943,
+  "instructionCount": 943,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object",
+    "Send-Credentials",
+    "new-object",
+    "System.Web.HttpUtility.UrlEncode",
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedActionSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object",
+    "Send-Credentials",
+    "new-object",
+    "System.Web.HttpUtility.UrlEncode",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "normalizedActionCount": 11,
+  "effectiveActionSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object",
+    "Send-Credentials",
+    "new-object",
+    "System.Web.HttpUtility.UrlEncode",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "effectiveActionCount": 11,
+  "rawApiSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object",
+    "Send-Credentials",
+    "new-object",
+    "System.Web.HttpUtility.UrlEncode",
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedApiSequence": [
+    "antani",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "System.Management.Automation.Internal.Host.InternalHostUserInterface.PromptForCredential",
+    "add-type",
+    "new-object",
+    "System.Management.Automation.PSObject.ValidateCredentials",
+    "select-object",
+    "Send-Credentials",
+    "new-object",
+    "System.Web.HttpUtility.UrlEncode",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "normalizedApiCount": 11,
+  "apiSequence": [
+    "add-type",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 932,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "Download"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "CompileCSharp|Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 905,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 229,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

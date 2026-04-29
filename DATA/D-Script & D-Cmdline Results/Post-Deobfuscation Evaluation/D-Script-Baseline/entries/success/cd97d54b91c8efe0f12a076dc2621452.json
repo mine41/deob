@@ -1,0 +1,99 @@
+﻿{
+  "file": "success\\cd97d54b91c8efe0f12a076dc2621452",
+  "sampleId": "cd97d54b91c8efe0f12a076dc2621452",
+  "rawInstructionCount": 135,
+  "instructionCount": 135,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 132,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 6,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteProcessOpen",
+    "RemoteMemoryWrite",
+    "RemoteThreadCreate",
+    "ScriptExec",
+    "ShellcodeInject"
+  ],
+  "effectiveCapabilityCount": 6,
+  "effectiveCapabilitySequence": [
+    "RemoteMemoryAlloc",
+    "RemoteProcessOpen",
+    "RemoteMemoryWrite",
+    "RemoteThreadCreate",
+    "ScriptExec",
+    "ShellcodeInject"
+  ],
+  "capabilitySignature": "RemoteMemoryAlloc|RemoteProcessOpen|RemoteMemoryWrite|RemoteThreadCreate|ScriptExec|ShellcodeInject",
+  "wrapperDepth": 0,
+  "launcherCount": 8,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 2112018,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 14064,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 68,
+  "deobfuscationScore": 32,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,131 @@
+﻿{
+  "file": "9fb9202db1a79599bd320c991bc07600.deob.ps1",
+  "sampleId": "9fb9202db1a79599bd320c991bc07600",
+  "rawInstructionCount": 371,
+  "instructionCount": 371,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "invoke-expression",
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 363,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "System.Net.WebClient.DownloadString",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "Download"
+  ],
+  "capabilitySignature": "ScriptExec|Download",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 429,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 152,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 7,
+  "deobfuscationScore": 93,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

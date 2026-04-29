@@ -1,0 +1,109 @@
+﻿{
+  "file": "0f087ab12f9c986e06200ed5ba9d3bb0.rebuilt.ps1",
+  "sampleId": "0f087ab12f9c986e06200ed5ba9d3bb0",
+  "rawInstructionCount": 592,
+  "instructionCount": 592,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "import-module",
+    "cmd.exe"
+  ],
+  "normalizedActionSequence": [
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "cmd.exe"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "cmd.exe"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "import-module",
+    "cmd.exe"
+  ],
+  "normalizedApiSequence": [
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "cmd.exe"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type",
+    "cmd.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 587,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "cmd.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "cmd.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "cmd.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "cmd.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 106,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 17,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 6,
+  "deobfuscationScore": 94,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

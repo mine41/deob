@@ -1,0 +1,150 @@
+﻿{
+  "file": "success\\bade61c6f2625e96c8ed34e183a1c141",
+  "sampleId": "bade61c6f2625e96c8ed34e183a1c141",
+  "rawInstructionCount": 549,
+  "instructionCount": 549,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-item",
+    "get-variable",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "new-object",
+    "System.Convert.FromBase64String",
+    "System.Management.Automation.PSObject.CreateDecryptor",
+    "System.Security.Cryptography.UniversalCryptoDecryptor.TransformFinalBlock",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "get-variable",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "new-object",
+    "System.Convert.FromBase64String",
+    "System.Management.Automation.PSObject.CreateDecryptor",
+    "System.Security.Cryptography.UniversalCryptoDecryptor.TransformFinalBlock",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 12,
+  "effectiveActionSequence": [
+    "get-variable",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "new-object",
+    "System.Convert.FromBase64String",
+    "System.Management.Automation.PSObject.CreateDecryptor",
+    "System.Security.Cryptography.UniversalCryptoDecryptor.TransformFinalBlock",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 12,
+  "rawApiSequence": [
+    "set-item",
+    "get-variable",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "new-object",
+    "System.Convert.FromBase64String",
+    "System.Management.Automation.PSObject.CreateDecryptor",
+    "System.Security.Cryptography.UniversalCryptoDecryptor.TransformFinalBlock",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "get-variable",
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "System.Reflection.RtFieldInfo.SetValue",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Text.UTF8Encoding+UTF8EncodingSealed.GetBytes",
+    "new-object",
+    "System.Convert.FromBase64String",
+    "System.Management.Automation.PSObject.CreateDecryptor",
+    "System.Security.Cryptography.UniversalCryptoDecryptor.TransformFinalBlock",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 12,
+  "apiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 537,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "System.Reflection.RtFieldInfo.SetValue",
+    "System.Net.WebClient.DownloadString",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 3019,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 186,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 9,
+  "deobfuscationScore": 91,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

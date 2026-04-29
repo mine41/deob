@@ -1,0 +1,131 @@
+﻿{
+  "file": "a7353ea4f0e7dea0d808e0a84165dab1.rebuilt.ps1",
+  "sampleId": "a7353ea4f0e7dea0d808e0a84165dab1",
+  "rawInstructionCount": 5021,
+  "instructionCount": 5021,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "System.Reflection.Assembly.Load",
+    "write-output",
+    "BP.AMS.Disable",
+    "write-output",
+    "start-process",
+    "write-host",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "System.Reflection.Assembly.Load",
+    "write-output",
+    "BP.AMS.Disable",
+    "write-output",
+    "start-process",
+    "write-host"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "System.Reflection.Assembly.Load",
+    "write-output",
+    "BP.AMS.Disable",
+    "write-output",
+    "start-process",
+    "write-host"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "System.Reflection.Assembly.Load",
+    "write-output",
+    "BP.AMS.Disable",
+    "write-output",
+    "start-process",
+    "write-host",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "System.Reflection.Assembly.Load",
+    "write-output",
+    "BP.AMS.Disable",
+    "write-output",
+    "start-process",
+    "write-host"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "System.Reflection.Assembly.Load",
+    "BP.AMS.Disable",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 5012,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "System.Reflection.Assembly.Load",
+    "BP.AMS.Disable",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ProcessSpawn",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ProcessSpawn|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 5,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 502,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 4302,
+  "dynamicExecPrimitiveCount": 3,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 51,
+  "deobfuscationScore": 49,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,123 @@
+﻿{
+  "file": "success\\adbde72626c2b496f440c77d802b29a6",
+  "sampleId": "adbde72626c2b496f440c77d802b29a6",
+  "rawInstructionCount": 605,
+  "instructionCount": 605,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "copy-item",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "copy-item",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "copy-item",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "start-process"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "copy-item",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "copy-item",
+    "System.Convert.FromBase64String",
+    "System.Text.UnicodeEncoding.GetString",
+    "invoke-expression",
+    "start-process"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 598,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "copy-item",
+    "invoke-expression",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ScriptExec|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 64199,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 56,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

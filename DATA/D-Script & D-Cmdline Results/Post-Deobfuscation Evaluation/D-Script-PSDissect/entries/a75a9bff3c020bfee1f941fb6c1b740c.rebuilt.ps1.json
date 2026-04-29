@@ -1,0 +1,118 @@
+﻿{
+  "file": "a75a9bff3c020bfee1f941fb6c1b740c.rebuilt.ps1",
+  "sampleId": "a75a9bff3c020bfee1f941fb6c1b740c",
+  "rawInstructionCount": 292,
+  "instructionCount": 292,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "new-object",
+    "start-process",
+    "start-sleep",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "start-sleep",
+    "System.Windows.Forms.SendKeys.SendWait"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "new-object",
+    "start-process",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "add-type",
+    "new-object",
+    "start-process",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "add-type",
+    "new-object",
+    "start-process",
+    "start-sleep",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "start-sleep",
+    "System.Windows.Forms.SendKeys.SendWait"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "new-object",
+    "start-process",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait",
+    "System.Windows.Forms.SendKeys.SendWait"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "add-type",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 286,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "CompileCSharp|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 179,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 62,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "fallback_appended"
+}

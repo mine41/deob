@@ -1,0 +1,108 @@
+﻿{
+  "file": "88ad0646d31461995bedf3152cd9789f.deob.ps1",
+  "sampleId": "88ad0646d31461995bedf3152cd9789f",
+  "rawInstructionCount": 652,
+  "instructionCount": 652,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.Path.Combine",
+    "test-path",
+    "test-path",
+    "set-itemproperty",
+    "remove-item",
+    "test-path"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.Path.Combine",
+    "test-path",
+    "test-path",
+    "set-itemproperty",
+    "remove-item",
+    "test-path"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "System.IO.Path.Combine",
+    "test-path",
+    "test-path",
+    "set-itemproperty",
+    "remove-item",
+    "test-path"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "System.IO.Path.Combine",
+    "test-path",
+    "test-path",
+    "set-itemproperty",
+    "remove-item",
+    "test-path"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.Path.Combine",
+    "test-path",
+    "test-path",
+    "set-itemproperty",
+    "remove-item",
+    "test-path"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "set-itemproperty",
+    "remove-item"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 646,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "set-itemproperty",
+    "remove-item"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "capabilitySignature": "RegistryModify",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 445,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 102,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "fallback_appended"
+}

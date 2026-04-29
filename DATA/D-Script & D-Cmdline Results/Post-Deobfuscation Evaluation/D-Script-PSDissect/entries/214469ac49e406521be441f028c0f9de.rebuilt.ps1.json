@@ -1,0 +1,137 @@
+﻿{
+  "file": "214469ac49e406521be441f028c0f9de.rebuilt.ps1",
+  "sampleId": "214469ac49e406521be441f028c0f9de",
+  "rawInstructionCount": 1007,
+  "instructionCount": 1007,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "start-process",
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "import-module",
+    "cmd.exe",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "start-process",
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "cmd.exe",
+    "start-process"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "start-process",
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "cmd.exe",
+    "start-process"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "start-process",
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "import-module",
+    "cmd.exe",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "start-process",
+    "IsCurrentProcessArm64",
+    "add-type",
+    "Process.IsArm64",
+    "join-path",
+    "cmd.exe",
+    "start-process"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "start-process",
+    "add-type",
+    "cmd.exe",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 998,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "cmd.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "cmd.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "cmd.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "start-process",
+    "add-type",
+    "cmd.exe",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn",
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "ProcessSpawn|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 957,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 99,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 18,
+  "deobfuscationScore": 82,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

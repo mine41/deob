@@ -1,0 +1,129 @@
+﻿{
+  "file": "1ce9e7c6c1f0024f5bf2c50baa6e1a7b.rebuilt.ps1",
+  "sampleId": "1ce9e7c6c1f0024f5bf2c50baa6e1a7b",
+  "rawInstructionCount": 1710,
+  "instructionCount": 1710,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-Kellogs",
+    "add-type",
+    "new-item",
+    "start-sleep",
+    "API.Win32.GetAsyncKeyState",
+    "send-mailmessage"
+  ],
+  "normalizedActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-Kellogs",
+    "add-type",
+    "new-item",
+    "API.Win32.GetAsyncKeyState",
+    "send-mailmessage"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-Kellogs",
+    "add-type",
+    "new-item",
+    "API.Win32.GetAsyncKeyState",
+    "send-mailmessage"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-Kellogs",
+    "add-type",
+    "new-item",
+    "start-sleep",
+    "API.Win32.GetAsyncKeyState",
+    "send-mailmessage"
+  ],
+  "normalizedApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-Kellogs",
+    "add-type",
+    "new-item",
+    "API.Win32.GetAsyncKeyState",
+    "send-mailmessage"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "add-type",
+    "new-item",
+    "send-mailmessage"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1701,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "add-type",
+    "new-item",
+    "send-mailmessage"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1002,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 235,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "fallback_appended"
+}

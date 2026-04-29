@@ -1,0 +1,90 @@
+﻿{
+  "file": "ab60e46fe2697a54ca124d85cb17cf66.rebuilt.ps1",
+  "sampleId": "ab60e46fe2697a54ca124d85cb17cf66",
+  "rawInstructionCount": 413,
+  "instructionCount": 413,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": false,
+  "timedOut": true,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "normalizedActionSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "normalizedApiSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "unsafe_timeout",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 411,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "new-itemproperty",
+    "schtasks.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "RegistryModify",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "RegistryModify",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "RegistryModify|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 2019,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 125,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 21,
+  "deobfuscationScore": 79,
+  "apiSequenceCoverage": "fallback_appended"
+}

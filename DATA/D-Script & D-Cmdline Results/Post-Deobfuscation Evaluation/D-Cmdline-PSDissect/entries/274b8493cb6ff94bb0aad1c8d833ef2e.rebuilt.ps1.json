@@ -1,0 +1,111 @@
+﻿{
+  "file": "274b8493cb6ff94bb0aad1c8d833ef2e.rebuilt.ps1",
+  "sampleId": "274b8493cb6ff94bb0aad1c8d833ef2e",
+  "rawInstructionCount": 677,
+  "instructionCount": 677,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-content",
+    "get-content",
+    "get-random",
+    "set-content",
+    "cmd.exe"
+  ],
+  "normalizedActionSequence": [
+    "set-content",
+    "get-content",
+    "get-random",
+    "set-content",
+    "cmd.exe"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "set-content",
+    "get-content",
+    "get-random",
+    "set-content",
+    "cmd.exe"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "set-content",
+    "get-content",
+    "get-random",
+    "set-content",
+    "cmd.exe"
+  ],
+  "normalizedApiSequence": [
+    "set-content",
+    "get-content",
+    "get-random",
+    "set-content",
+    "cmd.exe"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "set-content",
+    "set-content",
+    "cmd.exe"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 672,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "cmd.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "cmd.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "cmd.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "set-content",
+    "set-content",
+    "cmd.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "FileWrite"
+  ],
+  "capabilitySignature": "FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 2,
+  "stringLiteralBytes": 1262,
+  "byteArrayLiteralBytes": 213,
+  "astNodeCount": 310,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 26,
+  "deobfuscationScore": 74,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

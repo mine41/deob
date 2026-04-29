@@ -1,0 +1,491 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 125,
+  "ChunkSignature": "13c0995da84a5a8284b64df71409d3501fbfa5d1cdcbc43ecb72a6286330efd3",
+  "FileCount": 13,
+  "ChunkResult": {
+    "Summary": {
+      "FilePath": {
+        "TotalOccurrences": 8,
+        "FilesContaining": 3
+      },
+      "IP": {
+        "TotalOccurrences": 6,
+        "FilesContaining": 2
+      },
+      "FilePathRaw": {
+        "TotalOccurrences": 9,
+        "FilesContaining": 4
+      },
+      "RegKey": {
+        "TotalOccurrences": 0,
+        "FilesContaining": 0
+      },
+      "URL": {
+        "TotalOccurrences": 5,
+        "FilesContaining": 2
+      }
+    },
+    "SkippedFiles": 0,
+    "ProcessedFiles": 13,
+    "Errors": [],
+    "FailedFiles": 0,
+    "FileDetails": [
+      {
+        "URL": {
+          "Values": [
+            "https://github.com/PowerShellMafia/PowerSploit/blob/dev/ScriptModification/Out-CompressedDll.ps1."
+          ],
+          "Total": 1,
+          "Unique": 1
+        },
+        "FilePath": {
+          "Values": [
+            "C:\\Program Files (x86)\\Microsoft\\Exchange\\Web Services\\2.1\\Microsoft.Exchange.WebServices.dll"
+          ],
+          "Total": 1,
+          "Unique": 1
+        },
+        "FileSize": 489344,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Program Files (x86)\\Microsoft\\Exchange\\Web Services\\2.1\\Microsoft.Exchange.WebServices.dll"
+          ],
+          "Total": 1,
+          "Unique": 1
+        },
+        "FileName": "ff104a794dcbe6d0d0b92affbd9f2c21.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [
+            "%APPDATA%\\Microsoft\\1.chm",
+            "%APPDATA%\\Microsoft\\1.com",
+            "%APPDATA%\\Microsoft\\Windows\\1.HHK",
+            "%APPDATA%\\Microsoft\\Windows\\1.HHC",
+            "%APPDATA%\\Microsoft\\Windows\\1.htm"
+          ],
+          "Total": 5,
+          "Unique": 5
+        },
+        "FileSize": 1168,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [
+            "7.0.0.0",
+            "7.0.0.0"
+          ],
+          "Total": 2,
+          "Unique": 1
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\'), ($Null), ([int]0",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\1.chm",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\1.com",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\1.HHK",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\1.HHC",
+            "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\1.htm"
+          ],
+          "Total": 6,
+          "Unique": 6
+        },
+        "FileName": "ff1217c31d46256a2fda4de878796ffd.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 3704,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ff5508be912c3fa6022fc362e87d0d09.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 908051,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ff60f288365b2dcbd303a0a19b0ef8d4.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 161888,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ff621fc8912ec76d95740342ccc2b7d0.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [
+            "http://162.208.10.211:1515/win_update/microsoft_crp/37",
+            "http://162.208.10.211:1515/win_update/microsoft_corp/37",
+            "http://162.208.10.211:1515/win_update/microsoft_crp/37",
+            "http://162.208.10.211:1515/win_update/microsoft_crp/37"
+          ],
+          "Total": 4,
+          "Unique": 2
+        },
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\splwow64.ps1",
+            "%TEMP%\\splwow64.ps1"
+          ],
+          "Total": 2,
+          "Unique": 1
+        },
+        "FileSize": 3316,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [
+            "162.208.10.211",
+            "162.208.10.211",
+            "162.208.10.211",
+            "162.208.10.211"
+          ],
+          "Total": 4,
+          "Unique": 1
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\splwow64.ps1"
+          ],
+          "Total": 1,
+          "Unique": 1
+        },
+        "FileName": "ff6c8ee1e1a9313d689a0ed08cdcfbb1.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 9787,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ff84413a7bcd71e2dcc0935ab312dcb5"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 1980443,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ffb11af763c7368799f4c03e08cd3373"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 1097404,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ffb3fa329bd54dcd5996fc510c49aabc"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 6506,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ffb4a11f42a18b3fc8f5ade7fbd64531.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 271924,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Users\\Public');$The.AppendPrivatePath('C"
+          ],
+          "Total": 1,
+          "Unique": 1
+        },
+        "FileName": "ffb4a7e9fa14256d8aa22431418da756"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 143950,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ffcc41fed560a88d89da875d42b2a227.deob.ps1"
+      },
+      {
+        "URL": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePath": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileSize": 2418,
+        "RegKey": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "IP": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Total": 0,
+          "Unique": 0
+        },
+        "FileName": "ffea330fc43f156cf22b743c1dc319fe.deob.ps1"
+      }
+    ],
+    "CollectedValues": {
+      "FilePath": [
+        "C:\\Program Files (x86)\\Microsoft\\Exchange\\Web Services\\2.1\\Microsoft.Exchange.WebServices.dll",
+        "%APPDATA%\\Microsoft\\1.chm",
+        "%APPDATA%\\Microsoft\\1.com",
+        "%APPDATA%\\Microsoft\\Windows\\1.HHK",
+        "%APPDATA%\\Microsoft\\Windows\\1.HHC",
+        "%APPDATA%\\Microsoft\\Windows\\1.htm",
+        "%TEMP%\\splwow64.ps1",
+        "%TEMP%\\splwow64.ps1"
+      ],
+      "IP": [
+        "7.0.0.0",
+        "7.0.0.0",
+        "162.208.10.211",
+        "162.208.10.211",
+        "162.208.10.211",
+        "162.208.10.211"
+      ],
+      "FilePathRaw": [
+        "C:\\Program Files (x86)\\Microsoft\\Exchange\\Web Services\\2.1\\Microsoft.Exchange.WebServices.dll",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\'), ($Null), ([int]0",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\1.chm",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\1.com",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\1.HHK",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\1.HHC",
+        "C:\\Users\\hacker\\AppData\\Roaming\\Microsoft\\Windows\\1.htm",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\splwow64.ps1",
+        "C:\\Users\\Public');$The.AppendPrivatePath('C"
+      ],
+      "RegKey": [],
+      "URL": [
+        "https://github.com/PowerShellMafia/PowerSploit/blob/dev/ScriptModification/Out-CompressedDll.ps1.",
+        "http://162.208.10.211:1515/win_update/microsoft_crp/37",
+        "http://162.208.10.211:1515/win_update/microsoft_corp/37",
+        "http://162.208.10.211:1515/win_update/microsoft_crp/37",
+        "http://162.208.10.211:1515/win_update/microsoft_crp/37"
+      ]
+    }
+  }
+}

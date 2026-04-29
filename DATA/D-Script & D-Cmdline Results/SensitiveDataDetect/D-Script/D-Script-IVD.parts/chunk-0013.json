@@ -1,0 +1,1469 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 13,
+  "ChunkSignature": "22f8858ba8d871d809a90dc8dce89fb71ecdf5711201ed1a4a9f084883105aa0",
+  "FileCount": 34,
+  "ChunkResult": {
+    "FailedFiles": 0,
+    "Summary": {
+      "URL": {
+        "FilesContaining": 6,
+        "TotalOccurrences": 23
+      },
+      "FilePath": {
+        "FilesContaining": 10,
+        "TotalOccurrences": 65
+      },
+      "RegKey": {
+        "FilesContaining": 1,
+        "TotalOccurrences": 2
+      },
+      "IP": {
+        "FilesContaining": 6,
+        "TotalOccurrences": 32
+      },
+      "FilePathRaw": {
+        "FilesContaining": 10,
+        "TotalOccurrences": 79
+      }
+    },
+    "ProcessedFiles": 34,
+    "FileDetails": [
+      {
+        "FilePath": {
+          "Values": [
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).PromptOnSecureDesktop",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile"
+          ],
+          "Unique": 27,
+          "Total": 30
+        },
+        "FileName": "1aff1101836b6a11e72827b759540b84",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\Microsoft.NET\\Framework",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).PromptOnSecureDesktop",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile"
+          ],
+          "Unique": 28,
+          "Total": 31
+        },
+        "RegKey": {
+          "Values": [
+            " HKLM:\\SOFTWARE",
+            " HKLM:\\SOFTWARE"
+          ],
+          "Unique": 1,
+          "Total": 2
+        },
+        "FileSize": 535682
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "C:\\WINDOWS' , 'System Directory",
+            "%WINDIR%\\system32' , 'Boot Device",
+            "C:\\pagefile.sys' , 'Domain",
+            "C:\\path\\to\\file.txt"
+          ],
+          "Unique": 4,
+          "Total": 4
+        },
+        "FileName": "1b173594217cd185935c3d4a144047dc.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "https://redstir420.000webhostapp.com/uload.php",
+            "https://redstir420.000webhostapp.com/uload.php",
+            "https://ipinfo.io/ip",
+            "https://redstir420.000webhostapp.com/uload.php",
+            "https://redstir420.000webhostapp.com/con/index.php",
+            "https://redstir420.000webhostapp.com/uload.php",
+            "https://redstir420.000webhostapp.com/uload.php"
+          ],
+          "Unique": 3,
+          "Total": 7
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\WINDOWS' , 'System Directory",
+            "C:\\WINDOWS\\system32' , 'Boot Device",
+            "C:\\pagefile.sys' , 'Domain",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.txt",
+            "C:\\Users\\$Username.jpg",
+            "C:\\Users\\$Username.jpg",
+            "C:\\path\\to\\file.txt",
+            "C:\\Users\\$Username.jpg",
+            "C:\\Users\\$Username.txt"
+          ],
+          "Unique": 6,
+          "Total": 18
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 24866
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "1b190ab4c717aec1c2c2c9a3e118bc30.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 4196
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b1e5c27363abc6a363124daac667902.deob.ps1",
+        "IP": {
+          "Values": [
+            "192.168.1.1"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 13444
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b207275e10b82c99cfb817aa4fa10c9.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 552
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FileName": "1b3017c3903d05c62a2c8cac87e9d1ed.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+            "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1872
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b3aef2ed03cffd5e66e09a626dc5de8",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1575
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b41a6b9194910ee2c1cf1afbc10a3e3.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 66716
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b471b024da18e5aed8dc96663f1c356.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 7768
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b5952d87476b3a409d76b643319e5b9.deob.ps1",
+        "IP": {
+          "Values": [
+            "192.168.121.4"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 624
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%WINDIR%\\Temp\\svczHost.exe",
+            "%WINDIR%\\Temp\\svczHost.exe",
+            "%WINDIR%\\Temp\\svczHost.exe"
+          ],
+          "Unique": 1,
+          "Total": 3
+        },
+        "FileName": "1b7338e5b3b5c43e54caa1d7acc134a7.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://mydatayxnhz",
+            "http://mydatayxnhzcs.tech/file/t/mainbot.exe"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Windows\\Temp\\svczHost.exe",
+            "C:\\Windows\\Temp\\svczHost.exe",
+            "C:\\Windows\\Temp\\svczHost.exe"
+          ],
+          "Unique": 1,
+          "Total": 3
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 5339
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1b88ea6fbb7ea6d467e919eae59ac962.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 357894
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bab317f743b14112b60801f18c00184",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 2365311
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bab68408d177f25f2aaa4c57b7f6a24.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 7636
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bb372c659071561e29e6d2d5084791e",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://labs.rebex.net/curves",
+            "https://gist.github.com/FrankSpierings/3577b0365d02df6f7eeb",
+            "https://gist.github.com/FrankSpierings/c18da658e06948313fff",
+            "http://keccak.noekeon.org/",
+            "http://keccak.noekeon.org/",
+            "http://cr.yp.to/snuffle/salsa20/ref/salsa20.c",
+            "http://creativecommons.org/licenses/publicdomain/",
+            "http://cr.yp.to/snuffle.html.",
+            "http://code.logos.com/blog/2008/06/salsa20_implementation_in_c_1.html"
+          ],
+          "Unique": 8,
+          "Total": 9
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 410453
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bb7e98279c04bca586ebf6526edfdcc.deob.ps1",
+        "IP": {
+          "Values": [
+            "192.168.1.0",
+            "192.168.1.0",
+            "10.0.0.0",
+            "11.0.0.0",
+            "13.0.0.0",
+            "192.168.2.0",
+            "192.169.2.0",
+            "192.169.3.0",
+            "5.5.5.5",
+            "5.5.5.6",
+            "192.170.2.0",
+            "192.170.3.0",
+            "10.0.1.0",
+            "192.168.1.0",
+            "192.168.1.0",
+            "192.168.2.0",
+            "192.169.2.0",
+            "192.169.3.0",
+            "5.5.5.5",
+            "5.5.5.6",
+            "10.8.0.0",
+            "10.2.3.4",
+            "11.2.3.4",
+            "192.168.1.0",
+            "192.168.2.0",
+            "192.168.3.0",
+            "192.168.4.0"
+          ],
+          "Unique": 17,
+          "Total": 27
+        },
+        "URL": {
+          "Values": [
+            "http://powerwormjqj42hu.onion/get.php?s=setup&mom=9C7ABD3A-D197-11DB-BBDA-BBE061E60019&uid="
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 39514
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bba683658664fe7a3f621d843b08cd1.deob.ps1",
+        "IP": {
+          "Values": [
+            "192.168.1.4"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 1687
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "1bc07f77fba7a85aaef20997a8f79f60.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 4209
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bd48b55674b662d8169ad8286c5c515.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 52453
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FileName": "1bde918275eb08803f98fb3b2db5ce0f.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 4192
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1becf47a08128f6036cbe9c55e4437e3.deob.ps1",
+        "IP": {
+          "Values": [
+            "113.0.0.0"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "URL": {
+          "Values": [
+            "https://www.roblox.com/&rbx_medium=Direct&rbx_source=www.roblox.com&rbx_campaign=&rbx_adgroup=&rbx_keyword=&rbx_matchtype=&rbx_send_info=1",
+            "https://web.roblox.com/users/2491689492/profile",
+            "https://web.roblox.com/users/friends"
+          ],
+          "Unique": 3,
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3955
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe"
+          ],
+          "Unique": 1,
+          "Total": 3
+        },
+        "FileName": "1bf157141c72edb369847aab75c81cb1.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe' , $tfrd",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe"
+          ],
+          "Unique": 2,
+          "Total": 3
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 465678
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1bf252c86ac6082a297b28643e07cdaa.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 248
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%WINDIR%\\zLUDzD\\Windowspowershell\\v1.0\\powershell",
+            "%WINDIR%\\sysDzD\\Windowspowershell\\v1.0\\powershell"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "FileName": "1bf58a39598c9b26de68d2273e28be16.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "C:\\Windows\\zLUDzD\\Windowspowershell\\v1.0\\powershell",
+            "C:\\Windows\\sysDzD\\Windowspowershell\\v1.0\\powershell"
+          ],
+          "Unique": 2,
+          "Total": 2
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 26302
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c281a24a8e4b706326ad69a66ada66f",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 778
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c29e32963143b34efe2b9f7ffd89518.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 479829
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c3bd81ddcc821f9992a62f121aeed18.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 13018
+      },
+      {
+        "FilePath": {
+          "Values": [
+            "%APPDATA%\\Logs",
+            "%APPDATA%\\Logs\\Report.ps1",
+            "%APPDATA%\\Logs\\Loader.vbs",
+            "%APPDATA%\\Logs\\Report.ps1",
+            "%APPDATA%\\Logs\\install.ps1",
+            "%APPDATA%\\Logs\\install.vbs",
+            "%APPDATA%\\Logs\\install.ps1",
+            "%APPDATA%\\Logs\\t.png",
+            "%APPDATA%\\Logs\\t.png",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+            "%APPDATA%\\Logs\\Report.ps1",
+            "%APPDATA%\\Logs\\t.png",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+            "%APPDATA%\\Logs\\install.ps1",
+            "%APPDATA%\\Logs\\install.vbs",
+            "%APPDATA%\\Logs"
+          ],
+          "Unique": 8,
+          "Total": 18
+        },
+        "FileName": "1c41745361c0162bde7e2c91d540917a.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs",
+            "%USERPROFILE%\\AppData\\Roaming\\Logs\\Report.ps1",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\Loader.vbs",
+            "%USERPROFILE%\\AppData\\Roaming\\Logs\\Report.ps1",
+            "%USERPROFILE%\\AppData\\Roaming\\Logs\\install.ps1",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\install.vbs",
+            "%USERPROFILE%\\AppData\\Roaming\\Logs\\install.ps1",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\t.png",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\t.png",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\Report.ps1",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\t.png",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\install.ps1",
+            "$env:USERPROFILE\\AppData\\Roaming\\Logs\\install.vbs"
+          ],
+          "Unique": 10,
+          "Total": 17
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 538900
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c5290853ff19ad9d85cbf64a7c5cb26",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [
+            "http://mydatayxnhzcs.tech/file/docs/$fileName"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 3123
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c594f024994ec2318432347adbe6f52.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 90161
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c6302fca8659ac74f2796749ea3b8e7",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 12823814
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c71c88b67c2c01d6ea2a8037aa18dc6.deob.ps1",
+        "IP": {
+          "Values": [
+            "10.10.14.141"
+          ],
+          "Unique": 1,
+          "Total": 1
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 924
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c7565dfaf7888cd4aee60082e262f91.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 438743
+      },
+      {
+        "FilePath": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileName": "1c85e879f3f8c28052415a44cd5d0f49.deob.ps1",
+        "IP": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "URL": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "RegKey": {
+          "Values": [],
+          "Unique": 0,
+          "Total": 0
+        },
+        "FileSize": 33843
+      }
+    ],
+    "SkippedFiles": 0,
+    "Errors": [],
+    "CollectedValues": {
+      "IP": [
+        "192.168.1.1",
+        "192.168.121.4",
+        "192.168.1.0",
+        "192.168.1.0",
+        "10.0.0.0",
+        "11.0.0.0",
+        "13.0.0.0",
+        "192.168.2.0",
+        "192.169.2.0",
+        "192.169.3.0",
+        "5.5.5.5",
+        "5.5.5.6",
+        "192.170.2.0",
+        "192.170.3.0",
+        "10.0.1.0",
+        "192.168.1.0",
+        "192.168.1.0",
+        "192.168.2.0",
+        "192.169.2.0",
+        "192.169.3.0",
+        "5.5.5.5",
+        "5.5.5.6",
+        "10.8.0.0",
+        "10.2.3.4",
+        "11.2.3.4",
+        "192.168.1.0",
+        "192.168.2.0",
+        "192.168.3.0",
+        "192.168.4.0",
+        "192.168.1.4",
+        "113.0.0.0",
+        "10.10.14.141"
+      ],
+      "FilePathRaw": [
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "$Env:SystemRoot\\System32\\InetSRV\\appcmd.exe",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\Microsoft.NET\\Framework",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).PromptOnSecureDesktop",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile",
+        "C:\\WINDOWS' , 'System Directory",
+        "C:\\WINDOWS\\system32' , 'Boot Device",
+        "C:\\pagefile.sys' , 'Domain",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.txt",
+        "C:\\Users\\$Username.jpg",
+        "C:\\Users\\$Username.jpg",
+        "C:\\path\\to\\file.txt",
+        "C:\\Users\\$Username.jpg",
+        "C:\\Users\\$Username.txt",
+        "$env:temp\\keylogger.txt",
+        "$env:programdata\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "$env:temp\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "C:\\Windows\\Temp\\svczHost.exe",
+        "C:\\Windows\\Temp\\svczHost.exe",
+        "C:\\Windows\\Temp\\svczHost.exe",
+        "$env:temp\\keylogger.txt",
+        "$env:temp\\keylogger.txt",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvcs.exe' , $tfrd",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+        "C:\\Windows\\zLUDzD\\Windowspowershell\\v1.0\\powershell",
+        "C:\\Windows\\sysDzD\\Windowspowershell\\v1.0\\powershell",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs",
+        "%USERPROFILE%\\AppData\\Roaming\\Logs\\Report.ps1",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\Loader.vbs",
+        "%USERPROFILE%\\AppData\\Roaming\\Logs\\Report.ps1",
+        "%USERPROFILE%\\AppData\\Roaming\\Logs\\install.ps1",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\install.vbs",
+        "%USERPROFILE%\\AppData\\Roaming\\Logs\\install.ps1",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\t.png",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\t.png",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\Report.ps1",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\t.png",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\install.ps1",
+        "$env:USERPROFILE\\AppData\\Roaming\\Logs\\install.vbs"
+      ],
+      "RegKey": [
+        " HKLM:\\SOFTWARE",
+        " HKLM:\\SOFTWARE"
+      ],
+      "URL": [
+        "https://redstir420.000webhostapp.com/uload.php",
+        "https://redstir420.000webhostapp.com/uload.php",
+        "https://ipinfo.io/ip",
+        "https://redstir420.000webhostapp.com/uload.php",
+        "https://redstir420.000webhostapp.com/con/index.php",
+        "https://redstir420.000webhostapp.com/uload.php",
+        "https://redstir420.000webhostapp.com/uload.php",
+        "http://mydatayxnhz",
+        "http://mydatayxnhzcs.tech/file/t/mainbot.exe",
+        "http://labs.rebex.net/curves",
+        "https://gist.github.com/FrankSpierings/3577b0365d02df6f7eeb",
+        "https://gist.github.com/FrankSpierings/c18da658e06948313fff",
+        "http://keccak.noekeon.org/",
+        "http://keccak.noekeon.org/",
+        "http://cr.yp.to/snuffle/salsa20/ref/salsa20.c",
+        "http://creativecommons.org/licenses/publicdomain/",
+        "http://cr.yp.to/snuffle.html.",
+        "http://code.logos.com/blog/2008/06/salsa20_implementation_in_c_1.html",
+        "http://powerwormjqj42hu.onion/get.php?s=setup&mom=9C7ABD3A-D197-11DB-BBDA-BBE061E60019&uid=",
+        "https://www.roblox.com/&rbx_medium=Direct&rbx_source=www.roblox.com&rbx_campaign=&rbx_adgroup=&rbx_keyword=&rbx_matchtype=&rbx_send_info=1",
+        "https://web.roblox.com/users/2491689492/profile",
+        "https://web.roblox.com/users/friends",
+        "http://mydatayxnhzcs.tech/file/docs/$fileName"
+      ],
+      "FilePath": [
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).ConsentPromptBehaviorAdmin",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System).PromptOnSecureDesktop",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile",
+        "C:\\WINDOWS' , 'System Directory",
+        "%WINDIR%\\system32' , 'Boot Device",
+        "C:\\pagefile.sys' , 'Domain",
+        "C:\\path\\to\\file.txt",
+        "%TEMP%\\keylogger.txt",
+        "%PROGRAMDATA%\\PatchMyPCIntuneLogs -it di -fo -ea 'silentlycontinue')\\'PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%TEMP%\\PatchMyPC-SoftwareUpdateDetectionScript.log",
+        "%WINDIR%\\Temp\\svczHost.exe",
+        "%WINDIR%\\Temp\\svczHost.exe",
+        "%WINDIR%\\Temp\\svczHost.exe",
+        "%TEMP%\\keylogger.txt",
+        "%TEMP%\\keylogger.txt",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\RegSvckezhpnrcsgiudoys.exe",
+        "%WINDIR%\\zLUDzD\\Windowspowershell\\v1.0\\powershell",
+        "%WINDIR%\\sysDzD\\Windowspowershell\\v1.0\\powershell",
+        "%APPDATA%\\Logs",
+        "%APPDATA%\\Logs\\Report.ps1",
+        "%APPDATA%\\Logs\\Loader.vbs",
+        "%APPDATA%\\Logs\\Report.ps1",
+        "%APPDATA%\\Logs\\install.ps1",
+        "%APPDATA%\\Logs\\install.vbs",
+        "%APPDATA%\\Logs\\install.ps1",
+        "%APPDATA%\\Logs\\t.png",
+        "%APPDATA%\\Logs\\t.png",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+        "%APPDATA%\\Logs\\Report.ps1",
+        "%APPDATA%\\Logs\\t.png",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\aspnet_compiler.exe''}catch{",
+        "%APPDATA%\\Logs\\install.ps1",
+        "%APPDATA%\\Logs\\install.vbs",
+        "%APPDATA%\\Logs"
+      ]
+    }
+  }
+}

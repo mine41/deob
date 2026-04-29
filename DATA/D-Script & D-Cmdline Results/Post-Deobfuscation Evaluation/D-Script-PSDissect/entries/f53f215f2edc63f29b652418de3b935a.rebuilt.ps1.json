@@ -1,0 +1,146 @@
+﻿{
+  "file": "f53f215f2edc63f29b652418de3b935a.rebuilt.ps1",
+  "sampleId": "f53f215f2edc63f29b652418de3b935a",
+  "rawInstructionCount": 3999,
+  "instructionCount": 3999,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "new-object",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.TimeSpan.FromSeconds",
+    "get-date",
+    "get-date",
+    "test-path",
+    "powershell.exe",
+    "System.Management.Automation.PSObject.ReleaseMutex",
+    "System.Management.Automation.PSObject.Dispose"
+  ],
+  "normalizedActionSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "new-object",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.TimeSpan.FromSeconds",
+    "get-date",
+    "get-date",
+    "test-path",
+    "powershell.exe",
+    "System.Management.Automation.PSObject.Dispose"
+  ],
+  "normalizedActionCount": 12,
+  "effectiveActionSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "new-object",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.TimeSpan.FromSeconds",
+    "get-date",
+    "get-date",
+    "test-path",
+    "powershell.exe",
+    "System.Management.Automation.PSObject.Dispose"
+  ],
+  "effectiveActionCount": 12,
+  "rawApiSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "new-object",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.TimeSpan.FromSeconds",
+    "get-date",
+    "get-date",
+    "test-path",
+    "powershell.exe",
+    "System.Management.Automation.PSObject.ReleaseMutex",
+    "System.Management.Automation.PSObject.Dispose"
+  ],
+  "normalizedApiSequence": [
+    "foreach-object",
+    "invoke-expression",
+    "new-object",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "new-object",
+    "System.Management.Automation.PSObject.IsInRole",
+    "System.TimeSpan.FromSeconds",
+    "get-date",
+    "get-date",
+    "test-path",
+    "powershell.exe",
+    "System.Management.Automation.PSObject.Dispose"
+  ],
+  "normalizedApiCount": 12,
+  "apiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 3987,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 102250,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 46,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

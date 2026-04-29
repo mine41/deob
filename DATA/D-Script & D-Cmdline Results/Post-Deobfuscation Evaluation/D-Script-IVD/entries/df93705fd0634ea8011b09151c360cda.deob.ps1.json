@@ -1,0 +1,90 @@
+﻿{
+  "file": "df93705fd0634ea8011b09151c360cda.deob.ps1",
+  "sampleId": "df93705fd0634ea8011b09151c360cda",
+  "rawInstructionCount": 1429,
+  "instructionCount": 1429,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "Invoke-PowerShellTcp",
+    "foreach-object",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes"
+  ],
+  "normalizedActionSequence": [
+    "Invoke-PowerShellTcp",
+    "foreach-object",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes"
+  ],
+  "normalizedActionCount": 4,
+  "effectiveActionSequence": [
+    "Invoke-PowerShellTcp",
+    "foreach-object",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes"
+  ],
+  "effectiveActionCount": 4,
+  "rawApiSequence": [
+    "Invoke-PowerShellTcp",
+    "foreach-object",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes"
+  ],
+  "normalizedApiSequence": [
+    "Invoke-PowerShellTcp",
+    "foreach-object",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes"
+  ],
+  "normalizedApiCount": 4,
+  "apiSequence": [],
+  "recordedImportantApiCount": 0,
+  "importantApiCount": 0,
+  "importantApiState": "empty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1425,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 0,
+  "effectiveApiSequence": [],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 8,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 883,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 364,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 55,
+  "deobfuscationScore": 45,
+  "apiSequenceCoverage": "complete"
+}

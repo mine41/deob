@@ -1,0 +1,122 @@
+﻿{
+  "file": "127bcaf2afdf495167e9175f0a241179.deob.ps1",
+  "sampleId": "127bcaf2afdf495167e9175f0a241179",
+  "rawInstructionCount": 397,
+  "instructionCount": 397,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-sleep",
+    "rename-item",
+    "start-sleep",
+    "invoke-expression",
+    "rundll32.exe",
+    "start-sleep",
+    "get-process"
+  ],
+  "normalizedActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "rename-item",
+    "invoke-expression",
+    "rundll32.exe",
+    "get-process"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "rename-item",
+    "invoke-expression",
+    "rundll32.exe",
+    "get-process"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "start-sleep",
+    "rename-item",
+    "start-sleep",
+    "invoke-expression",
+    "rundll32.exe",
+    "start-sleep",
+    "get-process"
+  ],
+  "normalizedApiSequence": [
+    "System.Convert.FromBase64String",
+    "System.IO.File.WriteAllBytes",
+    "rename-item",
+    "invoke-expression",
+    "rundll32.exe",
+    "get-process"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "System.IO.File.WriteAllBytes",
+    "rename-item",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 391,
+  "stubbedSinkCount": 3,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllBytes",
+    "rename-item",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "FileWrite|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 786607,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 66,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,112 @@
+﻿{
+  "file": "success\\187d4bf61954e6ad990271f25a66b3c7",
+  "sampleId": "187d4bf61954e6ad990271f25a66b3c7",
+  "rawInstructionCount": 957,
+  "instructionCount": 957,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.String.IsNullOrEmpty",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "write-host",
+    "invoke-restmethod",
+    "write-host"
+  ],
+  "normalizedActionSequence": [
+    "System.String.IsNullOrEmpty",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "write-host",
+    "invoke-restmethod",
+    "write-host"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "System.String.IsNullOrEmpty",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "write-host",
+    "invoke-restmethod",
+    "write-host"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "System.String.IsNullOrEmpty",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "write-host",
+    "invoke-restmethod",
+    "write-host"
+  ],
+  "normalizedApiSequence": [
+    "System.String.IsNullOrEmpty",
+    "System.Text.ASCIIEncoding+ASCIIEncodingSealed.GetBytes",
+    "System.Convert.ToBase64String",
+    "write-host",
+    "invoke-restmethod",
+    "write-host"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "invoke-restmethod"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 951,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "invoke-restmethod"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "invoke-restmethod"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "invoke-restmethod"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-restmethod"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "Download"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "Download"
+  ],
+  "capabilitySignature": "Download",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 635,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 176,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

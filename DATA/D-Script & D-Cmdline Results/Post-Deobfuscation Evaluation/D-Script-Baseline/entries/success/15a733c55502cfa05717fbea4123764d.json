@@ -1,0 +1,132 @@
+﻿{
+  "file": "success\\15a733c55502cfa05717fbea4123764d",
+  "sampleId": "15a733c55502cfa05717fbea4123764d",
+  "rawInstructionCount": 881,
+  "instructionCount": 881,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "invoke-expression",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedActionSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "invoke-expression",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "invoke-expression",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "invoke-expression",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedApiSequence": [
+    "System.String.Replace",
+    "System.String.Replace",
+    "invoke-expression",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "invoke-expression",
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 873,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "dynamicCapabilityCount": 3,
+  "dynamicCapabilitySequence": [
+    "ScriptExec",
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "effectiveCapabilityCount": 5,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "CompileCSharp",
+    "RemoteMemoryWrite",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "ScriptExec|CompileCSharp|RemoteMemoryWrite|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 3595,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 266,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 7,
+  "deobfuscationScore": 93,
+  "apiSequenceCoverage": "fallback_appended"
+}

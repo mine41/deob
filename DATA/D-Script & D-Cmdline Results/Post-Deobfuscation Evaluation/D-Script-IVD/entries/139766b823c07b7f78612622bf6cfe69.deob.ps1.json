@@ -1,0 +1,142 @@
+﻿{
+  "file": "139766b823c07b7f78612622bf6cfe69.deob.ps1",
+  "sampleId": "139766b823c07b7f78612622bf6cfe69",
+  "rawInstructionCount": 988,
+  "instructionCount": 988,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "eybig.LoadLibrary",
+    "eybig.GetProcAddress",
+    "eybig.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "eybig.LoadLibrary",
+    "eybig.GetProcAddress",
+    "eybig.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "add-type",
+    "eybig.LoadLibrary",
+    "eybig.GetProcAddress",
+    "eybig.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "add-type",
+    "eybig.LoadLibrary",
+    "eybig.GetProcAddress",
+    "eybig.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "eybig.LoadLibrary",
+    "eybig.GetProcAddress",
+    "eybig.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Math.Max",
+    "Win32Functions.Win32.VirtualAlloc",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 978,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "Win32Functions.Win32.CreateThread"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy",
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "staticCapabilityCount": 3,
+  "staticCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "effectiveCapabilityCount": 4,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite",
+    "RemoteMemoryAlloc",
+    "RemoteThreadCreate"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryWrite|RemoteMemoryAlloc|RemoteThreadCreate",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1729,
+  "byteArrayLiteralBytes": 6,
+  "astNodeCount": 664,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 2,
+  "obfuscationScore": 9,
+  "deobfuscationScore": 91,
+  "apiSequenceCoverage": "fallback_appended"
+}

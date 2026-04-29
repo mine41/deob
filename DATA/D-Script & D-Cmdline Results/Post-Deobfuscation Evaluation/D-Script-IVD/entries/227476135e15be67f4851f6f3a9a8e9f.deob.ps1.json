@@ -1,0 +1,125 @@
+﻿{
+  "file": "227476135e15be67f4851f6f3a9a8e9f.deob.ps1",
+  "sampleId": "227476135e15be67f4851f6f3a9a8e9f",
+  "rawInstructionCount": 920,
+  "instructionCount": 920,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-strictmode",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadData",
+    "obama",
+    "System.AppDomain.GetAssemblies",
+    "where-object",
+    "new-object",
+    "bush",
+    "new-object"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "System.Net.WebClient.DownloadData",
+    "obama",
+    "System.AppDomain.GetAssemblies",
+    "where-object",
+    "new-object",
+    "bush",
+    "new-object"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "new-object",
+    "System.Net.WebClient.DownloadData",
+    "obama",
+    "System.AppDomain.GetAssemblies",
+    "where-object",
+    "new-object",
+    "bush",
+    "new-object"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "set-strictmode",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadData",
+    "obama",
+    "System.AppDomain.GetAssemblies",
+    "where-object",
+    "new-object",
+    "bush",
+    "new-object"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "System.Net.WebClient.DownloadData",
+    "obama",
+    "System.AppDomain.GetAssemblies",
+    "where-object",
+    "new-object",
+    "bush",
+    "new-object"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 912,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadData"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "RemoteMemoryAlloc"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "RemoteMemoryAlloc"
+  ],
+  "capabilitySignature": "Download|RemoteMemoryAlloc",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 908,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 325,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

@@ -1,0 +1,99 @@
+﻿{
+  "file": "50aac8cbf2d159764775ee15ec718972.deob.ps1",
+  "sampleId": "50aac8cbf2d159764775ee15ec718972",
+  "rawInstructionCount": 228,
+  "instructionCount": 228,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "convertto-securestring",
+    "System.Runtime.InteropServices.Marshal.SecureStringToGlobalAllocAnsi",
+    "System.Runtime.InteropServices.Marshal.ReadByte",
+    "get-variable",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "convertto-securestring",
+    "System.Runtime.InteropServices.Marshal.SecureStringToGlobalAllocAnsi",
+    "System.Runtime.InteropServices.Marshal.ReadByte",
+    "get-variable",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "convertto-securestring",
+    "System.Runtime.InteropServices.Marshal.SecureStringToGlobalAllocAnsi",
+    "System.Runtime.InteropServices.Marshal.ReadByte",
+    "get-variable",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "convertto-securestring",
+    "System.Runtime.InteropServices.Marshal.SecureStringToGlobalAllocAnsi",
+    "System.Runtime.InteropServices.Marshal.ReadByte",
+    "get-variable",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "convertto-securestring",
+    "System.Runtime.InteropServices.Marshal.SecureStringToGlobalAllocAnsi",
+    "System.Runtime.InteropServices.Marshal.ReadByte",
+    "get-variable",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 223,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 170602,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 50,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 20,
+  "deobfuscationScore": 80,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,111 @@
+﻿{
+  "file": "success\\c17d373614bf7e1a27ae7c65491f7b08",
+  "sampleId": "c17d373614bf7e1a27ae7c65491f7b08",
+  "rawInstructionCount": 258,
+  "instructionCount": 258,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "start-sleep",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "start-sleep",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "recordedImportantApiCount": 5,
+  "importantApiCount": 5,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 253,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 5,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "schtasks.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "FileWrite"
+  ],
+  "capabilitySignature": "FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 440183,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 62,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 32,
+  "deobfuscationScore": 68,
+  "apiSequenceCoverage": "fallback_appended"
+}

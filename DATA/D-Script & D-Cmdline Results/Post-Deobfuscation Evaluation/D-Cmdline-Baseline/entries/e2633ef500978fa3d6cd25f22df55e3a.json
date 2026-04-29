@@ -1,0 +1,110 @@
+﻿{
+  "file": "e2633ef500978fa3d6cd25f22df55e3a",
+  "sampleId": "e2633ef500978fa3d6cd25f22df55e3a",
+  "rawInstructionCount": 698,
+  "instructionCount": 698,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Net.WebRequest.Create",
+    "System.Net.HttpWebRequest.GetResponse",
+    "write-output",
+    "invoke-expression",
+    "write-output",
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "System.Net.WebRequest.Create",
+    "System.Net.HttpWebRequest.GetResponse",
+    "write-output",
+    "invoke-expression",
+    "write-output"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "System.Net.WebRequest.Create",
+    "System.Net.HttpWebRequest.GetResponse",
+    "write-output",
+    "invoke-expression",
+    "write-output"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "System.Net.WebRequest.Create",
+    "System.Net.HttpWebRequest.GetResponse",
+    "write-output",
+    "invoke-expression",
+    "write-output",
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "System.Net.WebRequest.Create",
+    "System.Net.HttpWebRequest.GetResponse",
+    "write-output",
+    "invoke-expression",
+    "write-output"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "System.Net.WebRequest.Create",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "cmdline",
+  "normalizedMode": "script",
+  "normalizeStatus": "decoded_cmdline",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 2,
+  "instructionNoiseCount": 693,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "start-sleep",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "System.Net.WebRequest.Create",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 220,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 86,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 25,
+  "deobfuscationScore": 75,
+  "apiSequenceCoverage": "fallback_appended"
+}

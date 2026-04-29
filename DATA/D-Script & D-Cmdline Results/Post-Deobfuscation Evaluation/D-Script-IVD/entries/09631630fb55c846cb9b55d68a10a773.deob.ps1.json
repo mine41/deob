@@ -1,0 +1,105 @@
+﻿{
+  "file": "09631630fb55c846cb9b55d68a10a773.deob.ps1",
+  "sampleId": "09631630fb55c846cb9b55d68a10a773",
+  "rawInstructionCount": 264,
+  "instructionCount": 264,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "Win32.LoadLibrary",
+    "Win32.GetProcAddress",
+    "Win32.VirtualProtect",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 259,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "System.Runtime.InteropServices.Marshal.Copy"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp",
+    "RemoteMemoryWrite"
+  ],
+  "capabilitySignature": "CompileCSharp|RemoteMemoryWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 921,
+  "byteArrayLiteralBytes": 35,
+  "astNodeCount": 127,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 4,
+  "deobfuscationScore": 96,
+  "apiSequenceCoverage": "fallback_appended"
+}

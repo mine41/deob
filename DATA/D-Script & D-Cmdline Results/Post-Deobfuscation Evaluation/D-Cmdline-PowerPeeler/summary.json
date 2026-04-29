@@ -1,0 +1,56 @@
+﻿{
+  "totalSamples": 375,
+  "instructionCaptureEligible": 371,
+  "instructionCountZero": 1,
+  "actionRecordEmpty": 62,
+  "actionRecordEmptyButInstructionsPresent": 61,
+  "importantApiNonEmpty": 270,
+  "importantApiEmpty": 105,
+  "capabilityNonEmpty": 296,
+  "averageObfuscationScore": 13.63,
+  "averageWrapperDepth": 0.04,
+  "comparisonSafety": [
+    {
+      "safety": "partial_visibility",
+      "count": 157
+    },
+    {
+      "safety": "safe_with_stubbed",
+      "count": 154
+    },
+    {
+      "safety": "safe",
+      "count": 60
+    },
+    {
+      "safety": "unsafe_timeout",
+      "count": 3
+    },
+    {
+      "safety": "unsafe_normalize_failed",
+      "count": 1
+    }
+  ],
+  "detectedModes": [
+    {
+      "mode": "deob",
+      "count": 375
+    }
+  ],
+  "normalizedModes": [
+    {
+      "mode": "script",
+      "count": 374
+    },
+    {
+      "mode": "deob",
+      "count": 1
+    }
+  ],
+  "instructionCountSources": [
+    {
+      "source": "instruction_list",
+      "count": 375
+    }
+  ]
+}

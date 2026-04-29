@@ -1,0 +1,102 @@
+﻿{
+  "file": "4b4a83b9fa96f60fc3ed0b78fdf72f80.rebuilt.ps1",
+  "sampleId": "4b4a83b9fa96f60fc3ed0b78fdf72f80",
+  "rawInstructionCount": 630,
+  "instructionCount": 630,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "normalizedActionCount": 2,
+  "effectiveActionSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "effectiveActionCount": 2,
+  "rawApiSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "normalizedApiCount": 2,
+  "apiSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 628,
+  "stubbedSinkCount": 3,
+  "stubbedSinks": [
+    "invoke-restmethod",
+    "invoke-restmethod",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-restmethod",
+    "invoke-restmethod"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 292,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 104,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 7,
+  "deobfuscationScore": 93,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

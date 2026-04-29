@@ -1,0 +1,2088 @@
+{
+  "AnalyzerVersion": "Detect-SensitiveData",
+  "ChunkId": 84,
+  "ChunkSignature": "754cb278573341e5b4afe36b5c3d981e621cba7331c3ea033be2889b23b87e92",
+  "FileCount": 34,
+  "ChunkResult": {
+    "ProcessedFiles": 34,
+    "SkippedFiles": 0,
+    "CollectedValues": {
+      "IP": [
+        "192.168.1.103",
+        "192.168.1.103",
+        "192.168.1.101",
+        "192.168.1.101",
+        "192.168.1.102",
+        "192.168.1.102",
+        "192.168.1.103",
+        "192.168.0.212",
+        "192.168.0.212",
+        "192.168.0.212",
+        "185.181.10.234",
+        "185.181.10.234",
+        "185.181.10.234",
+        "185.181.10.234",
+        "185.181.10.234",
+        "185.181.10.234",
+        "185.181.10.234",
+        "185.181.10.234"
+      ],
+      "RegKey": [
+        " HKLM:\\Software",
+        " HKLM:\\SOFTWARE",
+        " HKCU:\\SOFTWARE",
+        " HKCU:\\SOFTWARE",
+        " HKLM:\\SOFTWARE"
+      ],
+      "FilePathRaw": [
+        "C:\\Temp\\blah.exe",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\ -Recurse",
+        "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\temp\\backup.exe",
+        "C:\\Windows",
+        "C:\\Windows\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+        "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe') {",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\Microsoft.NET\\Framework",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe') {",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\, C",
+        "C:\\Documents and Settings\\, or C",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "C:\\ProgramData\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe",
+        "$env:temp\\keylogger.txt",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\5b3d160e54cd6f6eda807babe79a9336.mp4')) {",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\SOFTWARE\\Microsoft\\SQMClient\\Windows",
+        "U:\\$AI66gg\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "C:\\Windows\\System32\\Tasks\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator' 'Microsoft\\Windows\\Customer Experience Improvement Program",
+        "C:\\Windows\\Temp\\tmp4071.tmp",
+        "C:\\Wi^^nd^^ows\\Mi^^cro^^soft.NET\\Frame^^work\\v4.0.30319\\asp^^net_com^^pi^^ler.^^e^^x^^e",
+        "C:\\Temp\\blah.exe",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\ -Recurse",
+        "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\temp\\backup.exe",
+        "C:\\Windows",
+        "C:\\Windows\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+        "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe') {",
+        "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\Microsoft.NET\\Framework",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe') {",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\, C",
+        "C:\\Documents and Settings\\, or C",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "C:\\ProgramData\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+        "C:\\UACBypassTest.",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').PromptOnSecureDesktop",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+        "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        "C:\\Users\\hacker\\AppData\\Roaming\\.zip'; Set-Location $pzip; Start-Process client32.exe; $fstr=$pzip+'\\client32.exe'; $rnm='ONEN0TEupdate_'+$rrnum; New-ItemProperty -Path 'HKCU",
+        "C:\\Users\\hacker\\AppData\\Roaming\\.zip",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "C:\\Windows\\System32\\wscript.exe ${__",
+        "C:\\Windows\\System32\\wscript.exe ${__",
+        "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "C:\\Program Files (x86",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Alzipupdate",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "$env:TMP\\sysupdate.exe",
+        "$env:TMP\\config.json",
+        "$env:TMP\\networkservice.exe",
+        "$env:TMP\\update.ps1",
+        "$env:TMP\\sysguard.exe",
+        "$env:TMP\\clean.bat",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysupdate.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\config.json",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\networkservice.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysguard.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\update.ps1",
+        "C:\\Users\\hacker\\update.ps1",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysupdate.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\networkservice.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysguard.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\config.json",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\networkservice.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysguard.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysupdate.exe",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\update.ps1",
+        "C:\\Users\\hacker\\update.ps1",
+        "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+        "$env:userprofile\\desktop\\prekvapko.txt",
+        "C:\\Users\\Public\\.jpg",
+        "C:\\Users\\Public\\.jpg' 'https",
+        "C:\\Users\\Public\\.jpg' '.jpg",
+        "C:\\Users\\Public\\.jpg', $gwrjvytq",
+        "C:\\Users\\Public' + '\\' + '.vbs",
+        "C:\\Users\\Public\\.vbs', [Convert",
+        "C:\\WINDOWS\\ + 'regsvr32.exe",
+        "C:\\Users\\Public\\.vbs",
+        "C:\\Users\\Public\\.vbs' '.vbs",
+        "M:\\SOFTWARE\\RBSoftVCe7W').'9pq9psx",
+        "M:\\SOFTWARE\\RBSoftVCe7W"
+      ],
+      "URL": [
+        "https://raw.githubusercontent.com/mattifestation/PSReflect/master/PSReflect.psm1",
+        "http://poshcode.org/2189",
+        "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa446671",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379624",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379554",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/ms681987",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+        "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+        "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+        "http://www.greyhathacker.net/?p=738",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+        "http://www.fuzzysecurity.com/tutorials/16.html",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "https://funoverip.net/2016/02/mcafee-sitelist-xml-password-decryption/",
+        "https://github.com/tfairane/HackStory/blob/master/McAfeePrivesc.md",
+        "https://www.syss.de/fileadmin/dokumente/Publikationen/2011/SySS_2011_Deeg_Privilege_Escalation_via_Antivirus_Software.pdf",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "http://www.obscuresecurity.blogspot.com/2012/05/gpp-password-retrieval-with-powershell.html",
+        "https://github.com/mattifestation/PowerSploit/blob/master/Recon/Get-GPPPassword.ps1",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/gpp.rb",
+        "http://esec-pentest.sogeti.com/exploiting-windows-2008-group-policy-preferences",
+        "http://rewtdance.blogspot.com/2012/06/exploiting-windows-2008-group-policy.html",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "http://192.168.0.212:8008",
+        "http://192.168.0.212:8008/login/process.php",
+        "http://192.168.0.212:8008/login/process.php",
+        "http://mydatayxnhzcs.tech/file/docs/$fileName",
+        "http://mydatayxnhzcs.tech/file/docs/5b3d160e54cd6f6eda807babe79a9336.mp4",
+        "http://mydatayxnhzcs.tech/file/docs/5b3d160e54cd6f6eda807babe79a9336.mp4",
+        "https://raw.githubusercontent.com/mattifestation/PSReflect/master/PSReflect.psm1",
+        "http://poshcode.org/2189",
+        "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa446671",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379624",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379554",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379626",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379630",
+        "http://forum.sysinternals.com/tip-easy-way-to-enable-privileges_topic15745.html",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://msdn.microsoft.com/en-us/library/windows/desktop/ms681987",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+        "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+        "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+        "http://www.greyhathacker.net/?p=738",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+        "http://www.fuzzysecurity.com/tutorials/16.html",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+        "http://www.netspi.com",
+        "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+        "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "https://funoverip.net/2016/02/mcafee-sitelist-xml-password-decryption/",
+        "https://github.com/tfairane/HackStory/blob/master/McAfeePrivesc.md",
+        "https://www.syss.de/fileadmin/dokumente/Publikationen/2011/SySS_2011_Deeg_Privilege_Escalation_via_Antivirus_Software.pdf",
+        "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+        "http://www.obscuresecurity.blogspot.com/2012/05/gpp-password-retrieval-with-powershell.html",
+        "https://github.com/mattifestation/PowerSploit/blob/master/Recon/Get-GPPPassword.ps1",
+        "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/gpp.rb",
+        "http://esec-pentest.sogeti.com/exploiting-windows-2008-group-policy-preferences",
+        "http://rewtdance.blogspot.com/2012/06/exploiting-windows-2008-group-policy.html",
+        "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+        "https://stackapk.com/pages/apostrk.php",
+        "https://stackapk.com/pages/apostrk.php",
+        "https://stackapk.com/pages/apostrk.php",
+        "http://pingguo5.atwebpages.com/nu/",
+        "http://pingguo5.atwebpages.com/nu/mo.txt",
+        "https://de.gsearch.com.de/api/sysupdate.exe",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/sysupdate.exe",
+        "https://de.gsearch.com.de/api/config.json",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/config.json",
+        "https://de.gsearch.com.de/api/networkservice.exe",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/networkservice.exe",
+        "https://de.gsearch.com.de/api/update.ps1",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/update.ps1",
+        "https://de.gsearch.com.de/api/sysguard.exe",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/sysguard.exe",
+        "https://de.gsearch.com.de/api/clean.bat",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/clean.bat",
+        "https://de.gsearch.com.de/api/update.ps1",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/update.ps1",
+        "http://185.181.10.234/E5DB0E07C3D7BE80V520/update.ps1",
+        "https://de.gsearch.com.de/api/update.ps1",
+        "https://example.com/decoy.jpg",
+        "https://example.com/decoy.jpg",
+        "https://example.com/decoy.jpg",
+        "https://example.com/decoy.jpg"
+      ],
+      "FilePath": [
+        "C:\\Temp\\blah.exe",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\ -Recurse",
+        "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\temp\\backup.exe",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe') {",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe') {",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\, C",
+        "C:\\Documents and Settings\\, or C",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "%PROGRAMDATA%\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "%TEMP%\\keylogger.txt",
+        "%TEMP%\\5b3d160e54cd6f6eda807babe79a9336.mp4')) {",
+        "%TEMP%\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "%TEMP%\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+        "C:\\Windows \\System32\\fodhelper.exe",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "A:\\\"\"\"\",\"\"\"\"B:\\\"\"\"\",\"\"\"\"C:\\Users\\\"\"\"\",\"\"\"\"C:\\Program Files\\\"\"\"\",\"\"\"\"C:\\Program Files (x86)\\\"\"\"\",\"\"\"\"D:\\\"\"\"\",\"\"\"\"E:\\\"\"\"\",\"\"\"\"F:\\\"\"\"\",\"\"\"\"G:\\\"\"\"\",\"\"\"\"H:\\\"\"\"\",\"\"\"\"I:\\\"\"\"\",\"\"\"\"J:\\\"\"\"\",\"\"\"\"K:\\\"\"\"\",\"\"\"\"L:\\\"\"\"\",\"\"\"\"M:\\\"\"\"\",\"\"\"\"N:\\\"\"\"\",\"\"\"\"O:\\\"\"\"\",\"\"\"\"P:\\\"\"\"\",\"\"\"\"Q:\\\"\"\"\",\"\"\"\"R:\\\"\"\"\",\"\"\"\"S:\\\"\"\"\",\"\"\"\"T:\\\"\"\"\",\"\"\"\"U:\\\"\"\"\",\"\"\"\"V:\\\"\"\"\",\"\"\"\"W:\\\"\"\"\",\"\"\"\"X:\\\"\"\"\",\"\"\"\"Y:\\\"\"\"\",\"\"\"\"Z:",
+        "M:\\SOFTWARE\\Microsoft\\SQMClient\\Windows",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+        "%WINDIR%\\System32\\Tasks\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator' 'Microsoft\\Windows\\Customer Experience Improvement Program",
+        "%WINDIR%\\Temp\\tmp4071.tmp",
+        "C:\\Wi^^nd^^ows\\Mi^^cro^^soft.NET\\Frame^^work\\v4.0.30319\\asp^^net_com^^pi^^ler.^^e^^x^^e",
+        "C:\\Wi^^nd^^ows\\Mi^^cro^^soft.NET\\Frame^^work\\v4.0.30319\\asp^^net_com^^pi^^ler.^^e^^x^^e",
+        "C:\\Temp\\blah.exe",
+        "C:\\Temp\\config.ini",
+        "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\ -Recurse",
+        "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+        "C:\\temp\\backup.exe",
+        "%WINDIR%\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "C:\\Program Files",
+        "C:\\Program Files (x86",
+        "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+        "C:\\Windows')) {",
+        "C:\\Program Files')) {",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+        "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+        "c:\\sysprep\\sysprep.xml",
+        "c:\\sysprep\\sysprep.inf",
+        "c:\\sysprep.inf",
+        "C:\\test2\\web.config",
+        "C:\\inetpub\\wwwroot",
+        "C:\\inetpub\\wwwroot\\web.config",
+        "C:\\App1            C",
+        "C:\\inetpub\\wwwroot C",
+        "C:\\App2            C",
+        "C:\\App2            C",
+        "D:\\App3            D",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+        "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe') {",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+        "%WINDIR%\\Microsoft.NET\\Framework",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe') {",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "C:\\Program Files\\, C",
+        "C:\\Documents and Settings\\, or C",
+        "C:\\Program Files\\','C",
+        "C:\\Documents and Settings\\','C",
+        "%PROGRAMDATA%\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+        "C:\\UACBypassTest.",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').PromptOnSecureDesktop",
+        "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+        "U:\\Software\\Classes\\mscfile",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+        "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+        "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+        "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        "%APPDATA%\\.zip",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "%WINDIR%\\System32\\wscript.exe ${__",
+        "%WINDIR%\\System32\\wscript.exe ${__",
+        "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "C:\\Program Files (x86",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Alzipupdate",
+        "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "%TEMP%\\sysupdate.exe",
+        "%TEMP%\\config.json",
+        "%TEMP%\\networkservice.exe",
+        "%TEMP%\\update.ps1",
+        "%TEMP%\\sysguard.exe",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\sysupdate.exe",
+        "%TEMP%\\config.json",
+        "%TEMP%\\networkservice.exe",
+        "%TEMP%\\sysguard.exe",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\update.ps1",
+        "%USERPROFILE%\\update.ps1",
+        "%TEMP%\\sysupdate.exe",
+        "%TEMP%\\networkservice.exe",
+        "%TEMP%\\sysguard.exe",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\config.json",
+        "%TEMP%\\networkservice.exe",
+        "%TEMP%\\sysguard.exe",
+        "%TEMP%\\sysupdate.exe",
+        "%TEMP%\\update.ps1",
+        "%USERPROFILE%\\update.ps1",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\update.ps1",
+        "%TEMP%\\sysupdate.exe",
+        "%TEMP%\\sysguard.exe",
+        "%TEMP%\\networkservice.exe",
+        "%TEMP%\\clean.bat",
+        "%TEMP%\\config.json",
+        "%USERPROFILE%\\desktop\\prekvapko.txt",
+        "%PUBLIC%\\.jpg",
+        "%PUBLIC%\\.jpg' 'https",
+        "%PUBLIC%\\.jpg' '.jpg",
+        "%USERPROFILE%\\' + '.vbs",
+        "%PUBLIC%\\.vbs', [Convert",
+        "%WINDIR%\\ + 'regsvr32.exe",
+        "%PUBLIC%\\.vbs",
+        "%PUBLIC%\\.vbs' '.vbs",
+        "%PUBLIC%\\.jpg",
+        "%PUBLIC%\\.vbs",
+        "M:\\SOFTWARE\\RBSoftVCe7W').'9pq9psx",
+        "M:\\SOFTWARE\\RBSoftVCe7W"
+      ]
+    },
+    "FileDetails": [
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 381747,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "aa8267ce7c80972095feba169056b039.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 47,
+          "Values": [
+            "C:\\Temp\\blah.exe",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\ -Recurse",
+            "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\temp\\backup.exe",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe') {",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe') {",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\, C",
+            "C:\\Documents and Settings\\, or C",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "%PROGRAMDATA%\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe"
+          ],
+          "Total": 55
+        },
+        "FileSize": 563288,
+        "IP": {
+          "Unique": 3,
+          "Values": [
+            "192.168.1.103",
+            "192.168.1.103",
+            "192.168.1.101",
+            "192.168.1.101",
+            "192.168.1.102",
+            "192.168.1.102",
+            "192.168.1.103"
+          ],
+          "Total": 7
+        },
+        "URL": {
+          "Unique": 28,
+          "Values": [
+            "https://raw.githubusercontent.com/mattifestation/PSReflect/master/PSReflect.psm1",
+            "http://poshcode.org/2189",
+            "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa446671",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379624",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379554",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/ms681987",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+            "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+            "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+            "http://www.greyhathacker.net/?p=738",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+            "http://www.fuzzysecurity.com/tutorials/16.html",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+            "https://funoverip.net/2016/02/mcafee-sitelist-xml-password-decryption/",
+            "https://github.com/tfairane/HackStory/blob/master/McAfeePrivesc.md",
+            "https://www.syss.de/fileadmin/dokumente/Publikationen/2011/SySS_2011_Deeg_Privilege_Escalation_via_Antivirus_Software.pdf",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+            "http://www.obscuresecurity.blogspot.com/2012/05/gpp-password-retrieval-with-powershell.html",
+            "https://github.com/mattifestation/PowerSploit/blob/master/Recon/Get-GPPPassword.ps1",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/gpp.rb",
+            "http://esec-pentest.sogeti.com/exploiting-windows-2008-group-policy-preferences",
+            "http://rewtdance.blogspot.com/2012/06/exploiting-windows-2008-group-policy.html",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/"
+          ],
+          "Total": 35
+        },
+        "FilePathRaw": {
+          "Unique": 50,
+          "Values": [
+            "C:\\Temp\\blah.exe",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\ -Recurse",
+            "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\temp\\backup.exe",
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+            "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe') {",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\Microsoft.NET\\Framework",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe') {",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\, C",
+            "C:\\Documents and Settings\\, or C",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "C:\\ProgramData\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe"
+          ],
+          "Total": 58
+        },
+        "FileName": "aa83ce1b5ab6446f9715c676b7a62460.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1951,
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "192.168.0.212",
+            "192.168.0.212",
+            "192.168.0.212"
+          ],
+          "Total": 3
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://192.168.0.212:8008",
+            "http://192.168.0.212:8008/login/process.php",
+            "http://192.168.0.212:8008/login/process.php"
+          ],
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "aa83e8f659cec0a9ab10f9c973d04833.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 12829,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "aa955103b4d129ddf585a058b022e00e.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%TEMP%\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "FileSize": 3119,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:temp\\keylogger.txt"
+          ],
+          "Total": 1
+        },
+        "FileName": "aaab0353f0e654b405aaff1cca630aa2.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 3144557,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "aaac7556346c93f561dc67ae17276289.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\Software"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 5,
+          "Values": [
+            "%TEMP%\\5b3d160e54cd6f6eda807babe79a9336.mp4')) {",
+            "%TEMP%\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "%TEMP%\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          ],
+          "Total": 7
+        },
+        "FileSize": 14896,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://mydatayxnhzcs.tech/file/docs/$fileName",
+            "http://mydatayxnhzcs.tech/file/docs/5b3d160e54cd6f6eda807babe79a9336.mp4",
+            "http://mydatayxnhzcs.tech/file/docs/5b3d160e54cd6f6eda807babe79a9336.mp4"
+          ],
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\5b3d160e54cd6f6eda807babe79a9336.mp4')) {",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\5b3d160e54cd6f6eda807babe79a9336.mp4",
+            "C:\\Windows \\System32\\fodhelper.exe",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          ],
+          "Total": 7
+        },
+        "FileName": "aabf43120ca29f1c44e9ecdcd85faddb.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 3,
+          "Values": [
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "A:\\\"\"\"\",\"\"\"\"B:\\\"\"\"\",\"\"\"\"C:\\Users\\\"\"\"\",\"\"\"\"C:\\Program Files\\\"\"\"\",\"\"\"\"C:\\Program Files (x86)\\\"\"\"\",\"\"\"\"D:\\\"\"\"\",\"\"\"\"E:\\\"\"\"\",\"\"\"\"F:\\\"\"\"\",\"\"\"\"G:\\\"\"\"\",\"\"\"\"H:\\\"\"\"\",\"\"\"\"I:\\\"\"\"\",\"\"\"\"J:\\\"\"\"\",\"\"\"\"K:\\\"\"\"\",\"\"\"\"L:\\\"\"\"\",\"\"\"\"M:\\\"\"\"\",\"\"\"\"N:\\\"\"\"\",\"\"\"\"O:\\\"\"\"\",\"\"\"\"P:\\\"\"\"\",\"\"\"\"Q:\\\"\"\"\",\"\"\"\"R:\\\"\"\"\",\"\"\"\"S:\\\"\"\"\",\"\"\"\"T:\\\"\"\"\",\"\"\"\"U:\\\"\"\"\",\"\"\"\"V:\\\"\"\"\",\"\"\"\"W:\\\"\"\"\",\"\"\"\"X:\\\"\"\"\",\"\"\"\"Y:\\\"\"\"\",\"\"\"\"Z:"
+          ],
+          "Total": 3
+        },
+        "FileSize": 7896,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "C:\\Program Files",
+            "C:\\Program Files (x86"
+          ],
+          "Total": 2
+        },
+        "FileName": "aadd2ae070253ddc2aa2b2f150930a7b.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 4,
+          "Values": [
+            "M:\\SOFTWARE\\Microsoft\\SQMClient\\Windows",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "%WINDIR%\\System32\\Tasks\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator' 'Microsoft\\Windows\\Customer Experience Improvement Program",
+            "%WINDIR%\\Temp\\tmp4071.tmp"
+          ],
+          "Total": 6
+        },
+        "FileSize": 2172907,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 5,
+          "Values": [
+            "M:\\SOFTWARE\\Microsoft\\SQMClient\\Windows",
+            "U:\\$AI66gg\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Publishers\\{cabe18a5-69b9-4eec-bed0-fa080ed05a3b}\\ChannelReferences\\0",
+            "C:\\Windows\\System32\\Tasks\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator' 'Microsoft\\Windows\\Customer Experience Improvement Program",
+            "C:\\Windows\\Temp\\tmp4071.tmp"
+          ],
+          "Total": 7
+        },
+        "FileName": "aaedebe3574f07e81650437739ac9357.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 256256,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ab00412a77a16ebab5e1f574977e56f2.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Wi^^nd^^ows\\Mi^^cro^^soft.NET\\Frame^^work\\v4.0.30319\\asp^^net_com^^pi^^ler.^^e^^x^^e",
+            "C:\\Wi^^nd^^ows\\Mi^^cro^^soft.NET\\Frame^^work\\v4.0.30319\\asp^^net_com^^pi^^ler.^^e^^x^^e"
+          ],
+          "Total": 2
+        },
+        "FileSize": 228505,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Wi^^nd^^ows\\Mi^^cro^^soft.NET\\Frame^^work\\v4.0.30319\\asp^^net_com^^pi^^ler.^^e^^x^^e"
+          ],
+          "Total": 1
+        },
+        "FileName": "ab2a1f573270f0745562ea5c4c872392.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\SOFTWARE"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 53,
+          "Values": [
+            "C:\\Temp\\blah.exe",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\ -Recurse",
+            "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\temp\\backup.exe",
+            "%WINDIR%\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%WINDIR%\\system32\\inetsrv\\appcmd.exe list config",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe') {",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe list vdir",
+            "%WINDIR%\\Microsoft.NET\\Framework",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe') {",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppool",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\, C",
+            "C:\\Documents and Settings\\, or C",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "%PROGRAMDATA%\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+            "C:\\UACBypassTest.",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').PromptOnSecureDesktop",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list apppools",
+            "%WINDIR%\\System32\\inetsrv\\appcmd.exe list vdir",
+            "%WINDIR%\\System32\\InetSRV\\appcmd.exe",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          ],
+          "Total": 61
+        },
+        "FileSize": 606073,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 31,
+          "Values": [
+            "https://raw.githubusercontent.com/mattifestation/PSReflect/master/PSReflect.psm1",
+            "http://poshcode.org/2189",
+            "http://stackoverflow.com/questions/28029872/retrieving-security-descriptor-and-getting-number-for-filesystemrights",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa446671",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379624",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379554",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379626",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/aa379630",
+            "http://forum.sysinternals.com/tip-easy-way-to-enable-privileges_topic15745.html",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://msdn.microsoft.com/en-us/library/windows/desktop/ms681987",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/local/trusted_service_path.rb",
+            "https://www.mandiant.com/blog/malware-persistence-windows-registry/",
+            "http://blogs.msdn.com/b/larryosterman/archive/2004/07/19/187752.aspx",
+            "http://www.greyhathacker.net/?p=738",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/windows_autologin.rb",
+            "http://www.fuzzysecurity.com/tutorials/16.html",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "https://raw2.github.com/NetSPI/cmdsql/master/cmdsql.aspx",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/darkoperator/Posh-SecMod/blob/master/PostExploitation/PostExploitation.psm1",
+            "http://www.netspi.com",
+            "http://www.iis.net/learn/get-started/getting-started-with-iis/getting-started-with-appcmdexe",
+            "http://msdn.microsoft.com/en-us/library/k6h9cz8h",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+            "https://funoverip.net/2016/02/mcafee-sitelist-xml-password-decryption/",
+            "https://github.com/tfairane/HackStory/blob/master/McAfeePrivesc.md",
+            "https://www.syss.de/fileadmin/dokumente/Publikationen/2011/SySS_2011_Deeg_Privilege_Escalation_via_Antivirus_Software.pdf",
+            "https://github.com/funoverip/mcafee-sitelist-pwd-decryption/",
+            "http://www.obscuresecurity.blogspot.com/2012/05/gpp-password-retrieval-with-powershell.html",
+            "https://github.com/mattifestation/PowerSploit/blob/master/Recon/Get-GPPPassword.ps1",
+            "https://github.com/rapid7/metasploit-framework/blob/master/modules/post/windows/gather/credentials/gpp.rb",
+            "http://esec-pentest.sogeti.com/exploiting-windows-2008-group-policy-preferences",
+            "http://rewtdance.blogspot.com/2012/06/exploiting-windows-2008-group-policy.html",
+            "https://rohnspowershellblog.wordpress.com/2013/03/19/viewing-service-acls/"
+          ],
+          "Total": 38
+        },
+        "FilePathRaw": {
+          "Unique": 56,
+          "Values": [
+            "C:\\Temp\\blah.exe",
+            "C:\\Temp\\config.ini",
+            "C:\\Temp\\blah.exe           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Temp\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\ -Recurse",
+            "C:\\Vuln\\blah.bat           {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\Vuln\\config.ini         {ReadAttributes, ReadCo... NT AUTHORITY\\Authentic...",
+            "C:\\temp\\backup.exe",
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "C:\\Windows",
+            "C:\\Program Files",
+            "C:\\Program Files (x86",
+            "M:\\System\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs",
+            "C:\\Windows\\System32')) -and (-not (Test-Path -Path $ModulePath)) -and ($KnownDLLs -NotContains $Module.ModuleName)) {",
+            "C:\\Windows')) {",
+            "C:\\Program Files')) {",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunService",
+            "M:\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnceService",
+            "c:\\sysprep\\sysprep.xml",
+            "c:\\sysprep\\sysprep.inf",
+            "c:\\sysprep.inf",
+            "C:\\test2\\web.config",
+            "C:\\inetpub\\wwwroot",
+            "C:\\inetpub\\wwwroot\\web.config",
+            "C:\\App1            C",
+            "C:\\inetpub\\wwwroot C",
+            "C:\\App2            C",
+            "C:\\App2            C",
+            "D:\\App3            D",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list sites",
+            "%systemroot%\\system32\\inetsrv\\appcmd.exe list config",
+            "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe') {",
+            "C:\\Windows\\System32\\InetSRV\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\Microsoft.NET\\Framework",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe') {",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list apppool",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "$Env:SystemRoot\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\Program Files\\, C",
+            "C:\\Documents and Settings\\, or C",
+            "C:\\Program Files\\','C",
+            "C:\\Documents and Settings\\','C",
+            "C:\\ProgramData\\Microsoft\\Group Policy\\History\\{32C4C89F-7",
+            "C:\\UACBypassTest.",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').ConsentPromptBehaviorAdmin",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System').PromptOnSecureDesktop",
+            "U:\\Software\\Classes\\mscfile\\shell\\open\\command",
+            "U:\\Software\\Classes\\mscfile",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list apppools",
+            "C:\\WINDOWS\\System32\\inetsrv\\appcmd.exe list vdir",
+            "C:\\WINDOWS\\System32\\InetSRV\\appcmd.exe",
+            "M:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"
+          ],
+          "Total": 64
+        },
+        "FileName": "ab344ce82a22f81ddedf4bab3e7507e6.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 89344,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ab416d84a4bacc811688e6391615b7ce.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKCU:\\SOFTWARE"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "%APPDATA%\\.zip",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+          ],
+          "Total": 2
+        },
+        "FileSize": 1156,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "https://stackapk.com/pages/apostrk.php",
+            "https://stackapk.com/pages/apostrk.php",
+            "https://stackapk.com/pages/apostrk.php"
+          ],
+          "Total": 3
+        },
+        "FilePathRaw": {
+          "Unique": 3,
+          "Values": [
+            "C:\\Users\\hacker\\AppData\\Roaming\\.zip'; Set-Location $pzip; Start-Process client32.exe; $fstr=$pzip+'\\client32.exe'; $rnm='ONEN0TEupdate_'+$rrnum; New-ItemProperty -Path 'HKCU",
+            "C:\\Users\\hacker\\AppData\\Roaming\\.zip",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+          ],
+          "Total": 3
+        },
+        "FileName": "ab57005ec2261f158587dee2faec281a.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%WINDIR%\\System32\\wscript.exe ${__",
+            "%WINDIR%\\System32\\wscript.exe ${__"
+          ],
+          "Total": 2
+        },
+        "FileSize": 18465,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Windows\\System32\\wscript.exe ${__",
+            "C:\\Windows\\System32\\wscript.exe ${__"
+          ],
+          "Total": 2
+        },
+        "FileName": "ab5812af257e7b2c13614d9d3d1175a6.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1476,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ab586dd0a3d8dc473e8a12a5a4c6a484.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe"
+          ],
+          "Total": 1
+        },
+        "FileSize": 57283,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\MSBuild.exe"
+          ],
+          "Total": 1
+        },
+        "FileName": "ab5e9b7eac6fa7c9bd32c2a02ed3c159.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKCU:\\SOFTWARE"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 3,
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "C:\\Program Files (x86",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Alzipupdate",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+          ],
+          "Total": 4
+        },
+        "FileSize": 4869,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 2,
+          "Values": [
+            "http://pingguo5.atwebpages.com/nu/",
+            "http://pingguo5.atwebpages.com/nu/mo.txt"
+          ],
+          "Total": 2
+        },
+        "FilePathRaw": {
+          "Unique": 3,
+          "Values": [
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "C:\\Program Files (x86",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'Alzipupdate",
+            "U:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+          ],
+          "Total": 4
+        },
+        "FileName": "ab6073ee2590470d18260fdf51b33d0e.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 7,
+          "Values": [
+            "%TEMP%\\sysupdate.exe",
+            "%TEMP%\\config.json",
+            "%TEMP%\\networkservice.exe",
+            "%TEMP%\\update.ps1",
+            "%TEMP%\\sysguard.exe",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\sysupdate.exe",
+            "%TEMP%\\config.json",
+            "%TEMP%\\networkservice.exe",
+            "%TEMP%\\sysguard.exe",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\update.ps1",
+            "%USERPROFILE%\\update.ps1",
+            "%TEMP%\\sysupdate.exe",
+            "%TEMP%\\networkservice.exe",
+            "%TEMP%\\sysguard.exe",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\config.json",
+            "%TEMP%\\networkservice.exe",
+            "%TEMP%\\sysguard.exe",
+            "%TEMP%\\sysupdate.exe",
+            "%TEMP%\\update.ps1",
+            "%USERPROFILE%\\update.ps1",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\update.ps1",
+            "%TEMP%\\sysupdate.exe",
+            "%TEMP%\\sysguard.exe",
+            "%TEMP%\\networkservice.exe",
+            "%TEMP%\\clean.bat",
+            "%TEMP%\\config.json"
+          ],
+          "Total": 32
+        },
+        "FileSize": 5694,
+        "IP": {
+          "Unique": 1,
+          "Values": [
+            "185.181.10.234",
+            "185.181.10.234",
+            "185.181.10.234",
+            "185.181.10.234",
+            "185.181.10.234",
+            "185.181.10.234",
+            "185.181.10.234",
+            "185.181.10.234"
+          ],
+          "Total": 8
+        },
+        "URL": {
+          "Unique": 12,
+          "Values": [
+            "https://de.gsearch.com.de/api/sysupdate.exe",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/sysupdate.exe",
+            "https://de.gsearch.com.de/api/config.json",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/config.json",
+            "https://de.gsearch.com.de/api/networkservice.exe",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/networkservice.exe",
+            "https://de.gsearch.com.de/api/update.ps1",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/update.ps1",
+            "https://de.gsearch.com.de/api/sysguard.exe",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/sysguard.exe",
+            "https://de.gsearch.com.de/api/clean.bat",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/clean.bat",
+            "https://de.gsearch.com.de/api/update.ps1",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/update.ps1",
+            "http://185.181.10.234/E5DB0E07C3D7BE80V520/update.ps1",
+            "https://de.gsearch.com.de/api/update.ps1"
+          ],
+          "Total": 16
+        },
+        "FilePathRaw": {
+          "Unique": 13,
+          "Values": [
+            "$env:TMP\\sysupdate.exe",
+            "$env:TMP\\config.json",
+            "$env:TMP\\networkservice.exe",
+            "$env:TMP\\update.ps1",
+            "$env:TMP\\sysguard.exe",
+            "$env:TMP\\clean.bat",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysupdate.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\config.json",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\networkservice.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysguard.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\update.ps1",
+            "C:\\Users\\hacker\\update.ps1",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysupdate.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\networkservice.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysguard.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\config.json",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\networkservice.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysguard.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\sysupdate.exe",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\update.ps1",
+            "C:\\Users\\hacker\\update.ps1",
+            "C:\\Users\\hacker\\AppData\\Local\\Temp\\clean.bat"
+          ],
+          "Total": 26
+        },
+        "FileName": "ab7fa48f22111ff8bdc7046b6c8fbe4e.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2633,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ab9ea20c9c823c889c53c167306fd0b4.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2944,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "abb8f8943a0f8c9d4218e81f275a577c"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 10261309,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "abbc533d6d24c1b10113f93e49012486.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 480360,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "abbd0e43103909a3f8d586b3f0cbd304.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2237,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "abbedf19940ca9a0f1f796e69ae3dfcf.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 263,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "abc5e86c7b7d06e72dbd03c4b51ff199.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 7302,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "abd0735ff23af16b2ce5f236295ec0e3.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 24500,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ac20eaac8992f4f7e835bd583dc1f6c5.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 1993,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ac31a555787ed0eae9cbadd276e95e0c.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 767,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ac4b5864024fbb430d3498815ef4b710.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 2274934,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ac4d5b43ffb3e9db001daec754c5af4b.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileSize": 49806,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FileName": "ac647b8271c37f8efe6c4aa24eb1fba7.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 1,
+          "Values": [
+            "%USERPROFILE%\\desktop\\prekvapko.txt"
+          ],
+          "Total": 1
+        },
+        "FileSize": 3889,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 1,
+          "Values": [
+            "$env:userprofile\\desktop\\prekvapko.txt"
+          ],
+          "Total": 1
+        },
+        "FileName": "ac6f9e1840ebbf23badaeb20fa4d4022.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePath": {
+          "Unique": 8,
+          "Values": [
+            "%PUBLIC%\\.jpg",
+            "%PUBLIC%\\.jpg' 'https",
+            "%PUBLIC%\\.jpg' '.jpg",
+            "%USERPROFILE%\\' + '.vbs",
+            "%PUBLIC%\\.vbs', [Convert",
+            "%WINDIR%\\ + 'regsvr32.exe",
+            "%PUBLIC%\\.vbs",
+            "%PUBLIC%\\.vbs' '.vbs",
+            "%PUBLIC%\\.jpg",
+            "%PUBLIC%\\.vbs"
+          ],
+          "Total": 10
+        },
+        "FileSize": 22097,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 1,
+          "Values": [
+            "https://example.com/decoy.jpg",
+            "https://example.com/decoy.jpg",
+            "https://example.com/decoy.jpg",
+            "https://example.com/decoy.jpg"
+          ],
+          "Total": 4
+        },
+        "FilePathRaw": {
+          "Unique": 9,
+          "Values": [
+            "C:\\Users\\Public\\.jpg",
+            "C:\\Users\\Public\\.jpg' 'https",
+            "C:\\Users\\Public\\.jpg' '.jpg",
+            "C:\\Users\\Public\\.jpg', $gwrjvytq",
+            "C:\\Users\\Public' + '\\' + '.vbs",
+            "C:\\Users\\Public\\.vbs', [Convert",
+            "C:\\WINDOWS\\ + 'regsvr32.exe",
+            "C:\\Users\\Public\\.vbs",
+            "C:\\Users\\Public\\.vbs' '.vbs"
+          ],
+          "Total": 9
+        },
+        "FileName": "ac876876add13f4c522a8bf9354a6c34.rebuilt.ps1"
+      },
+      {
+        "RegKey": {
+          "Unique": 1,
+          "Values": [
+            " HKLM:\\SOFTWARE"
+          ],
+          "Total": 1
+        },
+        "FilePath": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SOFTWARE\\RBSoftVCe7W').'9pq9psx",
+            "M:\\SOFTWARE\\RBSoftVCe7W"
+          ],
+          "Total": 2
+        },
+        "FileSize": 299,
+        "IP": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "URL": {
+          "Unique": 0,
+          "Values": [],
+          "Total": 0
+        },
+        "FilePathRaw": {
+          "Unique": 2,
+          "Values": [
+            "M:\\SOFTWARE\\RBSoftVCe7W').'9pq9psx",
+            "M:\\SOFTWARE\\RBSoftVCe7W"
+          ],
+          "Total": 2
+        },
+        "FileName": "ac9082063ecbac36df60e08884efb932.rebuilt.ps1"
+      }
+    ],
+    "Errors": [],
+    "Summary": {
+      "FilePath": {
+        "TotalOccurrences": 189,
+        "FilesContaining": 15
+      },
+      "FilePathRaw": {
+        "TotalOccurrences": 188,
+        "FilesContaining": 15
+      },
+      "RegKey": {
+        "TotalOccurrences": 5,
+        "FilesContaining": 5
+      },
+      "IP": {
+        "TotalOccurrences": 18,
+        "FilesContaining": 3
+      },
+      "URL": {
+        "TotalOccurrences": 104,
+        "FilesContaining": 8
+      }
+    },
+    "FailedFiles": 0
+  }
+}

@@ -1,0 +1,122 @@
+﻿{
+  "file": "success\\ab5e9b7eac6fa7c9bd32c2a02ed3c159",
+  "sampleId": "ab5e9b7eac6fa7c9bd32c2a02ed3c159",
+  "rawInstructionCount": 284,
+  "instructionCount": 284,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "start-sleep",
+    "invoke-expression",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFGFG",
+    "System.IO.File.Exists",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedActionSequence": [
+    "invoke-expression",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFGFG",
+    "System.IO.File.Exists",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "invoke-expression",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFGFG",
+    "System.IO.File.Exists",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "start-sleep",
+    "invoke-expression",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFGFG",
+    "System.IO.File.Exists",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedApiSequence": [
+    "invoke-expression",
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFGFG",
+    "System.IO.File.Exists",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.String.Replace",
+    "System.Convert.FromBase64String",
+    "System.Reflection.Assembly.Load"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "invoke-expression",
+    "System.Reflection.Assembly.Load"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 276,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "System.Reflection.Assembly.Load"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 56899,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 81,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

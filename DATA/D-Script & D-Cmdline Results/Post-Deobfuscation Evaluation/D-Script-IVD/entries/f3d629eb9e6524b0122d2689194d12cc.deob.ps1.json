@@ -1,0 +1,131 @@
+﻿{
+  "file": "f3d629eb9e6524b0122d2689194d12cc.deob.ps1",
+  "sampleId": "f3d629eb9e6524b0122d2689194d12cc",
+  "rawInstructionCount": 535,
+  "instructionCount": 535,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "go",
+    "where-object",
+    "System.Convert.ToInt32",
+    "System.IO.File.WriteAllBytes",
+    "start-sleep",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "go",
+    "where-object",
+    "System.Convert.ToInt32",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "go",
+    "where-object",
+    "System.Convert.ToInt32",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "go",
+    "where-object",
+    "System.Convert.ToInt32",
+    "System.IO.File.WriteAllBytes",
+    "start-sleep",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "go",
+    "where-object",
+    "System.Convert.ToInt32",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 5,
+  "importantApiCount": 5,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 527,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 5,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllText",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ProcessSpawn",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "FileWrite|ProcessSpawn|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 4,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 319791,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 95,
+  "dynamicExecPrimitiveCount": 4,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 72,
+  "deobfuscationScore": 28,
+  "apiSequenceCoverage": "fallback_appended"
+}

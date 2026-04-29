@@ -1,0 +1,117 @@
+﻿{
+  "file": "f4e4cb4dd8add96c5401ba1bf618553a.deob.ps1",
+  "sampleId": "f4e4cb4dd8add96c5401ba1bf618553a",
+  "rawInstructionCount": 132,
+  "instructionCount": 132,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-variable",
+    "invoke-webrequest",
+    "select-object",
+    "out-file",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "set-variable",
+    "invoke-webrequest",
+    "select-object",
+    "out-file",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "set-variable",
+    "invoke-webrequest",
+    "select-object",
+    "out-file",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "set-variable",
+    "invoke-webrequest",
+    "select-object",
+    "out-file",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "set-variable",
+    "invoke-webrequest",
+    "select-object",
+    "out-file",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "invoke-webrequest",
+    "out-file",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 127,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "invoke-webrequest",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest",
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-webrequest",
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "invoke-webrequest",
+    "out-file",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "Download",
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "FileWrite"
+  ],
+  "capabilitySignature": "Download|FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 697,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 37,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 12,
+  "deobfuscationScore": 88,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

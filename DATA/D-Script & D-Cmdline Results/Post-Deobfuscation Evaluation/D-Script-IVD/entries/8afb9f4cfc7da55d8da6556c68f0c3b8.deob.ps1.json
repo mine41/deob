@@ -1,0 +1,113 @@
+﻿{
+  "file": "8afb9f4cfc7da55d8da6556c68f0c3b8.deob.ps1",
+  "sampleId": "8afb9f4cfc7da55d8da6556c68f0c3b8",
+  "rawInstructionCount": 1200,
+  "instructionCount": 1200,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "test-path",
+    "get-itemproperty",
+    "set-location",
+    "get-childitem",
+    "where-object",
+    "join-path",
+    "join-path",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "test-path",
+    "get-itemproperty",
+    "get-childitem",
+    "where-object",
+    "join-path",
+    "join-path",
+    "start-process"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "test-path",
+    "get-itemproperty",
+    "get-childitem",
+    "where-object",
+    "join-path",
+    "join-path",
+    "start-process"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "test-path",
+    "get-itemproperty",
+    "set-location",
+    "get-childitem",
+    "where-object",
+    "join-path",
+    "join-path",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "test-path",
+    "get-itemproperty",
+    "get-childitem",
+    "where-object",
+    "join-path",
+    "join-path",
+    "start-process"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "start-process"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1193,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 379,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 130,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "fallback_appended"
+}

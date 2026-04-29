@@ -1,0 +1,120 @@
+﻿{
+  "file": "caad8ed577bcac8b45751dcc5cd75e0d.deob.ps1",
+  "sampleId": "caad8ed577bcac8b45751dcc5cd75e0d",
+  "rawInstructionCount": 327,
+  "instructionCount": 327,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "DllMiner",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "System.Convert.FromBase64CharArray",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionSequence": [
+    "DllMiner",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Convert.FromBase64CharArray",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "DllMiner",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Convert.FromBase64CharArray",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "DllMiner",
+    "new-object",
+    "System.Management.Automation.PSObject.DownloadString",
+    "System.Convert.FromBase64CharArray",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiSequence": [
+    "DllMiner",
+    "new-object",
+    "System.Net.WebClient.DownloadString",
+    "System.Convert.FromBase64CharArray",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "System.Net.WebClient.DownloadString",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 321,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "System.Net.WebClient.DownloadString",
+    "System.IO.File.WriteAllBytes",
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 3,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "FileWrite",
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "Download|FileWrite|ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 257,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 84,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

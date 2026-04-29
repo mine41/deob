@@ -1,0 +1,100 @@
+﻿{
+  "file": "success\\4caa57dd063c3fec1c9ac27c22c74f67",
+  "sampleId": "4caa57dd063c3fec1c9ac27c22c74f67",
+  "rawInstructionCount": 275,
+  "instructionCount": 275,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "powershell.exe",
+    "new-object",
+    "System.Diagnostics.Process.Start"
+  ],
+  "normalizedActionSequence": [
+    "powershell.exe",
+    "new-object",
+    "System.Diagnostics.Process.Start"
+  ],
+  "normalizedActionCount": 3,
+  "effectiveActionSequence": [
+    "powershell.exe",
+    "new-object",
+    "System.Diagnostics.Process.Start"
+  ],
+  "effectiveActionCount": 3,
+  "rawApiSequence": [
+    "powershell.exe",
+    "new-object",
+    "System.Diagnostics.Process.Start"
+  ],
+  "normalizedApiSequence": [
+    "powershell.exe",
+    "new-object",
+    "System.Diagnostics.Process.Start"
+  ],
+  "normalizedApiCount": 3,
+  "apiSequence": [
+    "powershell.exe",
+    "System.Diagnostics.Process.Start"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 272,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "powershell.exe",
+    "System.Diagnostics.Process.Start"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "powershell.exe",
+    "System.Diagnostics.Process.Start"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "powershell.exe",
+    "System.Diagnostics.Process.Start"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "powershell.exe",
+    "System.Diagnostics.Process.Start"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 3,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 2572,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 84,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 28,
+  "deobfuscationScore": 72,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

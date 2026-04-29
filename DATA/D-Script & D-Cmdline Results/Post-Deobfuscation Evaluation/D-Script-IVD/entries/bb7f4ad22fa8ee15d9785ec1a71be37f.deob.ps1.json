@@ -1,0 +1,121 @@
+{
+  "file": "bb7f4ad22fa8ee15d9785ec1a71be37f.deob.ps1",
+  "sampleId": "bb7f4ad22fa8ee15d9785ec1a71be37f",
+  "rawInstructionCount": 953,
+  "instructionCount": 953,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": false,
+  "timedOut": true,
+  "runtimeError": "The process cannot access the file '.\\sandbox\\log.txt' because it is being used by another process.",
+  "rawActionSequence": [
+    "Update-Windows",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedActionSequence": [
+    "Update-Windows",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "Update-Windows",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "Update-Windows",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "System.Management.Automation.SteppablePipeline.Begin",
+    "System.Management.Automation.SteppablePipeline.Process",
+    "System.Management.Automation.SteppablePipeline.End",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedApiSequence": [
+    "Update-Windows",
+    "System.Security.Principal.WindowsIdentity.GetCurrent",
+    "System.Security.Principal.WindowsPrincipal.IsInRole",
+    "System.Management.Automation.CommandInvocationIntrinsics.GetCommand",
+    "System.Management.Automation.ScriptBlock.GetSteppablePipeline",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "unsafe_timeout",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 946,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ScriptExec",
+    "FileWrite"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ScriptExec",
+    "FileWrite"
+  ],
+  "capabilitySignature": "ScriptExec|FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1572,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 159,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "fallback_appended"
+}

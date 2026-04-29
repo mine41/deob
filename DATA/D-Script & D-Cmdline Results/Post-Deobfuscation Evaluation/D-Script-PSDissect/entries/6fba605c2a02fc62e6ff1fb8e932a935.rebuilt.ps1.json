@@ -1,0 +1,109 @@
+﻿{
+  "file": "6fba605c2a02fc62e6ff1fb8e932a935.rebuilt.ps1",
+  "sampleId": "6fba605c2a02fc62e6ff1fb8e932a935",
+  "rawInstructionCount": 500,
+  "instructionCount": 500,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "foreach-object",
+    "System.String.Substring",
+    "System.IO.Path.GetRandomFileName",
+    "join-path",
+    "System.IO.File.WriteAllBytes",
+    "regsvr32.exe"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "foreach-object",
+    "System.String.Substring",
+    "System.IO.Path.GetRandomFileName",
+    "join-path",
+    "System.IO.File.WriteAllBytes",
+    "regsvr32.exe"
+  ],
+  "normalizedActionCount": 7,
+  "effectiveActionSequence": [
+    "new-object",
+    "foreach-object",
+    "System.String.Substring",
+    "System.IO.Path.GetRandomFileName",
+    "join-path",
+    "System.IO.File.WriteAllBytes",
+    "regsvr32.exe"
+  ],
+  "effectiveActionCount": 7,
+  "rawApiSequence": [
+    "new-object",
+    "foreach-object",
+    "System.String.Substring",
+    "System.IO.Path.GetRandomFileName",
+    "join-path",
+    "System.IO.File.WriteAllBytes",
+    "regsvr32.exe"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "foreach-object",
+    "System.String.Substring",
+    "System.IO.Path.GetRandomFileName",
+    "join-path",
+    "System.IO.File.WriteAllBytes",
+    "regsvr32.exe"
+  ],
+  "normalizedApiCount": 7,
+  "apiSequence": [
+    "System.IO.File.WriteAllBytes"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 493,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.IO.File.WriteAllBytes"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "FileWrite"
+  ],
+  "capabilitySignature": "FileWrite",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 95371,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 115,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 20,
+  "deobfuscationScore": 80,
+  "apiSequenceCoverage": "fallback_appended"
+}

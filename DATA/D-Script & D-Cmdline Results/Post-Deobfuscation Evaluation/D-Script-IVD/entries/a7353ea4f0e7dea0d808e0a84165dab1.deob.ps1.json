@@ -1,0 +1,112 @@
+﻿{
+  "file": "a7353ea4f0e7dea0d808e0a84165dab1.deob.ps1",
+  "sampleId": "a7353ea4f0e7dea0d808e0a84165dab1",
+  "rawInstructionCount": 5027,
+  "instructionCount": 5027,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "write-output",
+    "start-process",
+    "write-host",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "write-output",
+    "start-process",
+    "write-host"
+  ],
+  "normalizedActionCount": 6,
+  "effectiveActionSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "write-output",
+    "start-process",
+    "write-host"
+  ],
+  "effectiveActionCount": 6,
+  "rawApiSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "write-output",
+    "start-process",
+    "write-host",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "InvokeAMSBP",
+    "get-random",
+    "foreach-object",
+    "write-output",
+    "start-process",
+    "write-host"
+  ],
+  "normalizedApiCount": 6,
+  "apiSequence": [
+    "start-process"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 5021,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "start-process"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "ProcessSpawn",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ProcessSpawn|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 4,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 514,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 4308,
+  "dynamicExecPrimitiveCount": 2,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 38,
+  "deobfuscationScore": 62,
+  "apiSequenceCoverage": "fallback_appended"
+}

@@ -1,0 +1,144 @@
+﻿{
+  "file": "34349a4a4183e369d2901d5230f1a6df",
+  "sampleId": "34349a4a4183e369d2901d5230f1a6df",
+  "rawInstructionCount": 602,
+  "instructionCount": 602,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadString",
+    "foreach-object",
+    "start-sleep",
+    "System.Management.Automation.PSObject.DownloadString",
+    "foreach-object",
+    "start-sleep",
+    "System.Management.Automation.PSObject.DownloadString",
+    "foreach-object",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadString",
+    "foreach-object",
+    "start-sleep",
+    "System.Management.Automation.PSObject.DownloadString",
+    "foreach-object",
+    "start-sleep",
+    "System.Management.Automation.PSObject.DownloadString",
+    "foreach-object",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object",
+    "System.Net.WebClient.DownloadString",
+    "foreach-object"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "cmdline",
+  "normalizedMode": "script",
+  "normalizeStatus": "decoded_cmdline",
+  "normalizedDepth": 1,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 3,
+  "instructionNoiseCount": 594,
+  "stubbedSinkCount": 6,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadString",
+    "start-sleep",
+    "System.Management.Automation.PSObject.DownloadString",
+    "start-sleep",
+    "System.Management.Automation.PSObject.DownloadString",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 3,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 3,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString",
+    "System.Net.WebClient.DownloadString"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 1,
+  "launcherCount": 1,
+  "encodedCommandCount": 1,
+  "stringLiteralBytes": 275,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 118,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 33,
+  "deobfuscationScore": 67,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

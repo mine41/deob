@@ -1,0 +1,87 @@
+﻿{
+  "file": "0525d03b0959eb8982270c7c7d25abdf.rebuilt.ps1",
+  "sampleId": "0525d03b0959eb8982270c7c7d25abdf",
+  "rawInstructionCount": 150,
+  "instructionCount": 150,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-content",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "set-content"
+  ],
+  "normalizedActionCount": 1,
+  "effectiveActionSequence": [
+    "set-content"
+  ],
+  "effectiveActionCount": 1,
+  "rawApiSequence": [
+    "set-content",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "set-content"
+  ],
+  "normalizedApiCount": 1,
+  "apiSequence": [
+    "set-content"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 149,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "set-content"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "FileWrite"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "FileWrite",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "FileWrite|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 3043,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 25,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 15,
+  "deobfuscationScore": 85,
+  "apiSequenceCoverage": "fallback_appended"
+}

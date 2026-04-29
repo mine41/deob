@@ -1,0 +1,94 @@
+﻿{
+  "file": "a08e7aef325a6db70d255748e11fa163.deob.ps1",
+  "sampleId": "a08e7aef325a6db70d255748e11fa163",
+  "rawInstructionCount": 508,
+  "instructionCount": 508,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "get-item",
+    "System.IO.Path.GetTempPath",
+    "join-path",
+    "invoke-item"
+  ],
+  "normalizedActionSequence": [
+    "get-item",
+    "System.IO.Path.GetTempPath",
+    "join-path",
+    "invoke-item"
+  ],
+  "normalizedActionCount": 4,
+  "effectiveActionSequence": [
+    "get-item",
+    "System.IO.Path.GetTempPath",
+    "join-path",
+    "invoke-item"
+  ],
+  "effectiveActionCount": 4,
+  "rawApiSequence": [
+    "get-item",
+    "System.IO.Path.GetTempPath",
+    "join-path",
+    "invoke-item"
+  ],
+  "normalizedApiSequence": [
+    "get-item",
+    "System.IO.Path.GetTempPath",
+    "join-path",
+    "invoke-item"
+  ],
+  "normalizedApiCount": 4,
+  "apiSequence": [
+    "invoke-item"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 504,
+  "stubbedSinkCount": 0,
+  "stubbedSinks": [],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "invoke-item"
+  ],
+  "dynamicCapabilityCount": 0,
+  "dynamicCapabilitySequence": [],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "Download"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "Download"
+  ],
+  "capabilitySignature": "Download",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 215,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 69,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 0,
+  "deobfuscationScore": 100,
+  "apiSequenceCoverage": "fallback_appended"
+}

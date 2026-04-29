@@ -1,0 +1,124 @@
+﻿{
+  "file": "73f809178ed23aa3e31fecc9118c6470.rebuilt.ps1",
+  "sampleId": "73f809178ed23aa3e31fecc9118c6470",
+  "rawInstructionCount": 1343,
+  "instructionCount": 1343,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-itemproperty",
+    "get-process",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "post_http",
+    "new-object",
+    "get-process",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "new-itemproperty",
+    "get-process",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "post_http",
+    "new-object",
+    "get-process",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "new-itemproperty",
+    "get-process",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "post_http",
+    "new-object",
+    "get-process",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "new-itemproperty",
+    "get-process",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "post_http",
+    "new-object",
+    "get-process",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "new-itemproperty",
+    "get-process",
+    "System.Text.UnicodeEncoding.GetBytes",
+    "System.Convert.ToBase64String",
+    "post_http",
+    "new-object",
+    "get-process",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "new-itemproperty",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1335,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "new-itemproperty",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "RegistryModify"
+  ],
+  "capabilitySignature": "RegistryModify",
+  "wrapperDepth": 0,
+  "launcherCount": 2,
+  "encodedCommandCount": 3,
+  "stringLiteralBytes": 9379,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 294,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 45,
+  "deobfuscationScore": 55,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

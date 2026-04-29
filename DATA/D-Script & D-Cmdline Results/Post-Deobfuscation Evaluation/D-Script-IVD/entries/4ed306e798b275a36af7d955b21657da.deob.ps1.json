@@ -1,0 +1,114 @@
+﻿{
+  "file": "4ed306e798b275a36af7d955b21657da.deob.ps1",
+  "sampleId": "4ed306e798b275a36af7d955b21657da",
+  "rawInstructionCount": 491,
+  "instructionCount": 491,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedActionSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedActionCount": 4,
+  "effectiveActionSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "effectiveActionCount": 4,
+  "rawApiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedApiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "normalizedApiCount": 4,
+  "apiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 487,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-expression",
+    "schtasks.exe"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 393,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 67,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 7,
+  "deobfuscationScore": 93,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

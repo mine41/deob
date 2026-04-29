@@ -1,0 +1,116 @@
+﻿{
+  "file": "a68bb3fedb85acd8ee1af9f0e4920bd4.rebuilt.ps1",
+  "sampleId": "a68bb3fedb85acd8ee1af9f0e4920bd4",
+  "rawInstructionCount": 460,
+  "instructionCount": 460,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "set-variable",
+    "foreach-object",
+    "set-item",
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "normalizedActionSequence": [
+    "set-variable",
+    "foreach-object",
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "set-variable",
+    "foreach-object",
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "set-variable",
+    "foreach-object",
+    "set-item",
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "normalizedApiSequence": [
+    "set-variable",
+    "foreach-object",
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 455,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "normalizedStubbedCount": 2,
+  "normalizedStubbedSequence": [
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 2,
+  "importantStubbedSequence": [
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "invoke-expression",
+    "powershell.exe",
+    "powershell.exe"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "capabilitySignature": "ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 45930,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 65,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 27,
+  "deobfuscationScore": 73,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

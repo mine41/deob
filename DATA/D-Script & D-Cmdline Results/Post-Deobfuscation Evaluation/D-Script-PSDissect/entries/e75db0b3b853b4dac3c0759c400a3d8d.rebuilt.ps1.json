@@ -1,0 +1,105 @@
+﻿{
+  "file": "e75db0b3b853b4dac3c0759c400a3d8d.rebuilt.ps1",
+  "sampleId": "e75db0b3b853b4dac3c0759c400a3d8d",
+  "rawInstructionCount": 1054,
+  "instructionCount": 1054,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "add-type",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "get-process",
+    "Microsoft.VisualBasic.Interaction.AppActivate",
+    "write-host",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "add-type",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "get-process",
+    "Microsoft.VisualBasic.Interaction.AppActivate",
+    "write-host"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "add-type",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "get-process",
+    "Microsoft.VisualBasic.Interaction.AppActivate",
+    "write-host"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "add-type",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "get-process",
+    "Microsoft.VisualBasic.Interaction.AppActivate",
+    "write-host",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "add-type",
+    "System.Reflection.Assembly.LoadWithPartialName",
+    "get-process",
+    "Microsoft.VisualBasic.Interaction.AppActivate",
+    "write-host"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "add-type"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1049,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "add-type"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 954,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 57,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 10,
+  "deobfuscationScore": 90,
+  "apiSequenceCoverage": "fallback_appended"
+}

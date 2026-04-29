@@ -1,0 +1,140 @@
+﻿{
+  "file": "fa68145f9f156b9eaa1391424678fbba.rebuilt.ps1",
+  "sampleId": "fa68145f9f156b9eaa1391424678fbba",
+  "rawInstructionCount": 1473,
+  "instructionCount": 1473,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "new-object",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "new-object",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedActionCount": 10,
+  "effectiveActionSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "new-object",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "effectiveActionCount": 10,
+  "rawApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "new-object",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Management.Automation.PSObject.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedApiSequence": [
+    "System.Reflection.RuntimeAssembly.GetType",
+    "System.RuntimeType.GetField",
+    "new-object",
+    "new-object",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "foreach-object",
+    "foreach-object",
+    "invoke-expression"
+  ],
+  "normalizedApiCount": 10,
+  "apiSequence": [
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "invoke-expression"
+  ],
+  "recordedImportantApiCount": 4,
+  "importantApiCount": 4,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 1463,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.DownloadData"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Net.WebClient.DownloadData"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 4,
+  "effectiveApiSequence": [
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebHeaderCollection.Add",
+    "System.Net.WebClient.DownloadData",
+    "invoke-expression"
+  ],
+  "dynamicCapabilityCount": 2,
+  "dynamicCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "ScriptExec"
+  ],
+  "effectiveCapabilityCount": 2,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "ScriptExec"
+  ],
+  "capabilitySignature": "Download|ScriptExec",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 2150,
+  "byteArrayLiteralBytes": 32,
+  "astNodeCount": 424,
+  "dynamicExecPrimitiveCount": 1,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 15,
+  "deobfuscationScore": 85,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

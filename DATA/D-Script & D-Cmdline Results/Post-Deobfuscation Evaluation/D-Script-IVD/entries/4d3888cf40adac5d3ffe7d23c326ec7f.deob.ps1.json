@@ -1,0 +1,122 @@
+﻿{
+  "file": "4d3888cf40adac5d3ffe7d23c326ec7f.deob.ps1",
+  "sampleId": "4d3888cf40adac5d3ffe7d23c326ec7f",
+  "rawInstructionCount": 1819,
+  "instructionCount": 1819,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-KeyLogger",
+    "add-type",
+    "new-item",
+    "start-sleep",
+    "API.Win32.GetAsyncKeyState"
+  ],
+  "normalizedActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-KeyLogger",
+    "add-type",
+    "new-item",
+    "API.Win32.GetAsyncKeyState"
+  ],
+  "normalizedActionCount": 8,
+  "effectiveActionSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-KeyLogger",
+    "add-type",
+    "new-item",
+    "API.Win32.GetAsyncKeyState"
+  ],
+  "effectiveActionCount": 8,
+  "rawApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-KeyLogger",
+    "add-type",
+    "new-item",
+    "start-sleep",
+    "API.Win32.GetAsyncKeyState"
+  ],
+  "normalizedApiSequence": [
+    "convertto-securestring",
+    "new-object",
+    "get-date",
+    "System.Management.Automation.PSObject.AddMinutes",
+    "Start-KeyLogger",
+    "add-type",
+    "new-item",
+    "API.Win32.GetAsyncKeyState"
+  ],
+  "normalizedApiCount": 8,
+  "apiSequence": [
+    "add-type",
+    "new-item"
+  ],
+  "recordedImportantApiCount": 2,
+  "importantApiCount": 2,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "partial_visibility",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 1811,
+  "stubbedSinkCount": 1,
+  "stubbedSinks": [
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 0,
+  "normalizedStubbedSequence": [],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 0,
+  "importantStubbedSequence": [],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 2,
+  "effectiveApiSequence": [
+    "add-type",
+    "new-item"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "staticCapabilityCount": 1,
+  "staticCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 0,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1596,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 256,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 1,
+  "obfuscationScore": 5,
+  "deobfuscationScore": 95,
+  "apiSequenceCoverage": "fallback_appended"
+}

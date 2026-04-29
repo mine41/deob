@@ -1,0 +1,120 @@
+﻿{
+  "file": "success\\a8c7945f32a8c72520ca0b97719d736f",
+  "sampleId": "a8c7945f32a8c72520ca0b97719d736f",
+  "rawInstructionCount": 841,
+  "instructionCount": 841,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": false,
+  "timedOut": true,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "System.Math.Ceiling",
+    "new-object"
+  ],
+  "normalizedActionSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "System.Math.Ceiling",
+    "new-object"
+  ],
+  "normalizedActionCount": 5,
+  "effectiveActionSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "System.Math.Ceiling",
+    "new-object"
+  ],
+  "effectiveActionCount": 5,
+  "rawApiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "System.Math.Ceiling",
+    "new-object"
+  ],
+  "normalizedApiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "System.Math.Ceiling",
+    "new-object"
+  ],
+  "normalizedApiCount": 5,
+  "apiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "recordedImportantApiCount": 3,
+  "importantApiCount": 3,
+  "importantApiState": "nonempty",
+  "detectedMode": "script",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "unsafe_timeout",
+  "apiNoiseCount": 0,
+  "instructionNoiseCount": 836,
+  "stubbedSinkCount": 3,
+  "stubbedSinks": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "normalizedStubbedCount": 3,
+  "normalizedStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 3,
+  "importantStubbedSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 3,
+  "effectiveApiSequence": [
+    "invoke-webrequest",
+    "invoke-webrequest",
+    "invoke-webrequest"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "Download"
+  ],
+  "staticCapabilityCount": 2,
+  "staticCapabilitySequence": [
+    "RegistryModify",
+    "CompileCSharp"
+  ],
+  "effectiveCapabilityCount": 3,
+  "effectiveCapabilitySequence": [
+    "Download",
+    "RegistryModify",
+    "CompileCSharp"
+  ],
+  "capabilitySignature": "Download|RegistryModify|CompileCSharp",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 1674,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 392,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 3,
+  "obfuscationScore": 19,
+  "deobfuscationScore": 81,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}

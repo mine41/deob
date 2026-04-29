@@ -1,0 +1,128 @@
+﻿{
+  "file": "7014c2533462824682e0236c2bcb719b.rebuilt.ps1",
+  "sampleId": "7014c2533462824682e0236c2bcb719b",
+  "rawInstructionCount": 2076,
+  "instructionCount": 2076,
+  "instructionCountSource": "instruction_list",
+  "instructionCaptureEligible": true,
+  "timedOut": false,
+  "runtimeError": null,
+  "rawActionSequence": [
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.Start",
+    "System.Management.Automation.PSObject.Connect",
+    "System.Management.Automation.PSObject.GetStream",
+    "start-sleep"
+  ],
+  "normalizedActionSequence": [
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "System.Diagnostics.Process.Start",
+    "System.Management.Automation.PSObject.Connect",
+    "System.Management.Automation.PSObject.GetStream"
+  ],
+  "normalizedActionCount": 9,
+  "effectiveActionSequence": [
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "System.Diagnostics.Process.Start",
+    "System.Management.Automation.PSObject.Connect",
+    "System.Management.Automation.PSObject.GetStream"
+  ],
+  "effectiveActionCount": 9,
+  "rawApiSequence": [
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "System.Management.Automation.PSObject.Start",
+    "System.Management.Automation.PSObject.Connect",
+    "System.Management.Automation.PSObject.GetStream",
+    "start-sleep"
+  ],
+  "normalizedApiSequence": [
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "new-object",
+    "System.Diagnostics.Process.Start",
+    "System.Management.Automation.PSObject.Connect",
+    "System.Management.Automation.PSObject.GetStream"
+  ],
+  "normalizedApiCount": 9,
+  "apiSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "recordedImportantApiCount": 1,
+  "importantApiCount": 1,
+  "importantApiState": "nonempty",
+  "detectedMode": "deob",
+  "normalizedMode": "script",
+  "normalizeStatus": "direct",
+  "normalizedDepth": 0,
+  "metricsMode": true,
+  "fairnessMode": "instruction_list_primary_v2_capability_v1",
+  "comparisonSafety": "safe_with_stubbed",
+  "apiNoiseCount": 1,
+  "instructionNoiseCount": 2067,
+  "stubbedSinkCount": 2,
+  "stubbedSinks": [
+    "System.Management.Automation.PSObject.Start",
+    "start-sleep"
+  ],
+  "normalizedStubbedCount": 1,
+  "normalizedStubbedSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "missingStableStubbedCount": 0,
+  "missingStableStubbedSequence": [],
+  "importantStubbedCount": 1,
+  "importantStubbedSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "missingImportantStubbedCount": 0,
+  "missingImportantStubbedSequence": [],
+  "effectiveApiCount": 1,
+  "effectiveApiSequence": [
+    "System.Diagnostics.Process.Start"
+  ],
+  "dynamicCapabilityCount": 1,
+  "dynamicCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "staticCapabilityCount": 0,
+  "staticCapabilitySequence": [],
+  "effectiveCapabilityCount": 1,
+  "effectiveCapabilitySequence": [
+    "ProcessSpawn"
+  ],
+  "capabilitySignature": "ProcessSpawn",
+  "wrapperDepth": 0,
+  "launcherCount": 1,
+  "encodedCommandCount": 0,
+  "stringLiteralBytes": 697,
+  "byteArrayLiteralBytes": 0,
+  "astNodeCount": 351,
+  "dynamicExecPrimitiveCount": 0,
+  "compilePrimitiveCount": 0,
+  "obfuscationScore": 6,
+  "deobfuscationScore": 94,
+  "apiSequenceCoverage": "complete_with_stubbed"
+}
