@@ -1,21 +1,3 @@
-<#PSScriptInfo
-.VERSION 3.4.0
-.GUID 5f167621-6abe-4153-a26c-f643e1716720
-.AUTHOR
-.DESCRIPTION This cmdlet is deprecated, a replacement might be found in the ObjectGraphTools module.
-.COMPANYNAME
-.COPYRIGHT
-.TAGS PSON PowerShell Object Notation Expression Serialize Stringify
-.LICENSE
-.PROJECTURI
-.ICON
-.EXTERNALMODULEDEPENDENCIES
-.REQUIREDSCRIPTS
-.EXTERNALSCRIPTDEPENDENCIES
-.RELEASENOTES
-.PRIVATEDATA
-#>
-
 <#
 .SYNOPSIS
     Serializes an object to a PowerShell expression.

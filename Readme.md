@@ -304,3 +304,5 @@ Common functions:
 - `Generate-CFG.ps1`: CFG generation and DOT export
 - `Execute-CFG.ps1`: execution engine and debug session API
 - `Ui-Localization.ps1`: bilingual UI text for debug and replay
+- `ast.ps1`: standalone AST helper for parsing PowerShell input through `Get-Ast`
+- `ConvertTo-Expression-origin.ps1`: serialization helper dot-sourced by `Execute-CFG.ps1`
