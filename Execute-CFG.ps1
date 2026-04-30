@@ -12052,22 +12052,25 @@ function Invoke-CFGStep {
 
         $varsBefore = @{}
         foreach ($varInfo in $currentNodeVarsRead) {
-            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
+            $varName = Get-CFGObjectPropertyValue -Object $varInfo -Name 'Name' -Default $null
+            if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varName)) {
                 Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
                 continue
             }
-            $actualVarName = $varInfo.Name
+            $actualVarName = [string]$varName
             if ($context.ScopeStack.Count -gt 0) {
                 $currentScope = $context.ScopeStack[-1]
-                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
-                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
+                if ($currentScope.LocalVars -and $varName -in $currentScope.LocalVars) {
+                    $actualVarName = $currentScope.ScopePrefix + $varName
                 }
             }
             $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
-            $varsBefore[$varInfo.Name] = $value
+            $varsBefore[$varName] = $value
 
-            if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value) -and -not (Test-CFGVariableBlockedTaint -Context $context -ActualName $actualVarName)) {
-                $key = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
+            $startOffset = Get-CFGObjectPropertyValue -Object $varInfo -Name 'StartOffset' -Default $null
+            $endOffset = Get-CFGObjectPropertyValue -Object $varInfo -Name 'EndOffset' -Default $null
+            if ($null -ne $startOffset -and $null -ne $endOffset -and (Test-ResolvableValue $value) -and -not (Test-CFGVariableBlockedTaint -Context $context -ActualName $actualVarName)) {
+                $key = "$($currentNode.Id):${startOffset}:${endOffset}"
                 if (-not $context.VariableReadResults.ContainsKey($key)) {
                     $context.VariableReadResults[$key] = @{
                         NodeId  = $currentNode.Id
@@ -12127,19 +12130,20 @@ function Invoke-CFGStep {
             }
 
             foreach ($varInfo in $currentNodeVarsWritten) {
-                if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varInfo.Name)) {
+                $varName = Get-CFGObjectPropertyValue -Object $varInfo -Name 'Name' -Default $null
+                if ($null -eq $varInfo -or [string]::IsNullOrWhiteSpace([string]$varName)) {
                     Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
                     continue
                 }
-                $actualVarName = $varInfo.Name
+                $actualVarName = [string]$varName
                 if ($context.ScopeStack.Count -gt 0) {
                     $currentScope = $context.ScopeStack[-1]
-                    if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
-                        $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
+                    if ($currentScope.LocalVars -and $varName -in $currentScope.LocalVars) {
+                        $actualVarName = $currentScope.ScopePrefix + $varName
                     }
                 }
                 $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
-                $varsAfter[$varInfo.Name] = $value
+                $varsAfter[$varName] = $value
             }
 
             Update-CFGAssignmentBlockedTaint -Node $currentNode -Context $context
@@ -12665,9 +12669,10 @@ function Get-CFGVariableStackPlaceholderRows {
         if (-not $Node) { return }
         $varInfos = @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsRead') + @(Get-CFGNodeVarInfos -Node $Node -PropertyName 'VarsWritten')
         foreach ($varInfo in @($varInfos)) {
-            if ($null -eq $varInfo -or $null -eq $varInfo.Name) { continue }
+            $varName = Get-CFGObjectPropertyValue -Object $varInfo -Name 'Name' -Default $null
+            if ($null -eq $varInfo -or $null -eq $varName) { continue }
 
-            $actualName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varInfo.Name)
+            $actualName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varName)
             if ($null -eq $actualName) { continue }
             Register-CFGTrackedEnvironmentVariable -Context $context -ActualName $actualName
             if ($seenActualNames.Contains($actualName)) { continue }

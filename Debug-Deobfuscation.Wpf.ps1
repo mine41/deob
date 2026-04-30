@@ -28,6 +28,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:StaticEvalOperatorCache = @{}
 
 function Test-IsWindowsHost {
     return ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)

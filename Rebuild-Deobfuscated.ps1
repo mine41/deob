@@ -61,6 +61,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:StaticEvalOperatorCache = @{}
 
 function ConvertFrom-HostBooleanArgument {
     param(
