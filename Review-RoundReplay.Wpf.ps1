@@ -65,23 +65,47 @@ function Get-CurrentPowerShellExecutablePath {
     return $null
 }
 
+function Get-ObjectPropertyValue {
+    param(
+        $Object,
+        [Parameter(Mandatory)][string]$Name,
+        $Default = $null
+    )
+
+    if ($null -eq $Object) { return $Default }
+
+    if ($Object -is [hashtable]) {
+        if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        return $Default
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -ne $prop) { return $prop.Value }
+
+    return $Default
+}
+
 function Get-ReportHostDisplay {
     param($ReportData)
 
     if (-not $ReportData) { return $null }
-    if (-not $ReportData.PSObject.Properties['HostInfo'] -or $null -eq $ReportData.HostInfo) { return $null }
+    $hostInfo = Get-ObjectPropertyValue -Object $ReportData -Name 'HostInfo' -Default $null
+    if ($null -eq $hostInfo) { return $null }
 
-    $hostInfo = $ReportData.HostInfo
-    if ($hostInfo.PSObject.Properties['Display'] -and -not [string]::IsNullOrWhiteSpace([string]$hostInfo.Display)) {
-        return [string]$hostInfo.Display
+    $display = Get-ObjectPropertyValue -Object $hostInfo -Name 'Display' -Default $null
+    if (-not [string]::IsNullOrWhiteSpace([string]$display)) {
+        return [string]$display
     }
 
     $parts = @()
-    if ($hostInfo.PSObject.Properties['Edition'] -and $hostInfo.Edition) { $parts += [string]$hostInfo.Edition }
-    if ($hostInfo.PSObject.Properties['Version'] -and $hostInfo.Version) { $parts += [string]$hostInfo.Version }
+    $edition = Get-ObjectPropertyValue -Object $hostInfo -Name 'Edition' -Default $null
+    $version = Get-ObjectPropertyValue -Object $hostInfo -Name 'Version' -Default $null
+    if ($edition) { $parts += [string]$edition }
+    if ($version) { $parts += [string]$version }
     $text = ($parts -join ' ').Trim()
-    if ($hostInfo.PSObject.Properties['ProcessName'] -and $hostInfo.ProcessName) {
-        $text = "$text [$($hostInfo.ProcessName)]"
+    $processName = Get-ObjectPropertyValue -Object $hostInfo -Name 'ProcessName' -Default $null
+    if ($processName) {
+        $text = "$text [$processName]"
     }
     if ([string]::IsNullOrWhiteSpace($text)) { return $null }
     return $text
@@ -179,6 +203,10 @@ function Get-RoundList {
         }
     }
 
+    if ($items.Count -eq 0 -and (Test-Path -LiteralPath (Join-Path $Dir 'debug.execution.log'))) {
+        $items += 1
+    }
+
     return @($items | Sort-Object -Unique)
 }
 
@@ -192,9 +220,9 @@ function Try-Load-ReportSummary {
         $r = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop | ConvertFrom-Json
         $hostDisplay = Get-ReportHostDisplay -ReportData $r
         return [PSCustomObject]@{
-            CandidateCount = $r.CandidateCount
-            AppliedCount   = $r.AppliedCount
-            SkippedCount   = $r.SkippedCount
+            CandidateCount = Get-ObjectPropertyValue -Object $r -Name 'CandidateCount' -Default 0
+            AppliedCount   = Get-ObjectPropertyValue -Object $r -Name 'AppliedCount' -Default 0
+            SkippedCount   = Get-ObjectPropertyValue -Object $r -Name 'SkippedCount' -Default 0
             HostDisplay    = $hostDisplay
         }
     } catch {
@@ -319,12 +347,27 @@ function Get-RoundFiles {
     $dotPath = Join-Path $Dir ("round{0}.cfg.dot" -f $label)
     $pngPath = Join-Path $Dir ("round{0}.cfg.png" -f $label)
 
+    if (-not (Test-Path -LiteralPath $logPath) -and $RoundNumber -eq 1) {
+        $debugLogPath = Join-Path $Dir 'debug.execution.log'
+        if (Test-Path -LiteralPath $debugLogPath) {
+            return [PSCustomObject]@{
+                Label          = 'debug'
+                LogPath        = $debugLogPath
+                ReportPath     = Join-Path $Dir 'debug.report.json'
+                DotPath        = Join-Path $Dir 'debug.cfg.dot'
+                PngPath        = Join-Path $Dir 'debug.cfg.png'
+                IsDebugSession = $true
+            }
+        }
+    }
+
     return [PSCustomObject]@{
-        Label      = $label
-        LogPath    = $logPath
-        ReportPath = $reportPath
-        DotPath    = $dotPath
-        PngPath    = $pngPath
+        Label          = $label
+        LogPath        = $logPath
+        ReportPath     = $reportPath
+        DotPath        = $dotPath
+        PngPath        = $pngPath
+        IsDebugSession = $false
     }
 }
 
@@ -1158,15 +1201,21 @@ function Update-ReportUi {
     if ($ReportData) {
         $hostText = Get-ReportHostDisplay -ReportData $ReportData
         $hostSuffix = if ($hostText) { L 'report.summary_host_suffix' @($hostText) } else { '' }
-        $txtReportSummary.Text = L 'report.summary' @($ReportData.CandidateCount, $ReportData.AppliedCount, $ReportData.SkippedCount, $ReportData.OverlapStrategy, $hostSuffix)
+        $candidateCount = Get-ObjectPropertyValue -Object $ReportData -Name 'CandidateCount' -Default 0
+        $appliedCount = Get-ObjectPropertyValue -Object $ReportData -Name 'AppliedCount' -Default 0
+        $skippedCount = Get-ObjectPropertyValue -Object $ReportData -Name 'SkippedCount' -Default 0
+        $overlapStrategy = Get-ObjectPropertyValue -Object $ReportData -Name 'OverlapStrategy' -Default 'n/a'
+        $txtReportSummary.Text = L 'report.summary' @($candidateCount, $appliedCount, $skippedCount, $overlapStrategy, $hostSuffix)
 
         [object[]]$appliedRows = @()
         [object[]]$skippedRows = @()
-        if ($ReportData.Applied) {
-            $appliedRows = @($ReportData.Applied)
+        $applied = Get-ObjectPropertyValue -Object $ReportData -Name 'Applied' -Default $null
+        $skipped = Get-ObjectPropertyValue -Object $ReportData -Name 'Skipped' -Default $null
+        if ($applied) {
+            $appliedRows = @($applied)
         }
-        if ($ReportData.Skipped) {
-            $skippedRows = @($ReportData.Skipped)
+        if ($skipped) {
+            $skippedRows = @($skipped)
         }
 
         $appliedGrid.ItemsSource = $appliedRows
@@ -1184,36 +1233,42 @@ function Build-ReportNodeIndex {
     $idx = @{}
     if (-not $ReportData) { return $idx }
 
-    foreach ($a in @($ReportData.Applied)) {
-        if ($null -eq $a -or $null -eq $a.NodeId) { continue }
-        $nid = [string]$a.NodeId
+    foreach ($a in @(Get-ObjectPropertyValue -Object $ReportData -Name 'Applied' -Default @())) {
+        $nodeId = Get-ObjectPropertyValue -Object $a -Name 'NodeId' -Default $null
+        if ($null -eq $a -or $null -eq $nodeId) { continue }
+        $nid = [string]$nodeId
         if (-not $idx.ContainsKey($nid)) { $idx[$nid] = New-Object System.Collections.ArrayList }
-        $typeText = if ($a.Type -is [System.Array]) { (@($a.Type) -join '/') } else { [string]$a.Type }
+        $type = Get-ObjectPropertyValue -Object $a -Name 'Type' -Default ''
+        $typeText = if ($type -is [System.Array]) { (@($type) -join '/') } else { [string]$type }
         $null = $idx[$nid].Add([PSCustomObject]@{
             Status      = L 'recovery.status.applied'
             StatusOrder = 0
             Type        = $typeText
-            Depth       = [string]$a.Depth
-            Start       = [string]$a.Start
-            End         = [string]$a.End
-            Original    = [string]$a.Original
-            Replacement = [string]$a.Replacement
+            Depth       = [string](Get-ObjectPropertyValue -Object $a -Name 'Depth' -Default '')
+            Start       = [string](Get-ObjectPropertyValue -Object $a -Name 'Start' -Default '')
+            End         = [string](Get-ObjectPropertyValue -Object $a -Name 'End' -Default '')
+            Original    = [string](Get-ObjectPropertyValue -Object $a -Name 'Original' -Default '')
+            Replacement = [string](Get-ObjectPropertyValue -Object $a -Name 'Replacement' -Default '')
         })
     }
 
-    foreach ($s in @($ReportData.Skipped)) {
-        if ($null -eq $s -or $null -eq $s.NodeId) { continue }
-        $nid = [string]$s.NodeId
+    foreach ($s in @(Get-ObjectPropertyValue -Object $ReportData -Name 'Skipped' -Default @())) {
+        $nodeId = Get-ObjectPropertyValue -Object $s -Name 'NodeId' -Default $null
+        if ($null -eq $s -or $null -eq $nodeId) { continue }
+        $nid = [string]$nodeId
         if (-not $idx.ContainsKey($nid)) { $idx[$nid] = New-Object System.Collections.ArrayList }
-        $typeText = if ($s.Type -is [System.Array]) { (@($s.Type) -join '/') } else { [string]$s.Type }
-        $msg = if ([string]::IsNullOrWhiteSpace([string]$s.Message)) { [string]$s.Reason } else { ([string]$s.Reason + ': ' + [string]$s.Message) }
+        $type = Get-ObjectPropertyValue -Object $s -Name 'Type' -Default ''
+        $typeText = if ($type -is [System.Array]) { (@($type) -join '/') } else { [string]$type }
+        $reason = [string](Get-ObjectPropertyValue -Object $s -Name 'Reason' -Default '')
+        $message = [string](Get-ObjectPropertyValue -Object $s -Name 'Message' -Default '')
+        $msg = if ([string]::IsNullOrWhiteSpace($message)) { $reason } else { ($reason + ': ' + $message) }
         $null = $idx[$nid].Add([PSCustomObject]@{
             Status      = L 'recovery.status.skipped'
             StatusOrder = 1
             Type        = $typeText
-            Depth       = [string]$s.Depth
-            Start       = [string]$s.Start
-            End         = [string]$s.End
+            Depth       = [string](Get-ObjectPropertyValue -Object $s -Name 'Depth' -Default '')
+            Start       = [string](Get-ObjectPropertyValue -Object $s -Name 'Start' -Default '')
+            End         = [string](Get-ObjectPropertyValue -Object $s -Name 'End' -Default '')
             Original    = ''
             Replacement = $msg
         })
@@ -1287,6 +1342,8 @@ $script:SuppressGrid = $false
 $script:GraphZoom = 1.0
 $script:SyncingZoomUi = $false
 $script:SuppressRecoverySelection = $false
+$script:GraphZoomTransform = New-Object System.Windows.Media.ScaleTransform 1.0, 1.0
+$graphContainer.LayoutTransform = $script:GraphZoomTransform
 
 function Reset-GraphOverlayState {
     $nodeRectsDip.Clear()
@@ -1342,17 +1399,22 @@ function Apply-GraphZoom {
     $size = Get-GraphSourceSizeDip
     if (-not $size) { return }
 
-    $targetW = [Math]::Max(1.0, $size.Width * $script:GraphZoom)
-    $targetH = [Math]::Max(1.0, $size.Height * $script:GraphZoom)
+    $baseW = [Math]::Max(1.0, $size.Width)
+    $baseH = [Math]::Max(1.0, $size.Height)
 
-    $graphImage.Width = $targetW
-    $graphImage.Height = $targetH
-    $graphContainer.Width = $targetW
-    $graphContainer.Height = $targetH
-    $graphOverlay.Width = $targetW
-    $graphOverlay.Height = $targetH
+    $graphImage.Width = $baseW
+    $graphImage.Height = $baseH
+    $graphContainer.Width = $baseW
+    $graphContainer.Height = $baseH
+    $graphOverlay.Width = $baseW
+    $graphOverlay.Height = $baseH
 
-    Rebuild-GraphHotspots
+    $script:GraphZoomTransform.ScaleX = $script:GraphZoom
+    $script:GraphZoomTransform.ScaleY = $script:GraphZoom
+
+    if ($nodeRectsDip.Count -eq 0) {
+        Rebuild-GraphHotspots
+    }
 
     if ($script:CurrentIndex -ge 0 -and $script:CurrentIndex -lt $frames.Count) {
         $cur = $frames[$script:CurrentIndex]
@@ -1390,33 +1452,54 @@ function Invoke-GraphCtrlWheelZoom {
         [Parameter(Mandatory)]$MouseArgs
     )
 
-    if (([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -eq 0) {
+    if ($null -eq $MouseArgs) { return }
+
+    $modifiers = [System.Windows.Input.Keyboard]::Modifiers
+    if (($modifiers -band [System.Windows.Input.ModifierKeys]::Control) -ne [System.Windows.Input.ModifierKeys]::Control) {
         return
     }
 
+    $MouseArgs.Handled = $true
+
     $oldZoom = [double]$script:GraphZoom
-    $step = if ($MouseArgs.Delta -gt 0) { 0.1 } else { -0.1 }
-    $newZoom = $oldZoom + $step
+    if ($oldZoom -le 0) { $oldZoom = 1.0 }
+
+    $wheelSteps = [int]($MouseArgs.Delta / 120)
+    if ($wheelSteps -eq 0) { $wheelSteps = if ($MouseArgs.Delta -gt 0) { 1 } else { -1 } }
+    if ($wheelSteps -gt 5) { $wheelSteps = 5 }
+    if ($wheelSteps -lt -5) { $wheelSteps = -5 }
+
+    $newZoom = $oldZoom + (0.1 * $wheelSteps)
     if ($newZoom -lt 0.2) { $newZoom = 0.2 }
     if ($newZoom -gt 3.0) { $newZoom = 3.0 }
 
     if ([Math]::Abs($newZoom - $oldZoom) -lt 0.0001) {
-        $MouseArgs.Handled = $true
         return
     }
 
-    $viewportPoint = $MouseArgs.GetPosition($graphScroll)
-    $contentPoint = $MouseArgs.GetPosition($graphContainer)
+    $scrollViewer = $graphScroll
+    if ($null -eq $scrollViewer) { return }
+
+    $viewportPoint = $MouseArgs.GetPosition($scrollViewer)
+    $baseX = ([double]$scrollViewer.HorizontalOffset + [double]$viewportPoint.X) / $oldZoom
+    $baseY = ([double]$scrollViewer.VerticalOffset + [double]$viewportPoint.Y) / $oldZoom
 
     Set-GraphZoom -Zoom $newZoom
 
-    $ratio = $newZoom / $oldZoom
-    $targetX = [Math]::Max(0.0, ($contentPoint.X * $ratio) - $viewportPoint.X)
-    $targetY = [Math]::Max(0.0, ($contentPoint.Y * $ratio) - $viewportPoint.Y)
+    $targetX = [Math]::Max(0.0, ($baseX * $newZoom) - [double]$viewportPoint.X)
+    $targetY = [Math]::Max(0.0, ($baseY * $newZoom) - [double]$viewportPoint.Y)
 
-    $graphScroll.ScrollToHorizontalOffset($targetX)
-    $graphScroll.ScrollToVerticalOffset($targetY)
-    $MouseArgs.Handled = $true
+    $scrollX = [double]$targetX
+    $scrollY = [double]$targetY
+    $scrollAction = {
+        try {
+            if ($null -eq $scrollViewer) { return }
+            $scrollViewer.ScrollToHorizontalOffset($scrollX)
+            $scrollViewer.ScrollToVerticalOffset($scrollY)
+        } catch {
+        }
+    }.GetNewClosure()
+    $null = $scrollViewer.Dispatcher.BeginInvoke([Action]$scrollAction, [System.Windows.Threading.DispatcherPriority]::Background)
 }
 
 function Ensure-GraphLoaded {
@@ -1589,8 +1672,10 @@ function Update-Highlight {
     $highlightRect.Visibility = 'Visible'
 
     try {
-        $centerX = $r.Left + ($r.Width / 2.0)
-        $centerY = $r.Top + ($r.Height / 2.0)
+        $zoom = [double]$script:GraphZoom
+        if ($zoom -le 0) { $zoom = 1.0 }
+        $centerX = ($r.Left + ($r.Width / 2.0)) * $zoom
+        $centerY = ($r.Top + ($r.Height / 2.0)) * $zoom
         $targetX = [Math]::Max(0, $centerX - ($graphScroll.ViewportWidth / 2.0))
         $targetY = [Math]::Max(0, $centerY - ($graphScroll.ViewportHeight / 2.0))
         $graphScroll.ScrollToHorizontalOffset($targetX)
@@ -1773,7 +1858,12 @@ $sldZoom.Add_ValueChanged({
     Set-GraphZoom -Zoom ($sldZoom.Value / 100.0) -FromSlider
 })
 $graphScroll.Add_PreviewMouseWheel({
-    Invoke-GraphCtrlWheelZoom -MouseArgs $eventArgs
+    param($sender, $e)
+    Invoke-GraphCtrlWheelZoom -MouseArgs $e
+})
+$graphContainer.Add_PreviewMouseWheel({
+    param($sender, $e)
+    Invoke-GraphCtrlWheelZoom -MouseArgs $e
 })
 $btnZoomOut.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom - 0.1) })
 $btnZoomIn.Add_Click({ Set-GraphZoom -Zoom ($script:GraphZoom + 0.1) })
