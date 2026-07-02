@@ -7760,6 +7760,19 @@ function Get-StaticReplacementCandidates {
         }
         $nodeId = [int]$node.Id
 
+        if (Test-RuntimeGeneratedNode -Node $node) {
+            foreach ($r in @($node.Resolvables)) {
+                if (-not $r) { continue }
+                $skipped += New-SkipRecord -Reason 'static_runtime_generated' -Message '运行时生成节点不参与原始脚本静态回填' -Item ([PSCustomObject]@{
+                    StartOffset = $r.StartOffset
+                    EndOffset = $r.EndOffset
+                    Type = $r.Type
+                    Depth = $r.Depth
+                    NodeId = $nodeId
+                })
+            }
+            continue
+        }
 
         foreach ($r in @($node.Resolvables)) {
             if (Test-StaticEvalBudgetExceeded -Context $Context) {
@@ -18387,10 +18400,22 @@ function Move-TemporaryFileIntoPlace {
         [Parameter(Mandatory)][string]$DestinationPath
     )
 
-    if (Test-Path -LiteralPath $DestinationPath) {
-        [System.IO.File]::Replace($TemporaryPath, $DestinationPath, $null, $true)
+    $sourcePath = [System.IO.Path]::GetFullPath($TemporaryPath)
+    $targetPath = [System.IO.Path]::GetFullPath($DestinationPath)
+
+    if (Test-Path -LiteralPath $targetPath) {
+        $targetDirectory = [System.IO.Path]::GetDirectoryName($targetPath)
+        $targetLeafName = [System.IO.Path]::GetFileName($targetPath)
+        $backupPath = [System.IO.Path]::Combine($targetDirectory, ("{0}.{1}.bak" -f $targetLeafName, ([guid]::NewGuid().ToString('N'))))
+        try {
+            [System.IO.File]::Replace($sourcePath, $targetPath, $backupPath, $true)
+        } finally {
+            if (Test-Path -LiteralPath $backupPath) {
+                Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            }
+        }
     } else {
-        [System.IO.File]::Move($TemporaryPath, $DestinationPath)
+        [System.IO.File]::Move($sourcePath, $targetPath)
     }
 }
 
@@ -18402,10 +18427,11 @@ function Write-TextFileAtomic {
         [int]$RetryDelayMs = 120
     )
 
-    Ensure-ParentDirectory -Path $Path
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    Ensure-ParentDirectory -Path $fullPath
 
-    $directory = [System.IO.Path]::GetDirectoryName($Path)
-    $leafName = [System.IO.Path]::GetFileName($Path)
+    $directory = [System.IO.Path]::GetDirectoryName($fullPath)
+    $leafName = [System.IO.Path]::GetFileName($fullPath)
     $attempts = [Math]::Max(1, $RetryCount)
     $lastError = $null
 
@@ -18414,7 +18440,7 @@ function Write-TextFileAtomic {
         try {
             $text = if ($null -eq $Content) { '' } else { [string]$Content }
             [System.IO.File]::WriteAllText($tmpPath, $text, [System.Text.UTF8Encoding]::new($false))
-            Move-TemporaryFileIntoPlace -TemporaryPath $tmpPath -DestinationPath $Path
+            Move-TemporaryFileIntoPlace -TemporaryPath $tmpPath -DestinationPath $fullPath
             return
         } catch {
             $lastError = $_
@@ -18442,10 +18468,11 @@ function Copy-FileAtomic {
         [int]$RetryDelayMs = 120
     )
 
-    Ensure-ParentDirectory -Path $DestinationPath
+    $fullDestinationPath = [System.IO.Path]::GetFullPath($DestinationPath)
+    Ensure-ParentDirectory -Path $fullDestinationPath
 
-    $directory = [System.IO.Path]::GetDirectoryName($DestinationPath)
-    $leafName = [System.IO.Path]::GetFileName($DestinationPath)
+    $directory = [System.IO.Path]::GetDirectoryName($fullDestinationPath)
+    $leafName = [System.IO.Path]::GetFileName($fullDestinationPath)
     $attempts = [Math]::Max(1, $RetryCount)
     $lastError = $null
 
@@ -18453,7 +18480,7 @@ function Copy-FileAtomic {
         $tmpPath = [System.IO.Path]::Combine($directory, ("{0}.{1}.tmp" -f $leafName, ([guid]::NewGuid().ToString('N'))))
         try {
             [System.IO.File]::Copy($SourcePath, $tmpPath, $true)
-            Move-TemporaryFileIntoPlace -TemporaryPath $tmpPath -DestinationPath $DestinationPath
+            Move-TemporaryFileIntoPlace -TemporaryPath $tmpPath -DestinationPath $fullDestinationPath
             return
         } catch {
             $lastError = $_
