@@ -3444,6 +3444,54 @@ function Get-CommandAstWrappedDynamicInvocationInfo {
     }
 }
 
+function Get-MemberAddScriptDynamicInvocationInfo {
+    param($AstRoot)
+
+    if ($null -eq $AstRoot) {
+        return [PSCustomObject]@{
+            Success     = $false
+            DynamicType = $null
+            InvokeAst   = $null
+            ArgumentAst = $null
+        }
+    }
+
+    $invokeAsts = @($AstRoot.FindAll({
+        param($n)
+        if ($n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) { return $false }
+        if ($null -eq $n.Arguments -or $n.Arguments.Count -lt 1) { return $false }
+
+        $memberName = $null
+        if ($n.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $memberName = [string]$n.Member.Value
+        } elseif ($n.Member -and $n.Member.Extent) {
+            $memberName = [string]$n.Member.Extent.Text
+        }
+
+        if ($memberName -ine 'AddScript') { return $false }
+
+        $exprText = if ($n.Expression -and $n.Expression.Extent) { [string]$n.Expression.Extent.Text } else { '' }
+        return ($exprText -match '(?i)(?:\[powershell\]|\[System\.Management\.Automation\.PowerShell\]|PowerShell\s*::\s*Create|\.Create\s*\()')
+    }, $true))
+
+    if ($invokeAsts.Count -eq 0) {
+        return [PSCustomObject]@{
+            Success     = $false
+            DynamicType = $null
+            InvokeAst   = $null
+            ArgumentAst = $null
+        }
+    }
+
+    $invokeAst = @($invokeAsts | Sort-Object { $_.Extent.StartOffset } | Select-Object -First 1)[0]
+    return [PSCustomObject]@{
+        Success     = $true
+        DynamicType = 'PowerShellAddScript'
+        InvokeAst   = $invokeAst
+        ArgumentAst = $invokeAst.Arguments[0]
+    }
+}
+
 function Test-PowerShellTextCandidate {
     param([string]$Text)
 
@@ -4111,6 +4159,18 @@ function Get-DynamicArgumentCodeFromNodeText {
                     $displayCode = $argCode
                     break
                 }
+            }
+        }
+    }
+
+    if (-not $argCode -and $DynamicType -eq 'PowerShellAddScript') {
+        $addScriptInfo = Get-MemberAddScriptDynamicInvocationInfo -AstRoot $scriptAst
+        if ($addScriptInfo.Success -and $addScriptInfo.ArgumentAst) {
+            $argCode = $addScriptInfo.ArgumentAst.Extent.Text
+            $displayCode = $argCode
+            if ($addScriptInfo.InvokeAst -and $addScriptInfo.InvokeAst.Extent) {
+                $replacementStartOffset = [int]$addScriptInfo.InvokeAst.Extent.StartOffset
+                $replacementEndOffset = [int]$addScriptInfo.InvokeAst.Extent.EndOffset
             }
         }
     }
@@ -5232,6 +5292,17 @@ function Invoke-NodeSafe {
             Error    = "Parse Node.Text failed: $($parseInfo.Error)"
             Action   = "Execute"
         }
+    }
+
+    $memberAddScriptInfo = Get-MemberAddScriptDynamicInvocationInfo -AstRoot $parseInfo.Ast
+    if ($memberAddScriptInfo.Success) {
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dynamic invoke detected: PowerShell.AddScript"
+        $dynamicInfo = [PSCustomObject]@{
+            Type   = 'PowerShellAddScript'
+            ArgAst = $memberAddScriptInfo.ArgumentAst
+            Ast    = $memberAddScriptInfo.InvokeAst
+        }
+        return Handle-DynamicInvoke -Node $Node -Context $Context -DynamicInfo $dynamicInfo
     }
 
     Test-SuspiciousVariables -Node $Node -Context $Context
@@ -8117,7 +8188,7 @@ function Handle-DynamicInvoke {
     $dynType = $null
     $isScriptBlockCreateFromCommand = $false
 
-    if ($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock", "PowerShellCommand")) {
+    if ($DynamicInfo -and $DynamicInfo.Type -in @("ScriptBlockCreate", "NewScriptBlock", "PowerShellCommand", "PowerShellAddScript")) {
         $dynType = $DynamicInfo.Type
     } elseif ($DynamicTypeFromCommand -eq "ScriptBlockCreate") {
         $dynType = "ScriptBlockCreate"
