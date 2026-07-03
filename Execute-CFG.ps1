@@ -3710,6 +3710,14 @@ function Resolve-InvocationArgumentValue {
         }
     }
 
+    if ($ArgumentAst -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        $ArgumentAst.StringConstantType -eq [System.Management.Automation.Language.StringConstantType]::BareWord) {
+        return [PSCustomObject]@{
+            Success = $true
+            Value   = [string]$ArgumentAst.Value
+        }
+    }
+
     $argCode = $ArgumentAst.Extent.Text
     if ($ArgumentAst -and $Context.FunctionSubgraphs.Count -gt 0) {
         $argCode = Resolve-EmbeddedFunctionCalls -Code $argCode -Ast $ArgumentAst -Context $Context -NodeId $CallerNodeId
@@ -5744,7 +5752,7 @@ function Invoke-ScriptBlockInline {
 
     Push-ExecutionScope -Context $Context -ScopeType "ScriptBlock" -ScopeName $BlockName -ReturnNodeId 0 -EndNodeId $blockEndId
     $scope = $Context.ScopeStack[-1]
-    $scope.LocalVars = $paramVars
+    $scope.LocalVars = @($paramVars)
     $scope.Arguments = $Arguments
     $scope.TargetVarName = $null
 
@@ -7357,7 +7365,7 @@ function Invoke-FunctionCall {
 
     $localVars = @()
     if ($funcEndId) {
-        $localVars = Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $funcStartId -EndNodeId $funcEndId
+        $localVars = @(Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $funcStartId -EndNodeId $funcEndId)
     }
 
     $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context)
@@ -7425,7 +7433,7 @@ function Invoke-FunctionCall {
 
     Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName -ReturnNodeId $returnNodeId -EndNodeId $funcEndId
     if ($Context.ScopeStack.Count -gt 0) {
-        $Context.ScopeStack[-1].LocalVars = $localVars
+        $Context.ScopeStack[-1].LocalVars = @($localVars)
         $Context.ScopeStack[-1].Arguments = $arguments
         $Context.ScopeStack[-1].NamedArguments = $namedArguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
@@ -7492,7 +7500,7 @@ function Invoke-FunctionInline {
 
     $localVars = @()
     if ($funcEndId) {
-        $localVars = Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $funcStartId -EndNodeId $funcEndId
+        $localVars = @(Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $funcStartId -EndNodeId $funcEndId)
     }
 
     $preferDirectFallback = Test-FunctionInlinePreferDirectFallback -FuncName $FuncName -Context $Context
@@ -7510,7 +7518,7 @@ function Invoke-FunctionInline {
     Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName `
         -ReturnNodeId 0 -EndNodeId $funcEndId
     $scope = $Context.ScopeStack[-1]
-    $scope.LocalVars = $localVars
+    $scope.LocalVars = @($localVars)
     $scope.Arguments = $Arguments
     $scope.NamedArguments = if ($NamedArguments) { $NamedArguments } else { @{} }
     $scope.TargetVarName = $null
@@ -7805,7 +7813,7 @@ function Invoke-ScriptBlockCall {
 
     $localVars = @()
     if ($blockEndId) {
-        $localVars = Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $blockStartId -EndNodeId $blockEndId
+        $localVars = @(Get-SubgraphLocalVars -CFG $Context.CFG -StartNodeId $blockStartId -EndNodeId $blockEndId)
     }
 
     $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $CallerNode -Context $Context)
@@ -7873,7 +7881,7 @@ function Invoke-ScriptBlockCall {
 
     Push-ExecutionScope -Context $Context -ScopeType "ScriptBlock" -ScopeName $BlockName -ReturnNodeId $returnNodeId -EndNodeId $blockEndId
     if ($Context.ScopeStack.Count -gt 0) {
-        $Context.ScopeStack[-1].LocalVars = $localVars
+        $Context.ScopeStack[-1].LocalVars = @($localVars)
         $Context.ScopeStack[-1].Arguments = $arguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
 
@@ -8536,13 +8544,9 @@ function Handle-DynamicInvoke {
         Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Created subgraph: $blockName (Nodes $($subgraphResult.BlockStartId)-$($subgraphResult.BlockEndId))"
 
         $blockVarRef = "`$$blockName"
-        $Node.Text = "& $blockVarRef"
-        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Node text replaced: & $blockVarRef"
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] Dispatching runtime subgraph: & $blockVarRef"
 
-        $Node.Invokes.ScriptBlocks = @($blockName)
-        $Node.DynamicInvoke = $null
-
-        return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
+        return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context -PreParsedArguments @()
     }
 }
 

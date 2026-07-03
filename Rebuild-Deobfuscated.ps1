@@ -37,6 +37,9 @@ param(
     [ValidateSet('skip', 'last')]
     [string]$VariableConflictPolicy = 'skip',
 
+    [ValidateSet('skip', 'prefer')]
+    [string]$DynamicConflictPolicy = 'skip',
+
     [int]$MaxRounds = 10,
 
     [int]$MaxIterations = 1000,
@@ -117,6 +120,7 @@ $script:IsAdaptiveCoverageOptimizationProfile = ([string]$OptimizationProfile -e
 $script:IsTimeoutCoverageOptimizationProfile = [bool]$script:IsAdaptiveCoverageOptimizationProfile
 $effectiveOverlapStrategy = $OverlapStrategy
 $effectiveVariableConflictPolicy = $VariableConflictPolicy
+$effectiveDynamicConflictPolicy = $DynamicConflictPolicy
 
 if ($script:IsCmdlineOptimizationProfile) {
     if (-not $PSBoundParameters.ContainsKey('OverlapStrategy') -and $effectiveOverlapStrategy -eq 'Inner') {
@@ -6578,7 +6582,9 @@ function Get-SensitiveSinkReplacementCandidates {
 function Get-DynamicInvokeReplacementCandidates {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
-        [Parameter(Mandatory)][string]$ScriptText
+        [Parameter(Mandatory)][string]$ScriptText,
+        [ValidateSet('skip', 'prefer')]
+        [string]$DynamicConflictPolicy = 'skip'
     )
 
     $candidates = @()
@@ -6712,7 +6718,7 @@ function Get-DynamicInvokeReplacementCandidates {
         }
     }
 
-    $merged = Merge-DynamicInvokeReplacementCandidates -Candidates $candidates -ScriptText $ScriptText
+    $merged = Merge-DynamicInvokeReplacementCandidates -Candidates $candidates -ScriptText $ScriptText -DynamicConflictPolicy $DynamicConflictPolicy
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
@@ -7541,7 +7547,9 @@ function Get-MandatoryBase64ReplacementCandidates {
 function Merge-DynamicInvokeReplacementCandidates {
     param(
         [array]$Candidates,
-        [string]$ScriptText
+        [string]$ScriptText,
+        [ValidateSet('skip', 'prefer')]
+        [string]$DynamicConflictPolicy = 'skip'
     )
 
     if (-not $Candidates -or $Candidates.Count -eq 0) {
@@ -7549,6 +7557,7 @@ function Merge-DynamicInvokeReplacementCandidates {
     }
 
     $map = @{}
+    $conflictRanges = @{}
     $skipped = @()
     foreach ($cand in @($Candidates | Sort-Object StartOffset, EndOffset, DynamicRecordIndex)) {
         if (-not $cand) { continue }
@@ -7556,12 +7565,26 @@ function Merge-DynamicInvokeReplacementCandidates {
         $key = Get-ReplacementRangeKey -StartOffset $cand.StartOffset -EndOffset $cand.EndOffset
         if ([string]::IsNullOrWhiteSpace($key)) { continue }
 
+        if ($conflictRanges.ContainsKey($key)) {
+            $skipped += New-SkipRecord -Reason 'dynamic_same_range_conflict' -Message '同区间 DynamicInvoke 产生不同结果，保守跳过该区间' -Item $cand
+            continue
+        }
+
         if (-not $map.ContainsKey($key)) {
             $map[$key] = $cand
             continue
         }
 
         $existing = $map[$key]
+        if ([string]$existing.Replacement -ne [string]$cand.Replacement -and $DynamicConflictPolicy -eq 'skip') {
+            $map.Remove($key)
+            $conflictRanges[$key] = $true
+            $message = '同区间 DynamicInvoke 产生不同结果，保守跳过该区间'
+            $skipped += New-SkipRecord -Reason 'dynamic_same_range_conflict' -Message $message -Item $existing
+            $skipped += New-SkipRecord -Reason 'dynamic_same_range_conflict' -Message $message -Item $cand
+            continue
+        }
+
         $preferred = Get-PreferredDynamicReplacementCandidate -Left $existing -Right $cand
         if (-not [string]::IsNullOrWhiteSpace($ScriptText) -and [string]$existing.Replacement -ne [string]$cand.Replacement) {
             $preferredIsValid = Test-ReplacementCandidateSyntaxValidity -ScriptText $ScriptText -Candidate $preferred
@@ -7823,6 +7846,12 @@ function Get-StaticReplacementCandidates {
                         continue
                     }
 
+                    $expandableSafety = Test-ResolvableExpandableStringCandidateSafe -Original $original -Replacement $replacement -Type $r.Type
+                    if (-not $expandableSafety.Safe) {
+                        $skipped += New-SkipRecord -Reason ('static_' + [string]$expandableSafety.Reason) -Message $expandableSafety.Message -Item $baseItem
+                        continue
+                    }
+
                     $candidates += [PSCustomObject]@{
                         StartOffset = $start
                         EndOffset = $end
@@ -7878,6 +7907,12 @@ function Get-StaticReplacementCandidates {
 
                 if (Test-PreserveWholeScriptStaticExpressionStructure -ScriptText $ScriptText -StartOffset ([int]$start) -EndOffset ([int]$end)) {
                     $skipped += New-SkipRecord -Reason 'static_preserve_whole_expression' -Message '顶层成员/索引/方法表达式保留结构，跳过整体标量折叠' -Item $baseItem
+                    continue
+                }
+
+                $expandableSafety = Test-ResolvableExpandableStringCandidateSafe -Original $original -Replacement $replacement -Type $r.Type
+                if (-not $expandableSafety.Safe) {
+                    $skipped += New-SkipRecord -Reason ('static_' + [string]$expandableSafety.Reason) -Message $expandableSafety.Message -Item $baseItem
                     continue
                 }
 
@@ -15401,14 +15436,14 @@ function Test-ResolvableExpandableStringCandidateSafe {
         return $safeResult
     }
 
-    $replacementLiteral = Get-LiteralStringValueFromExpressionText -ScriptText $Replacement
-    if ($null -eq $replacementLiteral) {
-        return $safeResult
-    }
-
     $literalOnlyValue = Get-ExpandableStringLiteralOnlyValue -Ast $originalExpr -SourceText $Original
     if ($null -eq $literalOnlyValue) {
         return $safeResult
+    }
+
+    $replacementLiteral = Get-LiteralStringValueFromExpressionText -ScriptText $Replacement
+    if ($null -eq $replacementLiteral) {
+        $replacementLiteral = [string]$Replacement
     }
 
     if ([string]$replacementLiteral -eq [string]$literalOnlyValue) {
@@ -18590,6 +18625,7 @@ if ($FullOutput) {
 Write-Host "Profile    : $OptimizationProfile" -ForegroundColor Gray
 Write-Host "Strategy   : $effectiveOverlapStrategy" -ForegroundColor Gray
 Write-Host "VarPolicy  : $effectiveVariableConflictPolicy" -ForegroundColor Gray
+Write-Host "DynPolicy  : $effectiveDynamicConflictPolicy" -ForegroundColor Gray
 Write-Host "SafeMode   : $SafeMode" -ForegroundColor Gray
 Write-Host "GateMode   : $PreExecutionGateMode" -ForegroundColor Gray
 if ($effectiveMaxRounds -ne $MaxRounds) {
@@ -19055,7 +19091,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         }
     } else {
         $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $effectiveVariableConflictPolicy
-        $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
+        $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText -DynamicConflictPolicy $effectiveDynamicConflictPolicy
         $functionResults = Get-FunctionInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
         if (($roundGate -and [bool]$roundGate.SkipWholeScriptDynamic) -or ($roundExecutionPlan -and [bool]$roundExecutionPlan.SkipWholeScriptDynamic)) {
             $wholeScriptDynamic = [PSCustomObject]@{
@@ -19277,6 +19313,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             GateReasons     = if ($roundGate) { @($roundGate.Reasons) } else { @() }
             OverlapStrategy = $effectiveOverlapStrategy
             VariableConflictPolicy = $effectiveVariableConflictPolicy
+            DynamicConflictPolicy = $effectiveDynamicConflictPolicy
             MaxIterations   = $effectiveRoundLimits.MaxIterations
             MaxTotalNodes   = $effectiveRoundLimits.MaxTotalNodes
             GlobalTimeBudgetMs = $GlobalTimeBudgetMs
