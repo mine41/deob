@@ -2193,6 +2193,8 @@ function Convert-ScriptBlockDefinition {
 
     $blockStart = Add-Node -cfg $cfg -type "BlockStart" -text "ScriptBlock $blockName" -line $scriptBlockExprAst.Extent.StartLineNumber -ast $null
     $blockStart | Add-Member -NotePropertyName "ScriptBlockText" -NotePropertyValue $scriptBlockExprAst.Extent.Text -Force
+    $blockStart | Add-Member -NotePropertyName "TextStartOffset" -NotePropertyValue $scriptBlockExprAst.Extent.StartOffset -Force
+    $blockStart | Add-Member -NotePropertyName "TextEndOffset" -NotePropertyValue $scriptBlockExprAst.Extent.EndOffset -Force
     $hasProcessBlock = ($null -ne $scriptBlock.ProcessBlock -and $scriptBlock.ProcessBlock.Statements.Count -gt 0)
     $blockStart | Add-Member -NotePropertyName "HasProcessBlock" -NotePropertyValue $hasProcessBlock -Force
     $blockStart | Add-Member -NotePropertyName "ProcessInputVar" -NotePropertyValue "__proc_input" -Force

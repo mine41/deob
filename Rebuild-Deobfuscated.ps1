@@ -530,6 +530,107 @@ function Test-SimpleVariableReplacementLiteral {
     return $true
 }
 
+function Test-TypedScalarTypeName {
+    param([AllowNull()][string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+
+    $scalarTypeNames = @(
+        'string', 'system.string',
+        'char', 'system.char',
+        'bool', 'boolean', 'system.boolean',
+        'byte', 'system.byte',
+        'sbyte', 'system.sbyte',
+        'int16', 'short', 'system.int16',
+        'uint16', 'ushort', 'system.uint16',
+        'int', 'int32', 'system.int32',
+        'uint32', 'uint', 'system.uint32',
+        'int64', 'long', 'system.int64',
+        'uint64', 'ulong', 'system.uint64',
+        'float', 'single', 'system.single',
+        'double', 'system.double',
+        'decimal', 'system.decimal'
+    )
+
+    return ($scalarTypeNames -contains ([string]$Name).ToLowerInvariant())
+}
+
+function Get-UnwrappedParenthesizedExpressionAst {
+    param($Ast)
+
+    $current = $Ast
+    while ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        $next = Get-StaticExpressionFromPipelineAst -PipelineAst $current.Pipeline
+        if (-not $next -or [object]::ReferenceEquals($next, $current)) { break }
+        $current = $next
+    }
+
+    return $current
+}
+
+function Test-SimpleTypedScalarCastAst {
+    param($Ast)
+
+    $current = Get-UnwrappedParenthesizedExpressionAst -Ast $Ast
+    if ($current -isnot [System.Management.Automation.Language.ConvertExpressionAst]) { return $false }
+    if (-not $current.Type -or -not $current.Type.TypeName) { return $false }
+    if (-not (Test-TypedScalarTypeName -Name ([string]$current.Type.TypeName.FullName))) { return $false }
+
+    $child = Get-UnwrappedParenthesizedExpressionAst -Ast $current.Child
+    if ($child -is [System.Management.Automation.Language.StringConstantExpressionAst]) { return $true }
+    if ($child -is [System.Management.Automation.Language.ConstantExpressionAst]) { return $true }
+    if ($child -is [System.Management.Automation.Language.VariableExpressionAst]) {
+        $name = if ($child.VariablePath) { [string]$child.VariablePath.UserPath } else { '' }
+        return ($name -match '^(?i:true|false)$')
+    }
+    if ($child -is [System.Management.Automation.Language.UnaryExpressionAst] -and $child.PSObject.Properties['Child']) {
+        $unaryChild = Get-UnwrappedParenthesizedExpressionAst -Ast $child.Child
+        return ($unaryChild -is [System.Management.Automation.Language.ConstantExpressionAst])
+    }
+    if ($child -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+        return (Test-SimpleTypedScalarCastAst -Ast $child)
+    }
+
+    return $false
+}
+
+function Test-TypedScalarExpressionText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+
+    $expr = Get-SingleTopLevelExpressionAstFromText -ScriptText $Text
+    if (-not $expr) { return $false }
+    return (Test-SimpleTypedScalarCastAst -Ast $expr)
+}
+
+function Get-TypedScalarExpressionRanges {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.Ast) { return @() }
+
+    $ranges = @()
+    $seen = @{}
+    $convertAsts = @($parse.Ast.FindAll({
+                param($n)
+                return (Test-SimpleTypedScalarCastAst -Ast $n)
+            }, $true))
+
+    foreach ($ast in $convertAsts) {
+        if (-not $ast.Extent) { continue }
+        $key = "$($ast.Extent.StartOffset):$($ast.Extent.EndOffset)"
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $ranges += [PSCustomObject]@{
+            StartOffset = [int]$ast.Extent.StartOffset
+            EndOffset   = [int]$ast.Extent.EndOffset
+        }
+    }
+
+    return @($ranges)
+}
+
 function Get-LastValidVariableReplacement {
     param([array]$Values)
 
@@ -617,6 +718,36 @@ function Test-PipelineAutomaticVariableAst {
     if ([string]::IsNullOrWhiteSpace($name)) { return $false }
 
     return ($name -ieq '_' -or $name -ieq 'PSItem')
+}
+
+function Test-ScriptBlockExpressionAssignmentRight {
+    param(
+        [AllowNull()][System.Management.Automation.Language.Ast]$Ast,
+        [int]$Depth = 0
+    )
+
+    if ($null -eq $Ast -or $Depth -gt 8) { return $false }
+
+    if ($Ast -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+        return $true
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ConvertExpressionAst]) {
+        return (Test-ScriptBlockExpressionAssignmentRight -Ast $Ast.Child -Depth ($Depth + 1))
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        return (Test-ScriptBlockExpressionAssignmentRight -Ast $Ast.Expression -Depth ($Depth + 1))
+    }
+
+    if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
+        $expr = Get-StaticExpressionFromPipelineAst -PipelineAst $Ast.Pipeline
+        if ($null -ne $expr) {
+            return (Test-ScriptBlockExpressionAssignmentRight -Ast $expr -Depth ($Depth + 1))
+        }
+    }
+
+    return $false
 }
 
 function Test-IsSensitiveCommandNameForContext {
@@ -861,6 +992,7 @@ function Get-ReplacementContextInfoFromScriptText {
             $assignedVarName = [string]$assignAst.Left.VariablePath.UserPath
             if ($null -eq $assignAst.Left.VariablePath -or $null -eq $assignAst.Left.VariablePath.UserPath) { continue }
             if (-not $commandTargetVariableNames.Contains($assignedVarName)) { continue }
+            if (Test-ScriptBlockExpressionAssignmentRight -Ast $assignAst.Right) { continue }
 
             Add-UniqueContextRange -SeenMap $commandTargetAssignmentRangeSeen -List $commandTargetAssignmentRanges -StartOffset $assignAst.Right.Extent.StartOffset -EndOffset $assignAst.Right.Extent.EndOffset
         }
@@ -1465,26 +1597,33 @@ function Filter-ReplacementCandidatesByContext {
         $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
         $withinPipelineVariable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineVariableRanges)
         $withinPipelineSensitiveExpression = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineSensitiveExpressionRanges)
+        $highValueSourceKinds = @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'CanonicalCommandInvocation', 'CommandTargetAssignment')
+        $allowInsideDynamicRange = $false
+        if ($withinDynamicRange -and
+            $sourceKind -eq 'CanonicalCommandInvocation' -and
+            $cand.PSObject.Properties['IsOriginMappedFromRuntime'] -and [bool]$cand.IsOriginMappedFromRuntime) {
+            $allowInsideDynamicRange = $true
+        }
 
-        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and $withinDynamicPayload -and $withinDynamicRange) {
+        if (-not $allowInsideDynamicRange -and $sourceKind -notin $highValueSourceKinds -and $withinDynamicPayload -and $withinDynamicRange) {
             $skipped += New-SkipRecord -Reason 'dynamic_payload_protected' -Message '外层 DynamicInvoke 候选有效，动态 payload 内部局部候选跳过' -Item $cand
             continue
         }
 
-        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and $withinDynamicRange) {
+        if (-not $allowInsideDynamicRange -and $sourceKind -notin $highValueSourceKinds -and $withinDynamicRange) {
             $skipped += New-SkipRecord -Reason 'dynamic_wrapper_protected' -Message '外层 DynamicInvoke 候选有效，动态调用节点内部局部候选跳过' -Item $cand
             continue
         }
 
         $allowInExpandable = $false
         if ($withinExpandable) {
-            if ($sourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'LiteralizedCommand', 'Resolvable')) {
+            if ($sourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'LiteralizedCommand', 'Resolvable')) {
                 $allowInExpandable = $true
             } elseif ($sourceKind -eq 'Static' -and $cand.PSObject.Properties['Confidence'] -and [string]$cand.Confidence -eq 'High') {
                 $allowInExpandable = $true
             }
         }
-        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and $withinExpandable -and -not $allowInExpandable) {
+        if ($sourceKind -notin $highValueSourceKinds -and $withinExpandable -and -not $allowInExpandable) {
             $skipped += New-SkipRecord -Reason 'expandable_context_protected' -Message 'ExpandableString 内仅放行高价值高置信候选，当前候选跳过' -Item $cand
             continue
         }
@@ -1505,12 +1644,12 @@ function Filter-ReplacementCandidatesByContext {
             continue
         }
 
-        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.MemberNameRanges)) {
+        if ($sourceKind -notin $highValueSourceKinds -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.MemberNameRanges)) {
             $skipped += New-SkipRecord -Reason 'member_name_protected' -Message '成员名位点默认不做局部替换，避免破坏反射/方法调用语义' -Item $cand
             continue
         }
 
-        if ($sourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandTargetAssignmentRanges)) {
+        if ($sourceKind -notin $highValueSourceKinds -and (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandTargetAssignmentRanges)) {
             $skipped += New-SkipRecord -Reason 'command_target_assignment_protected' -Message '命令目标变量的赋值表达式只允许整段还原，局部候选跳过' -Item $cand
             continue
         }
@@ -4747,6 +4886,7 @@ function Resolve-StaticAstTextInfo {
 
     return [PSCustomObject]@{
         Text              = [string]$text
+        Value             = $resolved.Value
         UsedEmptyFallback = [bool]$resolved.UsedEmptyFallback
     }
 }
@@ -5682,9 +5822,19 @@ function Try-DecodeStaticScriptTextFromAst {
 
     if ($null -eq $Ast) { return $null }
 
+    function Test-LocalStaticDecodedScriptText {
+        param([AllowNull()][string]$Text)
+
+        if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+        $trimmed = ([string]$Text).Trim()
+        if ($trimmed -match '^(?i)(?:[A-Za-z]:\\|\\\\|%[A-Z_][A-Z0-9_]*%\\)') { return $false }
+        if ($trimmed -match '^(?i)(?:\.{1,2}\\|~\\)') { return $false }
+        return ((Test-UsefulRecoveredScriptText -Text $trimmed) -and (Test-PowerShellSyntax -ScriptText $trimmed).IsValid)
+    }
+
     $extentText = if ($Ast.PSObject.Properties['Extent'] -and $Ast.Extent) { [string]$Ast.Extent.Text } else { '' }
     $directStaticText = Try-GetStaticStringValue -Ast $Ast -Context $Context
-    if (-not [string]::IsNullOrWhiteSpace($directStaticText) -and (Test-PowerShellSyntax -ScriptText $directStaticText).IsValid) {
+    if (Test-LocalStaticDecodedScriptText -Text $directStaticText) {
         return $directStaticText
     }
 
@@ -5697,7 +5847,7 @@ function Try-DecodeStaticScriptTextFromAst {
             }
 
             $value = Try-GetStaticStringValue -Ast $Ast.Child -Context $Context
-            if (-not [string]::IsNullOrWhiteSpace($value) -and (Test-PowerShellSyntax -ScriptText $value).IsValid) {
+            if (Test-LocalStaticDecodedScriptText -Text $value) {
                 return $value
             }
         }
@@ -5760,7 +5910,7 @@ function Try-DecodeStaticScriptTextFromAst {
 
             if ($callText -match '(?i)SecureStringToGlobalAllocUnicode' -or $callText -match '(?i)PtrToStringUni') {
                 $stringValue = Try-GetStaticStringValue -Ast $invokeAst -Context $Context
-                if (-not [string]::IsNullOrWhiteSpace($stringValue) -and (Test-PowerShellSyntax -ScriptText $stringValue).IsValid) {
+                if (Test-LocalStaticDecodedScriptText -Text $stringValue) {
                     return $stringValue
                 }
             }
@@ -6378,13 +6528,21 @@ function Get-ReplacementCandidatePriority {
         if ($isCmdline) { return 500 }
         return 430
     }
-    if ($sourceKind -eq 'FunctionResult') {
+    if ($sourceKind -eq 'FunctionResult' -or $sourceKind -eq 'ScriptBlockInvocation') {
         if ($protectsInner) {
             if ($isCmdline) { return 470 }
             return 420
         }
         return 390
     }
+    if ($sourceKind -eq 'CanonicalCommandInvocation') {
+        if ($Candidate.PSObject.Properties['IsOriginMappedFromRuntime'] -and [bool]$Candidate.IsOriginMappedFromRuntime) {
+            if ($isCmdline) { return 530 }
+            return 450
+        }
+        return 395
+    }
+    if ($sourceKind -eq 'CommandTargetAssignment') { return 382 }
     if ($sourceKind -eq 'SensitiveSink') { return 385 }
     if ($sourceKind -eq 'LiteralizedCommand') { return 380 }
     if ($sourceKind -eq 'VariableRead') {
@@ -6504,6 +6662,182 @@ function Get-LiteralizedCommandReplacementCandidates {
     }
 }
 
+function Get-CanonicalCommandInvocationReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.ContainsKey('CanonicalCommandInvocationResults') -or
+        -not $Context.CanonicalCommandInvocationResults -or
+        $Context.CanonicalCommandInvocationResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in @($Context.CanonicalCommandInvocationResults)) {
+        if (-not $rec) { continue }
+
+        $nodeId = if ($rec.PSObject.Properties['NodeId']) { $rec.NodeId } else { $null }
+        $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
+        $replacement = if ($rec.PSObject.Properties['ReplacementText']) { [string]$rec.ReplacementText } else { $null }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = if ($rec.PSObject.Properties['StartOffset']) { $rec.StartOffset } else { $null }
+            EndOffset   = if ($rec.PSObject.Properties['EndOffset']) { $rec.EndOffset } else { $null }
+            Type        = 'CanonicalCommandInvocation'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        if (-not $node) {
+            $skipped += New-SkipRecord -Reason 'canonical_command_node_missing' -Message "Canonical command 节点不存在: NodeId=$nodeId" -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement)) {
+            $skipped += New-SkipRecord -Reason 'canonical_command_empty' -Message 'Canonical command replacement 为空，跳过' -Item $baseItem
+            continue
+        }
+
+        $originInfo = Resolve-DynamicInvokeOriginInfo -Context $Context -Record $rec -Node $node
+        if (-not $originInfo.Success) {
+            $skipped += New-SkipRecord -Reason 'canonical_command_unmapped' -Message 'Canonical command 无法映射回原脚本位点，跳过' -Item $baseItem
+            continue
+        }
+
+        $start = [int]$originInfo.StartOffset
+        $end = [int]$originInfo.EndOffset
+        $resolvedRange = Resolve-DynamicInvokeRangeAgainstCurrentScript -ScriptText $ScriptText -StartOffset $start -EndOffset $end -Node $node -Record $rec
+        if (-not $resolvedRange.Success) {
+            $skipped += New-SkipRecord -Reason 'canonical_command_out_of_range' -Message "Canonical command offset 无法映射到当前脚本文本: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+
+        $start = [int]$resolvedRange.StartOffset
+        $end = [int]$resolvedRange.EndOffset
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'canonical_command_out_of_range' -Message "Canonical command offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring($start, $end - $start)
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'canonical_command_no_change' -Message 'Canonical command replacement 与原片段一致，跳过' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'CanonicalCommandInvocation'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'CanonicalCommandInvocation'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'String'
+            Executed    = $true
+            ResolvedName = if ($rec.PSObject.Properties['ResolvedName']) { [string]$rec.ResolvedName } else { $null }
+            OriginNodeId = [int]$originInfo.NodeId
+            OriginRuntimeDepth = [int]$originInfo.RuntimeDepth
+            IsOriginMappedFromRuntime = [bool]$originInfo.ViaRuntime
+            OriginResolutionMode = [string]$resolvedRange.ResolutionMode
+            ProtectsInnerCandidates = $true
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-CommandTargetAssignmentReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.ContainsKey('CommandTargetAssignmentResults') -or
+        -not $Context.CommandTargetAssignmentResults -or
+        $Context.CommandTargetAssignmentResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in @($Context.CommandTargetAssignmentResults)) {
+        if (-not $rec) { continue }
+
+        $start = if ($rec.PSObject.Properties['StartOffset']) { $rec.StartOffset } else { $null }
+        $end = if ($rec.PSObject.Properties['EndOffset']) { $rec.EndOffset } else { $null }
+        $replacement = if ($rec.PSObject.Properties['ReplacementText']) { [string]$rec.ReplacementText } else { $null }
+        $nodeId = if ($rec.PSObject.Properties['NodeId']) { $rec.NodeId } else { $null }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'CommandTargetAssignment'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'command_target_assignment_no_offset' -Message '命令目标赋值结果缺少 offset，跳过' -Item $baseItem
+            continue
+        }
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'command_target_assignment_out_of_range' -Message "命令目标赋值 offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement)) {
+            $skipped += New-SkipRecord -Reason 'command_target_assignment_empty' -Message '命令目标赋值 replacement 为空，跳过' -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'command_target_assignment_no_change' -Message '命令目标赋值 replacement 与原片段一致，跳过' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = [int]$start
+            EndOffset   = [int]$end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'CommandTargetAssignment'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'CommandTargetAssignment'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'String'
+            Executed    = $true
+            VariableName = if ($rec.PSObject.Properties['VariableName']) { [string]$rec.VariableName } else { $null }
+            ResolvedName = if ($rec.PSObject.Properties['ResolvedName']) { [string]$rec.ResolvedName } else { $null }
+        }
+    }
+
+    $merged = Merge-ReplacementCandidatesByRange -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
 function Get-SensitiveSinkReplacementCandidates {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -6550,6 +6884,21 @@ function Get-SensitiveSinkReplacementCandidates {
         }
 
         $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+        $recordOriginal = if ($rec.PSObject.Properties['OriginalText']) { [string]$rec.OriginalText } else { $null }
+        if (-not [string]::IsNullOrEmpty($recordOriginal) -and
+            -not [string]::Equals($original, $recordOriginal, [System.StringComparison]::Ordinal)) {
+            $relocated = Find-BestExactTextRangeInScriptText -ScriptText $ScriptText -CandidateTexts @($recordOriginal) -PreferredStartOffset ([int]$start)
+            if ($relocated) {
+                $start = [int]$relocated.StartOffset
+                $end = [int]$relocated.EndOffset
+                $baseItem.StartOffset = $start
+                $baseItem.EndOffset = $end
+                $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+            } else {
+                $skipped += New-SkipRecord -Reason 'sensitive_sink_offset_mismatch' -Message '敏感 sink offset 与原文不匹配，且无法重定位，跳过' -Item $baseItem
+                continue
+            }
+        }
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'sensitive_sink_no_change' -Message '敏感 sink replacement 与原片段一致，跳过' -Item $baseItem
             continue
@@ -6798,6 +7147,138 @@ function Get-FunctionInvokeReplacementCandidates {
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-ScriptBlockInvocationReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.ContainsKey('ScriptBlockInvocationResults') -or
+        -not $Context.ScriptBlockInvocationResults -or
+        $Context.ScriptBlockInvocationResults.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    foreach ($rec in @($Context.ScriptBlockInvocationResults)) {
+        if (-not $rec) { continue }
+
+        $start = if ($rec.PSObject.Properties['StartOffset']) { $rec.StartOffset } else { $null }
+        $end = if ($rec.PSObject.Properties['EndOffset']) { $rec.EndOffset } else { $null }
+        $nodeId = if ($rec.PSObject.Properties['NodeId']) { $rec.NodeId } else { $null }
+        $replacement = if ($rec.PSObject.Properties['ReplacementText']) { [string]$rec.ReplacementText } else { $null }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'ScriptBlockInvocation'
+            Depth       = $null
+            NodeId      = $nodeId
+        }
+
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_no_offset' -Message '脚本块调用缺少 offset，跳过' -Item $baseItem
+            continue
+        }
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_out_of_range' -Message "脚本块调用 offset 越界: [$start-$end], len=$($ScriptText.Length)" -Item $baseItem
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($replacement) -or $replacement -eq '__BLOCKED_PLACEHOLDER__') {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_empty' -Message '脚本块调用 replacement 为空，跳过' -Item $baseItem
+            continue
+        }
+
+        $blockStart = if ($rec.PSObject.Properties['BlockStartOffset']) { $rec.BlockStartOffset } else { $null }
+        $blockEnd = if ($rec.PSObject.Properties['BlockEndOffset']) { $rec.BlockEndOffset } else { $null }
+        if ($null -ne $blockStart -and $null -ne $blockEnd -and
+            [int]$blockStart -ge 0 -and [int]$blockEnd -gt [int]$blockStart -and [int]$blockEnd -le $ScriptText.Length) {
+            $blockOriginal = $ScriptText.Substring([int]$blockStart, ([int]$blockEnd - [int]$blockStart)).Trim()
+            if ($blockOriginal.StartsWith('{') -and $blockOriginal.EndsWith('}')) {
+                $skipped += New-SkipRecord -Reason 'scriptblock_invocation_source_backed_block' -Message '脚本块在源码中已有正文，优先改写脚本块正文而不是内联调用点' -Item $baseItem
+                continue
+            }
+        }
+
+        $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+        if ($original -eq $replacement) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_no_change' -Message '脚本块调用 replacement 与原片段一致，跳过' -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = [int]$start
+            EndOffset   = [int]$end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'ScriptBlockInvocation'
+            Depth       = $null
+            NodeId      = $nodeId
+            SourceKind  = 'ScriptBlockInvocation'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'ScriptBlockInvocation'
+            Executed    = $true
+            ProtectsInnerCandidates = $true
+            BlockName = if ($rec.PSObject.Properties['BlockName']) { [string]$rec.BlockName } else { $null }
+            BlockStartOffset = if ($rec.PSObject.Properties['BlockStartOffset']) { $rec.BlockStartOffset } else { $null }
+            BlockEndOffset = if ($rec.PSObject.Properties['BlockEndOffset']) { $rec.BlockEndOffset } else { $null }
+        }
+    }
+
+    $merged = Merge-ScriptBlockInvocationReplacementCandidates -Candidates $candidates
+    return [PSCustomObject]@{
+        Candidates = @($merged.Candidates)
+        Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Merge-ScriptBlockInvocationReplacementCandidates {
+    param([array]$Candidates)
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $map = @{}
+    $conflictRanges = @{}
+    $skipped = @()
+    foreach ($cand in @($Candidates | Sort-Object StartOffset, EndOffset, NodeId, Type)) {
+        if (-not $cand) { continue }
+        $key = "$($cand.StartOffset):$($cand.EndOffset):$($cand.NodeId):$($cand.Type)"
+        if ($conflictRanges.ContainsKey($key)) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_same_range_conflict' -Message '同一脚本块调用位点产生不同结果，保守跳过该区间' -Item $cand
+            continue
+        }
+
+        if (-not $map.ContainsKey($key)) {
+            $map[$key] = $cand
+            continue
+        }
+
+        $existing = $map[$key]
+        if ([string]$existing.Replacement -eq [string]$cand.Replacement) {
+            continue
+        }
+
+        $map.Remove($key)
+        $conflictRanges[$key] = $true
+        $message = '同一脚本块调用位点产生不同结果，保守跳过该区间'
+        $skipped += New-SkipRecord -Reason 'scriptblock_invocation_same_range_conflict' -Message $message -Item $existing
+        $skipped += New-SkipRecord -Reason 'scriptblock_invocation_same_range_conflict' -Message $message -Item $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($map.Values | Sort-Object StartOffset, EndOffset, NodeId, Type)
+        Skipped    = @($skipped)
     }
 }
 
@@ -7706,6 +8187,63 @@ function Filter-CandidatesPreferDynamicInvoke {
     }
 }
 
+function Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks {
+    param([array]$Candidates)
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @()
+            Skipped    = @()
+        }
+    }
+
+    $blockInvocationCandidates = @($Candidates | Where-Object { $_ -and [string]$_.SourceKind -eq 'ScriptBlockInvocation' })
+    if ($blockInvocationCandidates.Count -eq 0) {
+        return [PSCustomObject]@{
+            Candidates = @($Candidates)
+            Skipped    = @()
+        }
+    }
+
+    $kept = @()
+    $skipped = @()
+    foreach ($cand in @($Candidates)) {
+        if (-not $cand) { continue }
+        if ([string]$cand.SourceKind -ne 'ScriptBlockInvocation') {
+            $kept += $cand
+            continue
+        }
+
+        $recBlockStart = if ($cand.PSObject.Properties['BlockStartOffset']) { $cand.BlockStartOffset } else { $null }
+        $recBlockEnd = if ($cand.PSObject.Properties['BlockEndOffset']) { $cand.BlockEndOffset } else { $null }
+        if ($null -eq $recBlockStart -or $null -eq $recBlockEnd) {
+            $kept += $cand
+            continue
+        }
+
+        $blockStart = [int]$recBlockStart
+        $blockEnd = [int]$recBlockEnd
+        $updatesBlock = @($Candidates | Where-Object {
+                $_ -and $_ -ne $cand -and
+                [string]$_.SourceKind -ne 'ScriptBlockInvocation' -and
+                [int]$_.StartOffset -ge $blockStart -and
+                [int]$_.EndOffset -le $blockEnd
+            }).Count -gt 0
+
+        if ($updatesBlock) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_wait_updated_block' -Message '脚本块正文同轮被改写，调用点延后一轮内联' -Item $cand
+            continue
+        }
+
+        $kept += $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($kept)
+        Skipped    = @($skipped)
+    }
+}
+
 function Test-StaticLowConfidenceCandidateAutoApply {
     param(
         $Candidate,
@@ -7770,6 +8308,7 @@ function Get-StaticReplacementCandidates {
     if ($Context -and $Context.CFG -and $Context.CFG.Nodes) {
         $nodes = @($Context.CFG.Nodes | Sort-Object Id)
     }
+    $typedScalarRanges = Get-TypedScalarExpressionRanges -ScriptText $ScriptText
     $null = Reset-StaticEvalState -Context $Context -TimeBudgetMs $TimeBudgetMs
 
     foreach ($node in $nodes) {
@@ -7841,6 +8380,11 @@ function Get-StaticReplacementCandidates {
                 if (-not [string]::IsNullOrWhiteSpace($decodedScriptText)) {
                     $replacement = $decodedScriptText
                     $original = $ScriptText.Substring($start, $end - $start)
+                    if ((Test-TypedScalarExpressionText -Text $original) -or
+                        (Test-ReplacementWithinRanges -StartOffset ([int]$start) -EndOffset ([int]$end) -Ranges $typedScalarRanges)) {
+                        $skipped += New-SkipRecord -Reason 'static_already_typed_scalar' -Message '原片段已经是 typed scalar，跳过静态脚本文本解码' -Item $baseItem
+                        continue
+                    }
                     if ($original -eq $replacement) {
                         $skipped += New-SkipRecord -Reason 'static_no_change' -Message '静态整段解码结果与原片段一致' -Item $baseItem
                         continue
@@ -7892,7 +8436,12 @@ function Get-StaticReplacementCandidates {
                 if ($resolved.PSObject.Properties['RawReplacementText']) {
                     $replacement = [string]$resolved.RawReplacementText
                 } else {
-                    $replacement = [string](Format-ResolvableValue $resolved.Value)
+                    $typedReplacement = Format-TypedScalarResolvableValue $resolved.Value
+                    if (-not [string]::IsNullOrWhiteSpace([string]$typedReplacement)) {
+                        $replacement = [string]$typedReplacement
+                    } else {
+                        $replacement = [string](Format-ResolvableValue $resolved.Value)
+                    }
                 }
                 if ($replacement -eq '__BLOCKED_PLACEHOLDER__') {
                     $skipped += New-SkipRecord -Reason 'static_blocked' -Message '静态结果为占位符，跳过' -Item $baseItem
@@ -7900,6 +8449,11 @@ function Get-StaticReplacementCandidates {
                 }
 
                 $original = $ScriptText.Substring($start, $end - $start)
+                if ((Test-TypedScalarExpressionText -Text $original) -or
+                    (Test-ReplacementWithinRanges -StartOffset ([int]$start) -EndOffset ([int]$end) -Ranges $typedScalarRanges)) {
+                    $skipped += New-SkipRecord -Reason 'static_already_typed_scalar' -Message '原片段已经是 typed scalar，跳过重复包裹' -Item $baseItem
+                    continue
+                }
                 if ($original -eq $replacement) {
                     $skipped += New-SkipRecord -Reason 'static_no_change' -Message '静态替换无变化' -Item $baseItem
                     continue
@@ -7974,6 +8528,7 @@ function Get-ReplacementsFromResolvableResults {
 
     $regionMap = @{}          # key -> candidate
     $conflictRegions = @{}    # key -> @{ Replacements = @() }
+    $typedScalarRanges = Get-TypedScalarExpressionRanges -ScriptText $ScriptText
 
     foreach ($rec in $Context.ResolvableResults.Values) {
         $r = $rec.Resolvable
@@ -8028,6 +8583,11 @@ function Get-ReplacementsFromResolvableResults {
         }
 
         $original = $ScriptText.Substring($start, $end - $start)
+        if ((Test-TypedScalarExpressionText -Text $original) -or
+            (Test-ReplacementWithinRanges -StartOffset ([int]$start) -EndOffset ([int]$end) -Ranges $typedScalarRanges)) {
+            $skipped += New-SkipRecord -Reason 'already_typed_scalar' -Message '原片段已经是 typed scalar，跳过重复包裹' -Item $baseItem
+            continue
+        }
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'no_change' -Message 'replacement 与原片段一致' -Item $baseItem
             continue
@@ -8170,6 +8730,11 @@ function Get-ReplacementsFromResolvableResults {
             }
 
             $original = $ScriptText.Substring($start, $end - $start)
+            if ((Test-TypedScalarExpressionText -Text $original) -or
+                (Test-ReplacementWithinRanges -StartOffset ([int]$start) -EndOffset ([int]$end) -Ranges $typedScalarRanges)) {
+                $skipped += New-SkipRecord -Reason 'var_already_typed_scalar' -Message '变量读取位于 typed scalar 内部，跳过重复包裹' -Item $baseItem
+                continue
+            }
             if ($original -eq $replacement) {
                 $skipped += New-SkipRecord -Reason 'no_change' -Message '变量读取 replacement 与原片段一致' -Item $baseItem
                 continue
@@ -17743,8 +18308,12 @@ function Get-SimpleCommandArgumentReplacementText {
     if (-not $Ast.Extent) {
         return $null
     }
+    if (Test-TypedScalarExpressionText -Text ([string]$Ast.Extent.Text)) {
+        return $null
+    }
 
     $value = $null
+    $typedReplacement = $null
     if ($Ast -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
         $value = [string]$Ast.Value
     } elseif ($Ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
@@ -17763,10 +18332,17 @@ function Get-SimpleCommandArgumentReplacementText {
         }
         if ($staticInfo -and -not [string]::IsNullOrWhiteSpace([string]$staticInfo.Text)) {
             $value = [string]$staticInfo.Text
+            if ($staticInfo.PSObject.Properties['Value']) {
+                $typedReplacement = Format-TypedScalarResolvableValue $staticInfo.Value
+            }
         }
     }
 
-    $replacementText = Convert-SimpleCommandArgumentResolvedTextToReplacementText -Text $value
+    $replacementText = if (-not [string]::IsNullOrWhiteSpace([string]$typedReplacement)) {
+        [string]$typedReplacement
+    } else {
+        Convert-SimpleCommandArgumentResolvedTextToReplacementText -Text $value
+    }
     if ([string]::IsNullOrWhiteSpace($replacementText)) {
         return $null
     }
@@ -18046,6 +18622,68 @@ function Invoke-CanonicalizeDirectCommandNames {
     return $ScriptText
 }
 
+function Invoke-RemoveRedundantAmpersandForDirectCommands {
+    param([Parameter(Mandatory)][string]$ScriptText)
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return $ScriptText
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return $ScriptText
+    }
+
+    $replacements = @()
+    $commandAsts = @($parse.Ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.CommandAst]
+        }, $true))
+
+    foreach ($cmdAst in $commandAsts) {
+        if ([string]$cmdAst.InvocationOperator -ne 'Ampersand') { continue }
+        if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -eq 0) { continue }
+
+        $firstElement = $cmdAst.CommandElements[0]
+        if (-not $firstElement -or -not $firstElement.Extent) { continue }
+
+        $commandName = $cmdAst.GetCommandName()
+        if ([string]::IsNullOrWhiteSpace($commandName)) { continue }
+
+        $canonical = Try-Resolve-CanonicalCommandNameText -Name $commandName
+        if (-not $canonical.Found -or [string]::IsNullOrWhiteSpace([string]$canonical.Name)) { continue }
+
+        $start = [int]$cmdAst.Extent.StartOffset
+        $end = [int]$firstElement.Extent.StartOffset
+        if ($end -le $start) { continue }
+
+        $prefixText = $ScriptText.Substring($start, $end - $start)
+        if ($prefixText -notmatch '^\s*&\s*$') { continue }
+
+        $replacements += [PSCustomObject]@{
+            Start = $start
+            End   = $end
+            Text  = ''
+        }
+    }
+
+    if ($replacements.Count -eq 0) {
+        return $ScriptText
+    }
+
+    $result = $ScriptText
+    foreach ($r in @($replacements | Sort-Object Start -Descending)) {
+        $result = $result.Substring(0, $r.Start) + $r.Text + $result.Substring($r.End)
+    }
+
+    $check = Test-PowerShellSyntax -ScriptText $result
+    if ($check.IsValid) {
+        return $result
+    }
+
+    return $ScriptText
+}
+
 function Invoke-NormalizeSimpleCommandArguments {
     param([Parameter(Mandatory)][string]$ScriptText)
 
@@ -18303,6 +18941,7 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     if ($fastTimeoutPostProcess) {
         $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
         $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
+        $working = Invoke-RemoveRedundantAmpersandForDirectCommands -ScriptText $working
         $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
         $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
         $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
@@ -18311,6 +18950,7 @@ function Invoke-PostProcessDeobfuscatedScriptText {
             $working = [string]$mandatoryPayloadInfo.PayloadText
             $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
             $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
+            $working = Invoke-RemoveRedundantAmpersandForDirectCommands -ScriptText $working
             $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
             $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
             $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
@@ -18350,6 +18990,7 @@ function Invoke-PostProcessDeobfuscatedScriptText {
 
         $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
         $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
+        $working = Invoke-RemoveRedundantAmpersandForDirectCommands -ScriptText $working
         $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
         $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
         $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
@@ -18377,6 +19018,7 @@ function Invoke-PostProcessDeobfuscatedScriptText {
             $working = $payloadText
             $working = Invoke-CanonicalizeIndirectCommandHeads -ScriptText $working
             $working = Invoke-CanonicalizeDirectCommandNames -ScriptText $working
+            $working = Invoke-RemoveRedundantAmpersandForDirectCommands -ScriptText $working
             $working = Invoke-NormalizeSimpleCommandArguments -ScriptText $working
             $working = Invoke-WholeScriptStaticPathRewritePass -ScriptText $working
             $working = Invoke-NormalizeMandatoryBase64Expressions -ScriptText $working
@@ -19038,7 +19680,15 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         }
     }
 
-    if ($earlyPostProcessChanged) {
+    $hasCfgReplacementEvidence = ($null -ne $ctx -and (
+            ($ctx.ContainsKey('DynamicInvokeResults') -and $ctx.DynamicInvokeResults -and $ctx.DynamicInvokeResults.Count -gt 0) -or
+            ($ctx.ContainsKey('CanonicalCommandInvocationResults') -and $ctx.CanonicalCommandInvocationResults -and $ctx.CanonicalCommandInvocationResults.Count -gt 0) -or
+            ($ctx.ContainsKey('CommandTargetAssignmentResults') -and $ctx.CommandTargetAssignmentResults -and $ctx.CommandTargetAssignmentResults.Count -gt 0) -or
+        ($ctx.ContainsKey('FunctionInvokeResults') -and $ctx.FunctionInvokeResults -and $ctx.FunctionInvokeResults.Count -gt 0) -or
+        ($ctx.ContainsKey('ScriptBlockInvocationResults') -and $ctx.ScriptBlockInvocationResults -and $ctx.ScriptBlockInvocationResults.Count -gt 0)
+        ))
+
+    if ($earlyPostProcessChanged -and -not $hasCfgReplacementEvidence) {
         $candidates = @()
         $skipped = @()
         $selected = @()
@@ -19092,7 +19742,10 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
     } else {
         $base = Get-ReplacementsFromResolvableResults -Context $ctx -ScriptText $scriptText -VariableConflictPolicy $effectiveVariableConflictPolicy
         $dynamic = Get-DynamicInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText -DynamicConflictPolicy $effectiveDynamicConflictPolicy
+        $canonicalCommand = Get-CanonicalCommandInvocationReplacementCandidates -Context $ctx -ScriptText $scriptText
+        $commandTargetAssignments = Get-CommandTargetAssignmentReplacementCandidates -Context $ctx -ScriptText $scriptText
         $functionResults = Get-FunctionInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
+        $scriptBlockInvocations = Get-ScriptBlockInvocationReplacementCandidates -Context $ctx -ScriptText $scriptText
         if (($roundGate -and [bool]$roundGate.SkipWholeScriptDynamic) -or ($roundExecutionPlan -and [bool]$roundExecutionPlan.SkipWholeScriptDynamic)) {
             $wholeScriptDynamic = [PSCustomObject]@{
                 Candidates = @()
@@ -19121,12 +19774,13 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         } else {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
-        $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($functionResults.Candidates) + @($wholeScriptDynamic.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates))
-        $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($merged.Candidates) -Context $ctx -ScriptText $scriptText
+        $merged = Merge-ReplacementCandidatesByRange -Candidates (@($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates))
+        $scriptBlockInvocationFiltered = Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks -Candidates @($merged.Candidates)
+        $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($scriptBlockInvocationFiltered.Candidates) -Context $ctx -ScriptText $scriptText
         $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
         $candidates = @($preferred.Candidates)
-        $skipped = @($dynamic.Skipped) + @($functionResults.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockInvocations.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
         $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
         $autoCandidates = @()

@@ -1222,10 +1222,14 @@ function Convert-CodeForCurrentScope {
     )
 
     if ($Context.CurrentScopePrefix -and $Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-            return Convert-VariableNames -Code $Code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
+        $result = $Code
+        for ($i = $Context.ScopeStack.Count - 1; $i -ge 0; $i--) {
+            $scope = $Context.ScopeStack[$i]
+            if ($scope.LocalVars -and $scope.LocalVars.Count -gt 0) {
+                $result = Convert-VariableNames -Code $result -ScopePrefix $scope.ScopePrefix -LocalVarNames $scope.LocalVars
+            }
         }
+        return $result
     }
     return $Code
 }
@@ -1513,14 +1517,7 @@ function Resolve-AssignmentActualVariableName {
         return $VariableName
     }
 
-    if ($Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope -and $currentScope.LocalVars -and $VariableName -in $currentScope.LocalVars) {
-            return $currentScope.ScopePrefix + $VariableName
-        }
-    }
-
-    return $VariableName
+    return (Resolve-CFGVariableStackActualName -Context $Context -VariableName $VariableName)
 }
 
 function Test-CFGVariableNameAvailable {
@@ -1842,6 +1839,253 @@ function Record-LiteralizedCommandResult {
     Write-ExecutionLog -Context $Context -Message "  [LITERALIZE] Safe command folded for `$${0}: {1}" -f $info.VariableName, $info.Pattern
 }
 
+function Get-CommandAstGlobalExtent {
+    param(
+        $Node,
+        [System.Management.Automation.Language.Ast]$Ast
+    )
+
+    if ($null -eq $Ast -or -not $Ast.Extent) {
+        return $null
+    }
+
+    $start = [int]$Ast.Extent.StartOffset
+    $end = [int]$Ast.Extent.EndOffset
+    if ($Node -and $Node.PSObject.Properties['RuntimeGenerated'] -and [bool]$Node.RuntimeGenerated) {
+        return [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+        }
+    }
+
+    if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) {
+        $nodeStart = [int]$Node.TextStartOffset
+        if ($start -ge 0 -and $end -le ([string]$Node.Text).Length) {
+            $start = $nodeStart + $start
+            $end = $nodeStart + $end
+        }
+    }
+
+    return [PSCustomObject]@{
+        StartOffset = $start
+        EndOffset   = $end
+    }
+}
+
+function Record-CanonicalCommandInvocationResult {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo
+    )
+
+    if ($null -eq $Node -or $null -eq $Context -or -not $CommandInfo -or -not $CommandInfo.HasCommand) {
+        return
+    }
+    if (-not ($CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst])) {
+        return
+    }
+    if ($CommandInfo.Ast.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Ampersand) {
+        return
+    }
+    if (-not $CommandInfo.PSObject.Properties['ResolutionConfidence'] -or [string]$CommandInfo.ResolutionConfidence -ne 'High') {
+        return
+    }
+    if (-not $CommandInfo.PSObject.Properties['ResolutionKind'] -or [string]$CommandInfo.ResolutionKind -eq 'Direct') {
+        return
+    }
+
+    $cmdAst = $CommandInfo.Ast
+    if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -lt 1) {
+        return
+    }
+
+    $targetAst = $cmdAst.CommandElements[0]
+    if (-not $targetAst -or -not $targetAst.Extent) {
+        return
+    }
+
+    $cmdStart = [int]$cmdAst.Extent.StartOffset
+    $targetStart = [int]$targetAst.Extent.StartOffset
+    $targetEnd = [int]$targetAst.Extent.EndOffset
+    $localTargetEnd = $targetEnd - $cmdStart
+    if ($cmdStart -lt 0 -or $targetStart -lt $cmdStart -or $targetEnd -le $targetStart) {
+        return
+    }
+
+    $nodeText = [string]$Node.Text
+    if ($localTargetEnd -le 0 -or $localTargetEnd -gt $nodeText.Length) {
+        return
+    }
+
+    $tail = $nodeText.Substring($localTargetEnd)
+    $replacement = ([string]$CommandInfo.ResolvedName) + $tail
+    if ([string]::IsNullOrWhiteSpace($replacement) -or [string]$replacement -eq [string]$Node.Text) {
+        return
+    }
+
+    $extent = Get-CommandAstGlobalExtent -Node $Node -Ast $cmdAst
+    if (-not $extent) { return }
+
+    if (-not $Context.ContainsKey('CanonicalCommandInvocationResults') -or $null -eq $Context.CanonicalCommandInvocationResults) {
+        $Context.CanonicalCommandInvocationResults = @()
+    }
+
+    $Context.CanonicalCommandInvocationResults += [PSCustomObject]@{
+        NodeId            = $Node.Id
+        StartOffset       = $extent.StartOffset
+        EndOffset         = $extent.EndOffset
+        OriginalText      = [string]$Node.Text
+        ReplacementText   = [string]$replacement
+        ResolvedName      = [string]$CommandInfo.ResolvedName
+        OriginalName      = [string]$CommandInfo.OriginalName
+        ResolutionKind    = [string]$CommandInfo.ResolutionKind
+        RuntimeGenerated  = ($Node.PSObject.Properties['RuntimeGenerated'] -and [bool]$Node.RuntimeGenerated)
+        RuntimeBlockName  = if ($Node.PSObject.Properties['RuntimeBlockName']) { [string]$Node.RuntimeBlockName } else { $null }
+        Timestamp         = Get-Date
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [CANONCMD] Recorded: $([string]$Node.Text) -> $replacement"
+}
+
+function Record-CommandTargetAssignmentResult {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo
+    )
+
+    if ($null -eq $Node -or $null -eq $Context -or -not $CommandInfo -or -not $CommandInfo.HasCommand) {
+        return
+    }
+    if (-not ($CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst])) {
+        return
+    }
+    if ($CommandInfo.Ast.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Ampersand) {
+        return
+    }
+    if (-not $CommandInfo.PSObject.Properties['ResolutionConfidence'] -or [string]$CommandInfo.ResolutionConfidence -ne 'High') {
+        return
+    }
+    if (-not $CommandInfo.PSObject.Properties['ResolutionKind'] -or [string]$CommandInfo.ResolutionKind -eq 'Direct') {
+        return
+    }
+
+    $targetAst = $CommandInfo.Ast.CommandElements[0]
+    if ($targetAst -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
+        return
+    }
+    $varName = [string]$targetAst.VariablePath.UserPath
+    if ([string]::IsNullOrWhiteSpace($varName)) {
+        return
+    }
+
+    $assignNode = @($Context.CFG.Nodes | Where-Object {
+        $_.Ast -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $_.Ast.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+        [string]$_.Ast.Left.VariablePath.UserPath -eq $varName
+    } | Select-Object -Last 1)
+
+    if ($assignNode.Count -eq 0) {
+        return
+    }
+
+    $assignment = $assignNode[0].Ast
+    if (-not $assignment.Right -or -not $assignment.Right.Extent) {
+        return
+    }
+
+    $replacement = Format-LiteralizedCommandValue -Value ([string]$CommandInfo.ResolvedName)
+    if ([string]::IsNullOrWhiteSpace($replacement) -or [string]$replacement -eq [string]$assignment.Right.Extent.Text) {
+        return
+    }
+
+    if (-not $Context.ContainsKey('CommandTargetAssignmentResults') -or $null -eq $Context.CommandTargetAssignmentResults) {
+        $Context.CommandTargetAssignmentResults = @()
+    }
+
+    $Context.CommandTargetAssignmentResults += [PSCustomObject]@{
+        NodeId          = $assignNode[0].Id
+        CallerNodeId    = $Node.Id
+        VariableName    = $varName
+        StartOffset     = [int]$assignment.Right.Extent.StartOffset
+        EndOffset       = [int]$assignment.Right.Extent.EndOffset
+        OriginalText    = [string]$assignment.Right.Extent.Text
+        ReplacementText = [string]$replacement
+        ResolvedName    = [string]$CommandInfo.ResolvedName
+        SourceInvocationText = [string]$Node.Text
+        Timestamp       = Get-Date
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [CMDASSIGN] Recorded `$${varName} assignment -> $replacement"
+}
+
+function Record-ResolvedCommandInvocationArtifacts {
+    param(
+        $Node,
+        [hashtable]$Context,
+        $CommandInfo
+    )
+
+    Record-CanonicalCommandInvocationResult -Node $Node -Context $Context -CommandInfo $CommandInfo
+    Record-CommandTargetAssignmentResult -Node $Node -Context $Context -CommandInfo $CommandInfo
+}
+
+function Record-ScriptBlockInvocationResult {
+    param(
+        $CallerNode,
+        [hashtable]$Context,
+        [string]$BlockName,
+        [AllowNull()][array]$Arguments = $null
+    )
+
+    if ($null -eq $CallerNode -or $null -eq $Context -or [string]::IsNullOrWhiteSpace($BlockName)) {
+        return
+    }
+    if (-not $Context.ScriptBlockSubgraphs -or -not $Context.ScriptBlockSubgraphs.ContainsKey($BlockName)) {
+        return
+    }
+    if ($Arguments -and $Arguments.Count -gt 0) {
+        return
+    }
+
+    $blockStartId = $Context.ScriptBlockSubgraphs[$BlockName]
+    $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+    if (-not $blockStartNode -or [string]::IsNullOrWhiteSpace([string]$blockStartNode.ScriptBlockText)) {
+        return
+    }
+    if (-not $CallerNode.PSObject.Properties['TextStartOffset'] -or -not $CallerNode.PSObject.Properties['TextEndOffset']) {
+        return
+    }
+
+    $replacement = ([string]$blockStartNode.ScriptBlockText).Trim()
+    if ($replacement.StartsWith('{') -and $replacement.EndsWith('}') -and $replacement.Length -ge 2) {
+        $replacement = $replacement.Substring(1, $replacement.Length - 2).Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($replacement) -or [string]$replacement -eq [string]$CallerNode.Text) {
+        return
+    }
+
+    if (-not $Context.ContainsKey('ScriptBlockInvocationResults') -or $null -eq $Context.ScriptBlockInvocationResults) {
+        $Context.ScriptBlockInvocationResults = @()
+    }
+
+    $Context.ScriptBlockInvocationResults += [PSCustomObject]@{
+        NodeId          = $CallerNode.Id
+        BlockName       = [string]$BlockName
+        BlockStartNodeId = [int]$blockStartId
+        BlockStartOffset = if ($blockStartNode.PSObject.Properties['TextStartOffset']) { $blockStartNode.TextStartOffset } else { $null }
+        BlockEndOffset  = if ($blockStartNode.PSObject.Properties['TextEndOffset']) { $blockStartNode.TextEndOffset } else { $null }
+        StartOffset     = [int]$CallerNode.TextStartOffset
+        EndOffset       = [int]$CallerNode.TextEndOffset
+        OriginalText    = [string]$CallerNode.Text
+        ReplacementText = [string]$replacement
+        Timestamp       = Get-Date
+    }
+
+    Write-ExecutionLog -Context $Context -Message "  [SBCALL] Recorded: $([string]$CallerNode.Text) -> $replacement"
+}
+
 function Test-SensitiveSinkText {
     param(
         [AllowNull()][string]$Text,
@@ -2125,12 +2369,28 @@ function Get-SensitiveCommandReplacementRecord {
 
     if ($applied.Count -eq 0) { return $null }
 
+    $globalExtent = Get-NodeAstGlobalExtent -Node $Node -Ast $commandAst
+    if ($null -eq $globalExtent) { return $null }
+
+    $firstApplied = @($applied | Sort-Object Start | Select-Object -First 1)
+    if ($applied.Count -eq 1 -and $firstApplied.Count -eq 1) {
+        $item = $firstApplied[0]
+        return [PSCustomObject]@{
+            NodeId           = $Node.Id
+            StartOffset      = [int]$globalExtent.StartOffset + [int]$item.Start
+            EndOffset        = [int]$globalExtent.StartOffset + [int]$item.End
+            OriginalText     = $replacementText.Substring([int]$item.Start, ([int]$item.End - [int]$item.Start))
+            ReplacementText  = [string]$item.Text
+            SinkType         = [string]$item.SinkType
+            Executed         = $true
+            Timestamp        = Get-Date
+            UsedEmptyFallback = $false
+        }
+    }
+
     foreach ($item in @($applied | Sort-Object Start -Descending)) {
         $replacementText = $replacementText.Substring(0, $item.Start) + $item.Text + $replacementText.Substring($item.End)
     }
-
-    $globalExtent = Get-NodeAstGlobalExtent -Node $Node -Ast $commandAst
-    if ($null -eq $globalExtent) { return $null }
 
     return [PSCustomObject]@{
         NodeId           = $Node.Id
@@ -4942,6 +5202,76 @@ function Format-ResolvableValue {
     return ConvertTo-Expression -Object $Value -Expand -1
 }
 
+function Format-TypedScalarResolvableValue {
+    param($Value)
+
+    if ($null -eq $Value) { return $null }
+
+    if (Test-ExecutionResultSequenceContainer -Value $Value) {
+        $Value = Normalize-ExecutionResultValue -Value $Value
+    }
+
+    if ($null -eq $Value) { return $null }
+
+    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
+        $Value = $Value.BaseObject
+    }
+
+    $typeName = $null
+    $literal = $null
+    if ($Value -is [string]) {
+        $typeName = 'string'
+        if ($Value -match "[`r`n]") {
+            $literal = ConvertTo-SingleQuotedHereStringLiteral -Text $Value
+        } else {
+            $literal = "'" + ([string]$Value).Replace("'", "''") + "'"
+        }
+    } elseif ($Value -is [char]) {
+        $typeName = 'char'
+        $literal = if ([char]$Value -eq [char]39) {
+            "''''"
+        } elseif ([char]::IsControl([char]$Value)) {
+            [string][int][char]$Value
+        } else {
+            "'" + ([string]$Value).Replace("'", "''") + "'"
+        }
+    } elseif ($Value -is [bool]) {
+        $typeName = 'bool'
+    } elseif ($Value -is [byte]) {
+        $typeName = 'byte'
+    } elseif ($Value -is [sbyte]) {
+        $typeName = 'sbyte'
+    } elseif ($Value -is [int16]) {
+        $typeName = 'int16'
+    } elseif ($Value -is [uint16]) {
+        $typeName = 'uint16'
+    } elseif ($Value -is [int]) {
+        $typeName = 'int'
+    } elseif ($Value -is [uint32]) {
+        $typeName = 'uint32'
+    } elseif ($Value -is [int64]) {
+        $typeName = 'int64'
+    } elseif ($Value -is [uint64]) {
+        $typeName = 'uint64'
+    } elseif ($Value -is [float]) {
+        $typeName = 'float'
+    } elseif ($Value -is [double]) {
+        $typeName = 'double'
+    } elseif ($Value -is [decimal]) {
+        $typeName = 'decimal'
+    } else {
+        return $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$literal)) {
+        $literal = ConvertTo-Expression -Object $Value -Expand -1
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$literal)) { return $null }
+    if ([string]$literal -eq '$null') { return $null }
+
+    return ("([{0}]{1})" -f $typeName, [string]$literal)
+}
+
 function Test-ResolvableValue {
     param($Value)
 
@@ -5024,7 +5354,10 @@ function Evaluate-NodeResolvables {
                 continue
             }
 
-            $value = Format-ResolvableValue $evalResult.Result
+            $value = Format-TypedScalarResolvableValue $evalResult.Result
+            if ([string]::IsNullOrWhiteSpace([string]$value)) {
+                $value = Format-ResolvableValue $evalResult.Result
+            }
 
             if (-not $resolvable.Mapped -or $null -eq $resolvable.StartOffset -or $null -eq $resolvable.EndOffset) {
                 continue
@@ -5380,6 +5713,7 @@ function Invoke-NodeSafe {
         $commandInfo.PSObject.Properties['ResolutionConfidence'] -and
         [string]$commandInfo.ResolutionConfidence -eq 'High') {
         Record-CommandNameResolution -Node $Node -Context $Context -CommandInfo $commandInfo
+        Record-ResolvedCommandInvocationArtifacts -Node $Node -Context $Context -CommandInfo $commandInfo
     }
 
     if ($checkResult.IsForbidden) {
@@ -7769,7 +8103,11 @@ function Resolve-EmbeddedFunctionCalls {
                     Values = @()
                 }
             }
-            $Context.VariableReadResults[$inlineKey].Values += (Format-ResolvableValue $funcResult)
+            $inlineReplacement = Format-TypedScalarResolvableValue $funcResult
+            if ([string]::IsNullOrWhiteSpace([string]$inlineReplacement)) {
+                $inlineReplacement = Format-ResolvableValue $funcResult
+            }
+            $Context.VariableReadResults[$inlineKey].Values += $inlineReplacement
         }
 
         Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Created temp var `$$tempVar = $(Format-VariableValue $funcResult)" }).GetNewClosure()
@@ -7947,6 +8285,8 @@ function Invoke-ScriptBlockCall {
             }
         }
     }
+
+    Record-ScriptBlockInvocationResult -CallerNode $CallerNode -Context $Context -BlockName $BlockName -Arguments $arguments
 
     $targetVarName = if ($callerInfo -and $callerInfo.Success) { $callerInfo.TargetVarName } else { $null }
 
@@ -8554,13 +8894,7 @@ function Handle-DynamicInvoke {
             return Invoke-ScriptBlockCall -BlockName $blockName -CallerNode $Node -Context $Context
         }
 
-        $execCode = $Node.Text
-        if ($Context.ScopeStack.Count -gt 0) {
-            $currentScope = $Context.ScopeStack[-1]
-            if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-                $execCode = Convert-VariableNames -Code $execCode -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-            }
-        }
+        $execCode = Convert-CodeForCurrentScope -Code $Node.Text -Context $Context
 
         $execResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $execCode
 
@@ -8830,13 +9164,7 @@ function Invoke-NodeTraverse {
                 Write-ExecutionLog -Context $Context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
                 continue
             }
-            $actualVarName = $varInfo.Name
-            if ($Context.ScopeStack.Count -gt 0) {
-                $currentScope = $Context.ScopeStack[-1]
-                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
-                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
-                }
-            }
+            $actualVarName = Resolve-CFGVariableStackActualName -Context $Context -VariableName $varInfo.Name
 
             $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
             $varsBefore[$varInfo.Name] = $value
@@ -8850,7 +9178,11 @@ function Invoke-NodeTraverse {
                         Values  = @()
                     }
                 }
-                $Context.VariableReadResults[$key].Values += (Format-ResolvableValue $value)
+                $varReplacement = Format-TypedScalarResolvableValue $value
+                if ([string]::IsNullOrWhiteSpace([string]$varReplacement)) {
+                    $varReplacement = Format-ResolvableValue $value
+                }
+                $Context.VariableReadResults[$key].Values += $varReplacement
             }
         }
 
@@ -8895,13 +9227,7 @@ function Invoke-NodeTraverse {
                 Write-ExecutionLog -Context $Context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
                 continue
             }
-            $actualVarName = $varInfo.Name
-            if ($Context.ScopeStack.Count -gt 0) {
-                $currentScope = $Context.ScopeStack[-1]
-                if ($currentScope.LocalVars -and $varInfo.Name -in $currentScope.LocalVars) {
-                    $actualVarName = $currentScope.ScopePrefix + $varInfo.Name
-                }
-            }
+            $actualVarName = Resolve-CFGVariableStackActualName -Context $Context -VariableName $varInfo.Name
 
             $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
             $varsAfter[$varInfo.Name] = $value
@@ -9064,7 +9390,10 @@ function Add-FunctionInvokeResultRecord {
         $ReturnValue -isnot [System.Management.Automation.ScriptBlock]) { return }
     if ($null -eq $Scope.InvocationStartOffset -or $null -eq $Scope.InvocationEndOffset) { return }
 
-    $replacement = Format-ResolvableValue $ReturnValue
+    $replacement = Format-TypedScalarResolvableValue $ReturnValue
+    if ([string]::IsNullOrWhiteSpace([string]$replacement)) {
+        $replacement = Format-ResolvableValue $ReturnValue
+    }
     if ([string]::IsNullOrWhiteSpace([string]$replacement)) { return }
 
     $Context.FunctionInvokeResults += @{
@@ -9229,16 +9558,55 @@ function Convert-VariableNames {
 
     $result = $Code
 
+    $localSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($varName in $LocalVarNames) {
+        if ([string]::IsNullOrWhiteSpace([string]$varName)) { continue }
         if ($varName -in $script:AutoVariables) { continue }
-
         if ($varName -match '^_sc_[a-f0-9]{8}_') { continue }
-
         if ($varName -match '^_pipe_[a-f0-9]+$') { continue }
+        $null = $localSet.Add([string]$varName)
+    }
 
-        $pattern = '\$' + [regex]::Escape($varName) + '(?![a-zA-Z0-9_])'
-        $replacement = '$$' + $ScopePrefix + $varName
-        $result = $result -replace $pattern, $replacement
+    if ($localSet.Count -eq 0) { return $Code }
+
+    try {
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($Code, [ref]$tokens, [ref]$errors)
+        $varAsts = @($ast.FindAll({
+                    param($n)
+                    $n -is [System.Management.Automation.Language.VariableExpressionAst]
+                }, $true))
+
+        $replacements = @()
+        foreach ($varAst in $varAsts) {
+            if (-not $varAst -or -not $varAst.VariablePath -or $null -eq $varAst.VariablePath.UserPath -or -not $varAst.Extent) {
+                continue
+            }
+
+            $varName = [string]$varAst.VariablePath.UserPath
+            if (-not $localSet.Contains($varName)) { continue }
+            if ($varAst.Splatted) { continue }
+            if ($varAst.Extent.StartOffset -lt 0 -or $varAst.Extent.EndOffset -le $varAst.Extent.StartOffset -or $varAst.Extent.EndOffset -gt $Code.Length) {
+                continue
+            }
+
+            $replacements += [PSCustomObject]@{
+                StartOffset = [int]$varAst.Extent.StartOffset
+                EndOffset   = [int]$varAst.Extent.EndOffset
+                Replacement = ('$' + $ScopePrefix + $varName)
+            }
+        }
+
+        foreach ($item in @($replacements | Sort-Object StartOffset -Descending)) {
+            $result = $result.Substring(0, $item.StartOffset) + [string]$item.Replacement + $result.Substring($item.EndOffset)
+        }
+    } catch {
+        foreach ($varName in $localSet) {
+            $pattern = '\$' + [regex]::Escape($varName) + '(?![a-zA-Z0-9_])'
+            $replacement = '$$' + $ScopePrefix + $varName
+            $result = $result -replace $pattern, $replacement
+        }
     }
 
     return $result
@@ -10731,7 +11099,10 @@ function Resolve-NonCommandExpressions {
                 continue
             }
 
-            $value = Format-ResolvableValue $evalResult.Result
+            $value = Format-TypedScalarResolvableValue $evalResult.Result
+            if ([string]::IsNullOrWhiteSpace([string]$value)) {
+                $value = Format-ResolvableValue $evalResult.Result
+            }
 
             $localKey = "local:$($Node.Id):$($resolvable.LocalStartOffset):$($resolvable.LocalEndOffset)"
             $resolvedValues[$localKey] = $value
@@ -10931,13 +11302,7 @@ function Get-ScriptBlockNameFromAst {
             return $Context.VarToBlockMapping[$varName]
         }
 
-        $actualVarName = $varName
-        if ($Context.ScopeStack.Count -gt 0) {
-            $currentScope = $Context.ScopeStack[-1]
-            if ($currentScope.LocalVars -and $varName -in $currentScope.LocalVars) {
-                $actualVarName = $currentScope.ScopePrefix + $varName
-            }
-        }
+        $actualVarName = Resolve-CFGVariableStackActualName -Context $Context -VariableName $varName
 
         $varValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualVarName
         if ($varValue -is [scriptblock]) {
@@ -11026,12 +11391,7 @@ function Get-AstValue {
 
     $code = $Ast.Extent.Text
 
-    if ($Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope.LocalVars -and $currentScope.LocalVars.Count -gt 0) {
-            $code = Convert-VariableNames -Code $code -ScopePrefix $currentScope.ScopePrefix -LocalVarNames $currentScope.LocalVars
-        }
-    }
+    $code = Convert-CodeForCurrentScope -Code $code -Context $Context
 
     $evalResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $code
     if ($evalResult.Success) {
@@ -11295,6 +11655,9 @@ function Invoke-CFGTraversal {
         MaxCallDepth          = 100
         DynamicInvokeResults  = @()
         FunctionInvokeResults = @()
+        ScriptBlockInvocationResults = @()
+        CanonicalCommandInvocationResults = @()
+        CommandTargetAssignmentResults = @()
         LastSubgraphResult    = $null
         PipelineCurrentStack  = @()
         OutputCaptureStack    = @()
@@ -11470,6 +11833,9 @@ function New-CFGExecutionSession {
         MaxCallDepth           = 100
         DynamicInvokeResults   = @()
         FunctionInvokeResults  = @()
+        ScriptBlockInvocationResults = @()
+        CanonicalCommandInvocationResults = @()
+        CommandTargetAssignmentResults = @()
         LastSubgraphResult     = $null
         PipelineCurrentStack   = @()
         OutputCaptureStack     = @()
@@ -12132,13 +12498,7 @@ function Invoke-CFGStep {
                 Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsRead entry with null/empty Name"
                 continue
             }
-            $actualVarName = [string]$varName
-            if ($context.ScopeStack.Count -gt 0) {
-                $currentScope = $context.ScopeStack[-1]
-                if ($currentScope.LocalVars -and $varName -in $currentScope.LocalVars) {
-                    $actualVarName = $currentScope.ScopePrefix + $varName
-                }
-            }
+            $actualVarName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varName)
             $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
             $varsBefore[$varName] = $value
 
@@ -12153,7 +12513,11 @@ function Invoke-CFGStep {
                         Values  = @()
                     }
                 }
-                $context.VariableReadResults[$key].Values += (Format-ResolvableValue $value)
+                $varReplacement = Format-TypedScalarResolvableValue $value
+                if ([string]::IsNullOrWhiteSpace([string]$varReplacement)) {
+                    $varReplacement = Format-ResolvableValue $value
+                }
+                $context.VariableReadResults[$key].Values += $varReplacement
             }
         }
 
@@ -12210,13 +12574,7 @@ function Invoke-CFGStep {
                     Write-ExecutionLog -Context $context -Message "  [WARN] Skip VarsWritten entry with null/empty Name"
                     continue
                 }
-                $actualVarName = [string]$varName
-                if ($context.ScopeStack.Count -gt 0) {
-                    $currentScope = $context.ScopeStack[-1]
-                    if ($currentScope.LocalVars -and $varName -in $currentScope.LocalVars) {
-                        $actualVarName = $currentScope.ScopePrefix + $varName
-                    }
-                }
+                $actualVarName = Resolve-CFGVariableStackActualName -Context $context -VariableName ([string]$varName)
                 $value = Get-VariableFromContext -ExecContext $context.ExecContext -Name $actualVarName
                 $varsAfter[$varName] = $value
             }
@@ -12699,9 +13057,11 @@ function Resolve-CFGVariableStackActualName {
     }
 
     if ($Context.ScopeStack.Count -gt 0) {
-        $currentScope = $Context.ScopeStack[-1]
-        if ($currentScope.LocalVars -and $name -in $currentScope.LocalVars) {
-            return ($currentScope.ScopePrefix + $name)
+        for ($i = $Context.ScopeStack.Count - 1; $i -ge 0; $i--) {
+            $scope = $Context.ScopeStack[$i]
+            if ($scope.LocalVars -and $name -in $scope.LocalVars) {
+                return ($scope.ScopePrefix + $name)
+            }
         }
     }
 
