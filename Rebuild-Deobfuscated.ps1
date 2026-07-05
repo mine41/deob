@@ -17813,6 +17813,8 @@ function Append-SensitiveEvidenceCommentBlock {
         [object[]]$Evidence = @()
     )
 
+    return $ScriptText
+
     $commentBlock = Get-SensitiveEvidenceCommentBlock -Evidence $Evidence
     if ([string]::IsNullOrWhiteSpace($commentBlock)) {
         return $ScriptText
@@ -17823,6 +17825,13 @@ function Append-SensitiveEvidenceCommentBlock {
     }
 
     return ($ScriptText.TrimEnd() + "`r`n`r`n" + $commentBlock + "`r`n")
+}
+
+function Remove-SensitiveEvidenceCommentBlock {
+    param([AllowNull()][string]$ScriptText)
+
+    if ($null -eq $ScriptText) { return $ScriptText }
+    return [regex]::Replace([string]$ScriptText, '(?s)\s*<#\s*PSDissect-SensitiveEvidence.*?#>\s*$', "`r`n")
 }
 
 function Remove-StandaloneCmdlineNoiseLines {
@@ -20183,8 +20192,13 @@ if (-not $DryRun) {
     }
 
     if ($FullOutput) {
-        Copy-FileAtomic -SourcePath $finalOutputPathToCopy -DestinationPath $OutPath
+        if ($null -eq $finalOutputText -and -not [string]::IsNullOrWhiteSpace($finalOutputPathToCopy)) {
+            $finalOutputText = Get-RawScriptTextFromFile -Path $finalOutputPathToCopy
+        }
+        $finalOutputText = Remove-SensitiveEvidenceCommentBlock -ScriptText $finalOutputText
+        Write-TextFileAtomic -Path $OutPath -Content $finalOutputText
     } else {
+        $finalOutputText = Remove-SensitiveEvidenceCommentBlock -ScriptText $finalOutputText
         Write-TextFileAtomic -Path $OutPath -Content $finalOutputText
     }
 }
