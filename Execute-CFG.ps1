@@ -1872,6 +1872,61 @@ function Get-CommandAstGlobalExtent {
     }
 }
 
+function Get-CurrentExecutionScopeMetadata {
+    param([hashtable]$Context)
+
+    if (-not $Context -or -not $Context.ContainsKey('ScopeStack') -or $Context.ScopeStack.Count -eq 0) {
+        return $null
+    }
+
+    $scope = $Context.ScopeStack[-1]
+    if (-not $scope) { return $null }
+
+    return @{
+        ScopeType                  = if ($scope.ContainsKey('ScopeType')) { $scope.ScopeType } else { $null }
+        ScopeName                  = if ($scope.ContainsKey('ScopeName')) { $scope.ScopeName } else { $null }
+        ScopePrefix                = if ($scope.ContainsKey('ScopePrefix')) { $scope.ScopePrefix } else { $null }
+        ScopeInvocationId          = if ($scope.ContainsKey('InvocationId')) { $scope.InvocationId } else { $null }
+        ParentScopeInvocationId    = if ($scope.ContainsKey('ParentInvocationId')) { $scope.ParentInvocationId } else { $null }
+        ScopeCallerNodeId          = if ($scope.ContainsKey('CallerNodeId')) { $scope.CallerNodeId } else { $null }
+        ScopeInvocationStartOffset = if ($scope.ContainsKey('InvocationStartOffset')) { $scope.InvocationStartOffset } else { $null }
+        ScopeInvocationEndOffset   = if ($scope.ContainsKey('InvocationEndOffset')) { $scope.InvocationEndOffset } else { $null }
+        ScopeInvocationText        = if ($scope.ContainsKey('InvocationText')) { $scope.InvocationText } else { $null }
+    }
+}
+
+function Add-CurrentScopeMetadataToRecord {
+    param(
+        [hashtable]$Record,
+        [hashtable]$Context
+    )
+
+    if (-not $Record) { return $Record }
+
+    $scopeInfo = Get-CurrentExecutionScopeMetadata -Context $Context
+    if (-not $scopeInfo) { return $Record }
+
+    foreach ($key in @($scopeInfo.Keys)) {
+        $Record[$key] = $scopeInfo[$key]
+    }
+
+    return $Record
+}
+
+function Get-ScopeAwareExecutionResultKey {
+    param(
+        [Parameter(Mandatory)][string]$BaseKey,
+        [hashtable]$Context
+    )
+
+    $scopeInfo = Get-CurrentExecutionScopeMetadata -Context $Context
+    if ($scopeInfo -and -not [string]::IsNullOrWhiteSpace([string]$scopeInfo.ScopeInvocationId)) {
+        return "$BaseKey`:scope:$($scopeInfo.ScopeInvocationId)"
+    }
+
+    return $BaseKey
+}
+
 function Record-CanonicalCommandInvocationResult {
     param(
         $Node,
@@ -1931,7 +1986,7 @@ function Record-CanonicalCommandInvocationResult {
         $Context.CanonicalCommandInvocationResults = @()
     }
 
-    $Context.CanonicalCommandInvocationResults += [PSCustomObject]@{
+    $record = @{
         NodeId            = $Node.Id
         StartOffset       = $extent.StartOffset
         EndOffset         = $extent.EndOffset
@@ -1944,6 +1999,8 @@ function Record-CanonicalCommandInvocationResult {
         RuntimeBlockName  = if ($Node.PSObject.Properties['RuntimeBlockName']) { [string]$Node.RuntimeBlockName } else { $null }
         Timestamp         = Get-Date
     }
+    $record = Add-CurrentScopeMetadataToRecord -Record $record -Context $Context
+    $Context.CanonicalCommandInvocationResults += [PSCustomObject]$record
 
     Write-ExecutionLog -Context $Context -Message "  [CANONCMD] Recorded: $([string]$Node.Text) -> $replacement"
 }
@@ -2004,7 +2061,7 @@ function Record-CommandTargetAssignmentResult {
         $Context.CommandTargetAssignmentResults = @()
     }
 
-    $Context.CommandTargetAssignmentResults += [PSCustomObject]@{
+    $record = @{
         NodeId          = $assignNode[0].Id
         CallerNodeId    = $Node.Id
         VariableName    = $varName
@@ -2016,6 +2073,8 @@ function Record-CommandTargetAssignmentResult {
         SourceInvocationText = [string]$Node.Text
         Timestamp       = Get-Date
     }
+    $record = Add-CurrentScopeMetadataToRecord -Record $record -Context $Context
+    $Context.CommandTargetAssignmentResults += [PSCustomObject]$record
 
     Write-ExecutionLog -Context $Context -Message "  [CMDASSIGN] Recorded `$${varName} assignment -> $replacement"
 }
@@ -2070,7 +2129,7 @@ function Record-ScriptBlockInvocationResult {
         $Context.ScriptBlockInvocationResults = @()
     }
 
-    $Context.ScriptBlockInvocationResults += [PSCustomObject]@{
+    $record = @{
         NodeId          = $CallerNode.Id
         BlockName       = [string]$BlockName
         BlockStartNodeId = [int]$blockStartId
@@ -2082,8 +2141,81 @@ function Record-ScriptBlockInvocationResult {
         ReplacementText = [string]$replacement
         Timestamp       = Get-Date
     }
+    $record = Add-CurrentScopeMetadataToRecord -Record $record -Context $Context
+    $Context.ScriptBlockInvocationResults += [PSCustomObject]$record
 
     Write-ExecutionLog -Context $Context -Message "  [SBCALL] Recorded: $([string]$CallerNode.Text) -> $replacement"
+}
+
+function Record-ScriptBlockCallInstance {
+    param(
+        [hashtable]$Context,
+        [string]$BlockName,
+        $CallerNode,
+        $CallerInfo,
+        [string]$InvocationId,
+        [array]$Arguments = @()
+    )
+
+    if (-not $Context -or [string]::IsNullOrWhiteSpace($BlockName) -or -not $CallerNode) { return }
+    if ([string]::IsNullOrWhiteSpace($InvocationId)) { return }
+    if (-not $Context.ScriptBlockSubgraphs -or -not $Context.ScriptBlockSubgraphs.ContainsKey($BlockName)) { return }
+
+    $blockStartId = $Context.ScriptBlockSubgraphs[$BlockName]
+    $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+    if (-not $blockStartNode) { return }
+
+    $cmdAst = $null
+    if ($CallerInfo -and $CallerInfo.Success) {
+        if ($CallerInfo.TopLevelCommandAst) {
+            $cmdAst = $CallerInfo.TopLevelCommandAst
+        } elseif ($CallerInfo.CommandAst) {
+            $cmdAst = $CallerInfo.CommandAst
+        } elseif ($CallerInfo.Statement) {
+            $cmdAst = $CallerInfo.Statement
+        }
+    }
+
+    $extent = if ($cmdAst) { Get-NodeAstGlobalExtent -Node $CallerNode -Ast $cmdAst } else { $null }
+    $startOffset = if ($extent) {
+        $extent.StartOffset
+    } elseif ($CallerNode.PSObject.Properties['TextStartOffset']) {
+        $CallerNode.TextStartOffset
+    } else {
+        $null
+    }
+    $endOffset = if ($extent) {
+        $extent.EndOffset
+    } elseif ($CallerNode.PSObject.Properties['TextEndOffset']) {
+        $CallerNode.TextEndOffset
+    } else {
+        $null
+    }
+    $text = if ($extent -and $extent.PSObject.Properties['Text']) {
+        [string]$extent.Text
+    } elseif ($CallerNode.PSObject.Properties['Text']) {
+        [string]$CallerNode.Text
+    } else {
+        $null
+    }
+
+    if (-not $Context.ContainsKey('ScriptBlockCallInstances') -or $null -eq $Context.ScriptBlockCallInstances) {
+        $Context.ScriptBlockCallInstances = @()
+    }
+
+    $Context.ScriptBlockCallInstances += [PSCustomObject]@{
+        InvocationId     = [string]$InvocationId
+        BlockName        = [string]$BlockName
+        CallerNodeId     = [int]$CallerNode.Id
+        StartOffset      = $startOffset
+        EndOffset        = $endOffset
+        InvocationText   = $text
+        BlockStartNodeId = [int]$blockStartId
+        BlockStartOffset = if ($blockStartNode.PSObject.Properties['TextStartOffset']) { $blockStartNode.TextStartOffset } else { $null }
+        BlockEndOffset   = if ($blockStartNode.PSObject.Properties['TextEndOffset']) { $blockStartNode.TextEndOffset } else { $null }
+        Arguments        = @($Arguments)
+        Timestamp        = Get-Date
+    }
 }
 
 function Test-SensitiveSinkText {
@@ -4330,16 +4462,18 @@ function Get-NodeTextReturnExpression {
 
     if ($returnAst -and $returnAst.Pipeline) {
         return [PSCustomObject]@{
-            Success = $true
-            Error   = $null
-            Code    = $returnAst.Pipeline.Extent.Text
+            Success     = $true
+            Error       = $null
+            Code        = $returnAst.Pipeline.Extent.Text
+            PipelineAst = $returnAst.Pipeline
         }
     }
 
     return [PSCustomObject]@{
-        Success = $true
-        Error   = $null
-        Code    = $null
+        Success     = $true
+        Error       = $null
+        Code        = $null
+        PipelineAst = $null
     }
 }
 
@@ -5363,14 +5497,17 @@ function Evaluate-NodeResolvables {
                 continue
             }
 
-            $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+            $baseKey = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+            $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $Context
 
             if (-not $Context.ResolvableResults.ContainsKey($key)) {
-                $Context.ResolvableResults[$key] = @{
+                $rec = @{
                     NodeId     = $Node.Id
                     Resolvable = $resolvable
                     Values     = @()
                 }
+                $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $Context
+                $Context.ResolvableResults[$key] = $rec
             }
             $Context.ResolvableResults[$key].Values += $value
         }
@@ -8089,9 +8226,10 @@ function Resolve-EmbeddedFunctionCalls {
         $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($tempVar, $funcResult)
 
         if ($NodeId -ge 0 -and (Test-ResolvableValue $funcResult)) {
-            $inlineKey = "$($NodeId):$($call.Start):$($call.End)"
+            $inlineBaseKey = "$($NodeId):$($call.Start):$($call.End)"
+            $inlineKey = Get-ScopeAwareExecutionResultKey -BaseKey $inlineBaseKey -Context $Context
             if (-not $Context.VariableReadResults.ContainsKey($inlineKey)) {
-                $Context.VariableReadResults[$inlineKey] = @{
+                $inlineRec = @{
                     NodeId  = $NodeId
                     VarInfo = [PSCustomObject]@{
                         Name           = $tempVar
@@ -8102,6 +8240,8 @@ function Resolve-EmbeddedFunctionCalls {
                     }
                     Values = @()
                 }
+                $inlineRec = Add-CurrentScopeMetadataToRecord -Record $inlineRec -Context $Context
+                $Context.VariableReadResults[$inlineKey] = $inlineRec
             }
             $inlineReplacement = Format-TypedScalarResolvableValue $funcResult
             if ([string]::IsNullOrWhiteSpace([string]$inlineReplacement)) {
@@ -8286,7 +8426,17 @@ function Invoke-ScriptBlockCall {
         }
     }
 
+    $parentInvocationId = $null
+    if ($Context.ScopeStack -and $Context.ScopeStack.Count -gt 0) {
+        $parentScope = $Context.ScopeStack[-1]
+        if ($parentScope -and $parentScope.ContainsKey('InvocationId')) {
+            $parentInvocationId = $parentScope.InvocationId
+        }
+    }
+    $invocationId = [guid]::NewGuid().ToString("N")
+
     Record-ScriptBlockInvocationResult -CallerNode $CallerNode -Context $Context -BlockName $BlockName -Arguments $arguments
+    Record-ScriptBlockCallInstance -Context $Context -BlockName $BlockName -CallerNode $CallerNode -CallerInfo $callerInfo -InvocationId $invocationId -Arguments $arguments
 
     $targetVarName = if ($callerInfo -and $callerInfo.Success) { $callerInfo.TargetVarName } else { $null }
 
@@ -8295,6 +8445,20 @@ function Invoke-ScriptBlockCall {
         $Context.ScopeStack[-1].LocalVars = @($localVars)
         $Context.ScopeStack[-1].Arguments = $arguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
+        $Context.ScopeStack[-1].InvocationId = $invocationId
+        $Context.ScopeStack[-1].ParentInvocationId = $parentInvocationId
+        $Context.ScopeStack[-1].CallerNodeId = $CallerNode.Id
+        $cmdAst = if ($callerInfo.TopLevelCommandAst) { $callerInfo.TopLevelCommandAst } elseif ($callerInfo.CommandAst) { $callerInfo.CommandAst } else { $callerInfo.Statement }
+        $cmdExtent = if ($cmdAst) { Get-NodeAstGlobalExtent -Node $CallerNode -Ast $cmdAst } else { $null }
+        if ($cmdExtent) {
+            $Context.ScopeStack[-1].InvocationStartOffset = [int]$cmdExtent.StartOffset
+            $Context.ScopeStack[-1].InvocationEndOffset = [int]$cmdExtent.EndOffset
+            $Context.ScopeStack[-1].InvocationText = [string]$cmdExtent.Text
+        } elseif ($CallerNode.PSObject.Properties['TextStartOffset'] -and $CallerNode.PSObject.Properties['TextEndOffset']) {
+            $Context.ScopeStack[-1].InvocationStartOffset = [int]$CallerNode.TextStartOffset
+            $Context.ScopeStack[-1].InvocationEndOffset = [int]$CallerNode.TextEndOffset
+            $Context.ScopeStack[-1].InvocationText = [string]$CallerNode.Text
+        }
 
         if ($hasProcessBlock) {
             $pipelineInput = Get-CallerPipelineInput -CallerNode $CallerNode -Context $Context
@@ -8604,6 +8768,7 @@ function Handle-DynamicInvoke {
         StopMessage   = $null
         MaterializationKind = $null
     }
+    $dynamicRecord = Add-CurrentScopeMetadataToRecord -Record $dynamicRecord -Context $Context
 
     $nodeBaseStartOffset = $null
     if ($Node -and $Node.PSObject.Properties['TextStartOffset'] -and $null -ne $Node.TextStartOffset) {
@@ -9038,6 +9203,38 @@ function Invoke-NodeTraverse {
 
                         $returnValue = Normalize-ExecutionResultValue -Value $evalResult.Result -TreatArraysAsSequence
                         Write-ExecutionLog -Context $Context -Message ({ "  [RETURN] Expression value: $(Format-VariableValue $returnValue)" }).GetNewClosure()
+
+                        if ($retInfo.PSObject.Properties['PipelineAst'] -and $retInfo.PipelineAst -and (Test-ResolvableValue $returnValue)) {
+                            $returnExtent = Get-NodeAstGlobalExtent -Node $currentNode -Ast $retInfo.PipelineAst
+                            if ($returnExtent -and $null -ne $returnExtent.StartOffset -and $null -ne $returnExtent.EndOffset) {
+                                $returnReplacement = Format-TypedScalarResolvableValue $returnValue
+                                if ([string]::IsNullOrWhiteSpace([string]$returnReplacement)) {
+                                    $returnReplacement = Format-ResolvableValue $returnValue
+                                }
+                                if (-not [string]::IsNullOrWhiteSpace([string]$returnReplacement)) {
+                                    $baseKey = "$($currentNode.Id):$($returnExtent.StartOffset):$($returnExtent.EndOffset)"
+                                    $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $Context
+                                    if (-not $Context.ResolvableResults.ContainsKey($key)) {
+                                        $rec = @{
+                                            NodeId     = $currentNode.Id
+                                            Resolvable = [PSCustomObject]@{
+                                                Type        = 'ReturnExpression'
+                                                Text        = [string]$retInfo.Code
+                                                StartOffset = [int]$returnExtent.StartOffset
+                                                EndOffset   = [int]$returnExtent.EndOffset
+                                                Depth       = 0
+                                                Ast         = $retInfo.PipelineAst
+                                                Mapped      = $true
+                                            }
+                                            Values     = @()
+                                        }
+                                        $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $Context
+                                        $Context.ResolvableResults[$key] = $rec
+                                    }
+                                    $Context.ResolvableResults[$key].Values += $returnReplacement
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -9170,13 +9367,16 @@ function Invoke-NodeTraverse {
             $varsBefore[$varInfo.Name] = $value
 
             if ($null -ne $varInfo.StartOffset -and $null -ne $varInfo.EndOffset -and (Test-ResolvableValue $value) -and -not (Test-CFGVariableBlockedTaint -Context $Context -ActualName $actualVarName)) {
-                $key = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
+                $baseKey = "$($currentNode.Id):$($varInfo.StartOffset):$($varInfo.EndOffset)"
+                $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $Context
                 if (-not $Context.VariableReadResults.ContainsKey($key)) {
-                    $Context.VariableReadResults[$key] = @{
+                    $rec = @{
                         NodeId  = $currentNode.Id
                         VarInfo = $varInfo
                         Values  = @()
                     }
+                    $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $Context
+                    $Context.VariableReadResults[$key] = $rec
                 }
                 $varReplacement = Format-TypedScalarResolvableValue $value
                 if ([string]::IsNullOrWhiteSpace([string]$varReplacement)) {
@@ -9356,6 +9556,8 @@ function Push-ExecutionScope {
         NamedArguments = [ordered]@{}
         TargetVarName = $null
         CallerNodeId = $null
+        InvocationId = $null
+        ParentInvocationId = $null
         InvocationStartOffset = $null
         InvocationEndOffset = $null
         InvocationText = $null
@@ -9396,7 +9598,7 @@ function Add-FunctionInvokeResultRecord {
     }
     if ([string]::IsNullOrWhiteSpace([string]$replacement)) { return }
 
-    $Context.FunctionInvokeResults += @{
+    $record = @{
         NodeId          = $Scope.CallerNodeId
         FunctionName    = $Scope.ScopeName
         StartOffset     = [int]$Scope.InvocationStartOffset
@@ -9406,6 +9608,11 @@ function Add-FunctionInvokeResultRecord {
         ReturnValue     = $ReturnValue
         Timestamp       = Get-Date
     }
+    $record = Add-CurrentScopeMetadataToRecord -Record $record -Context $Context
+    if (-not [string]::IsNullOrWhiteSpace([string]$Scope.InvocationId)) {
+        $record.ScopeInvocationId = $Scope.InvocationId
+    }
+    $Context.FunctionInvokeResults += $record
 }
 
 function Pop-ExecutionScope {
@@ -11108,13 +11315,16 @@ function Resolve-NonCommandExpressions {
             $resolvedValues[$localKey] = $value
 
             if ($resolvable.Mapped -and $null -ne $resolvable.StartOffset -and $null -ne $resolvable.EndOffset) {
-                $key = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+                $baseKey = "$($Node.Id):$($resolvable.StartOffset):$($resolvable.EndOffset)"
+                $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $Context
                 if (-not $Context.ResolvableResults.ContainsKey($key)) {
-                    $Context.ResolvableResults[$key] = @{
+                    $rec = @{
                         NodeId     = $Node.Id
                         Resolvable = $resolvable
                         Values     = @()
                     }
+                    $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $Context
+                    $Context.ResolvableResults[$key] = $rec
                 }
                 $Context.ResolvableResults[$key].Values += $value
                 $resolvedValues[$key] = $value
@@ -11478,7 +11688,8 @@ function Record-CommandNameResolution {
     $startOffset = if ($null -ne $manualStartOffset) { $manualStartOffset } else { $cmdNameElement.Extent.StartOffset }
     $endOffset = if ($null -ne $manualEndOffset) { $manualEndOffset } else { $cmdNameElement.Extent.EndOffset }
 
-    $key = "$($Node.Id):${startOffset}:${endOffset}"
+    $baseKey = "$($Node.Id):${startOffset}:${endOffset}"
+    $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $Context
 
     $resolutionKind = if ($CommandInfo.PSObject.Properties['ResolutionKind']) {
         [string]$CommandInfo.ResolutionKind
@@ -11499,11 +11710,13 @@ function Record-CommandNameResolution {
     }
 
     if (-not $Context.ResolvableResults.ContainsKey($key)) {
-        $Context.ResolvableResults[$key] = @{
+        $rec = @{
             NodeId     = $Node.Id
             Resolvable = $commandResolvable
             Values     = @()
         }
+        $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $Context
+        $Context.ResolvableResults[$key] = $rec
     }
 
     $Context.ResolvableResults[$key].Values += $CommandInfo.ResolvedName
@@ -11656,6 +11869,7 @@ function Invoke-CFGTraversal {
         DynamicInvokeResults  = @()
         FunctionInvokeResults = @()
         ScriptBlockInvocationResults = @()
+        ScriptBlockCallInstances = @()
         CanonicalCommandInvocationResults = @()
         CommandTargetAssignmentResults = @()
         LastSubgraphResult    = $null
@@ -11834,6 +12048,7 @@ function New-CFGExecutionSession {
         DynamicInvokeResults   = @()
         FunctionInvokeResults  = @()
         ScriptBlockInvocationResults = @()
+        ScriptBlockCallInstances = @()
         CanonicalCommandInvocationResults = @()
         CommandTargetAssignmentResults = @()
         LastSubgraphResult     = $null
@@ -12505,13 +12720,16 @@ function Invoke-CFGStep {
             $startOffset = Get-CFGObjectPropertyValue -Object $varInfo -Name 'StartOffset' -Default $null
             $endOffset = Get-CFGObjectPropertyValue -Object $varInfo -Name 'EndOffset' -Default $null
             if ($null -ne $startOffset -and $null -ne $endOffset -and (Test-ResolvableValue $value) -and -not (Test-CFGVariableBlockedTaint -Context $context -ActualName $actualVarName)) {
-                $key = "$($currentNode.Id):${startOffset}:${endOffset}"
+                $baseKey = "$($currentNode.Id):${startOffset}:${endOffset}"
+                $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $context
                 if (-not $context.VariableReadResults.ContainsKey($key)) {
-                    $context.VariableReadResults[$key] = @{
+                    $rec = @{
                         NodeId  = $currentNode.Id
                         VarInfo = $varInfo
                         Values  = @()
                     }
+                    $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $context
+                    $context.VariableReadResults[$key] = $rec
                 }
                 $varReplacement = Format-TypedScalarResolvableValue $value
                 if ([string]::IsNullOrWhiteSpace([string]$varReplacement)) {
