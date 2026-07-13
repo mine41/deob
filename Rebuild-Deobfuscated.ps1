@@ -1892,7 +1892,7 @@ function Filter-ReplacementCandidatesByContext {
         $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
         $withinPipelineVariable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineVariableRanges)
         $withinPipelineSensitiveExpression = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineSensitiveExpressionRanges)
-        $highValueSourceKinds = @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline')
+        $highValueSourceKinds = @('DynamicInvoke', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline')
         $allowInsideDynamicRange = $false
 
         $definitionRange = Get-ContainingReusableScriptBlockRange -StartOffset $start -EndOffset $end -Ranges $reusableScriptBlockRanges
@@ -4051,6 +4051,12 @@ function Try-Resolve-WholeScriptStaticCompressedLoaderPayloadInfo {
         $prefixStatements = @()
         if ($statements.Count -gt 1) {
             $prefixStatements = @($statements | Select-Object -First ($statements.Count - 1))
+            foreach ($prefixStatement in @($prefixStatements)) {
+                if ($null -eq $prefixStatement) { continue }
+                if ($prefixStatement -is [System.Management.Automation.Language.AssignmentStatementAst]) { continue }
+                if ($prefixStatement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { continue }
+                return $null
+            }
             [void](Initialize-WholeScriptStaticAssignments -Statements $prefixStatements -Context $ctx)
         }
 
@@ -6129,6 +6135,52 @@ function Try-DecodeCompressedScriptTextFromByteArray {
     }
 }
 
+function Try-DecodeCompressedScriptTextFromAst {
+    param(
+        $Ast,
+        [hashtable]$Context
+    )
+
+    if ($null -eq $Ast -or -not $Ast.Extent) { return $null }
+
+    $extentText = [string]$Ast.Extent.Text
+    if ($extentText -notmatch '(?i)\bFromBase64String\b' -or
+        $extentText -notmatch '(?i)\b(?:DeflateStream|GZipStream)\b' -or
+        $extentText -notmatch '(?i)\bReadToEnd\b') {
+        return $null
+    }
+
+    $encodingName = if ($extentText -match '(?i)Encoding\]::UTF-?8') {
+        'utf8'
+    } elseif ($extentText -match '(?i)Encoding\]::Unicode') {
+        'unicode'
+    } else {
+        'ascii'
+    }
+
+    $base64Calls = @($Ast.FindAll({
+                param($n)
+                if ($n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+                    return $false
+                }
+
+                $memberName = Get-InvokeMemberNameText -InvokeAst $n
+                return ($memberName -match '^(?i:FromBase64String|FromBase64CharArray)$')
+            }, $true))
+
+    foreach ($base64Invoke in $base64Calls) {
+        $bytes = Resolve-DirectBase64BytesFromAst -Ast $base64Invoke -Context $Context
+        if (-not $bytes -or $bytes.Length -eq 0) { continue }
+
+        $text = Try-DecodeCompressedScriptTextFromByteArray -Bytes $bytes -EncodingName $encodingName
+        if (-not [string]::IsNullOrWhiteSpace($text) -and (Test-PowerShellSyntax -ScriptText $text).IsValid) {
+            return $text
+        }
+    }
+
+    return $null
+}
+
 function Try-DecodeStaticScriptTextFromAst {
     param(
         $Ast,
@@ -6136,6 +6188,15 @@ function Try-DecodeStaticScriptTextFromAst {
     )
 
     if ($null -eq $Ast) { return $null }
+    $precheckExtentText = if ($Ast.PSObject.Properties['Extent'] -and $Ast.Extent) { [string]$Ast.Extent.Text } else { '' }
+    if ($precheckExtentText -match '(?i)\bFromBase64String\b' -and
+        $precheckExtentText -match '(?i)\b(?:DeflateStream|GZipStream)\b' -and
+        $precheckExtentText -match '(?i)\bReadToEnd\b') {
+        $compressedText = Try-DecodeCompressedScriptTextFromAst -Ast $Ast -Context $Context
+        if (-not [string]::IsNullOrWhiteSpace($compressedText)) {
+            return $compressedText
+        }
+    }
     if (Test-AstContainsPipelineAutomaticVariable -Ast $Ast) { return $null }
 
     function Test-LocalStaticDecodedScriptText {
@@ -6824,6 +6885,10 @@ function Get-ReplacementCandidatePriority {
     if ($wholeScriptMaterialized) {
         if ($isCmdline) { return 650 }
         return 520
+    }
+    if ($sourceKind -eq 'StaticCompressedLoader') {
+        if ($isCmdline) { return 560 }
+        return 515
     }
     if ($sourceKind -eq 'MandatoryBase64') {
         if ($isCmdline) { return 490 }
@@ -8740,6 +8805,30 @@ function Test-MandatoryBase64ExpressionAst {
     return ($base64Invoke.Count -gt 0)
 }
 
+function Test-MandatoryBase64BinaryConsumerContext {
+    param($Ast)
+
+    if ($null -eq $Ast) {
+        return $false
+    }
+
+    $node = $Ast
+    while ($node) {
+        $text = if ($node.PSObject.Properties['Extent'] -and $node.Extent) { [string]$node.Extent.Text } else { '' }
+        if ($text -match '(?i)\b(?:FromBase64String|FromBase64CharArray)\b' -and
+            $text -match '(?i)\b(?:MemoryStream|DeflateStream|GZipStream|CryptoStream|CompressionMode|CreateDecryptor|CreateEncryptor|TransformFinalBlock)\b') {
+            return $true
+        }
+
+        if (-not $node.PSObject.Properties['Parent']) {
+            break
+        }
+        $node = $node.Parent
+    }
+
+    return $false
+}
+
 function Resolve-DirectBase64BytesFromAst {
     param(
         $Ast,
@@ -8883,6 +8972,9 @@ function Get-MandatoryBase64ExpressionReplacementText {
     )
 
     if (-not (Test-MandatoryBase64ExpressionAst -Ast $Ast)) {
+        return $null
+    }
+    if (Test-MandatoryBase64BinaryConsumerContext -Ast $Ast) {
         return $null
     }
 
@@ -9029,6 +9121,10 @@ function Get-MandatoryBase64ReplacementCandidates {
 
         if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
             $skipped += New-SkipRecord -Reason 'mandatory_base64_out_of_range' -Message 'Mandatory base64 expression offset out of range' -Item $baseItem
+            continue
+        }
+        if (Test-MandatoryBase64BinaryConsumerContext -Ast $exprAst) {
+            $skipped += New-SkipRecord -Reason 'mandatory_base64_binary_consumer' -Message 'Base64 bytes are consumed by a binary stream/crypto loader, so inline text replacement is unsafe' -Item $baseItem
             continue
         }
 
@@ -9202,7 +9298,7 @@ function Filter-CandidatesPreferDynamicInvoke {
         }
     }
 
-    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult') })
+    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult') })
     if ($dynamicCandidates.Count -eq 0) {
         return [PSCustomObject]@{
             Candidates = @($Candidates)
@@ -9215,7 +9311,7 @@ function Filter-CandidatesPreferDynamicInvoke {
 
     foreach ($cand in $Candidates) {
         if (-not $cand) { continue }
-        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult')) {
+        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult')) {
             $kept += $cand
             continue
         }
@@ -16638,6 +16734,12 @@ function Try-Resolve-WholeScriptMandatoryBase64PayloadInfo {
         $prefixStatements = @()
         if ($statements.Count -gt 1) {
             $prefixStatements = @($statements | Select-Object -First ($statements.Count - 1))
+            foreach ($prefixStatement in @($prefixStatements)) {
+                if ($null -eq $prefixStatement) { continue }
+                if ($prefixStatement -is [System.Management.Automation.Language.AssignmentStatementAst]) { continue }
+                if ($prefixStatement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { continue }
+                return $null
+            }
             [void](Initialize-WholeScriptStaticAssignments -Statements $prefixStatements -Context $ctx)
         }
         $allowIndirect = (Test-StatementsContainMandatoryBase64Consumer -Statements $prefixStatements)
@@ -16717,6 +16819,109 @@ function Try-Resolve-WholeScriptMandatoryBase64PayloadInfo {
         return $null
     } finally {
         Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
+}
+
+function Get-StaticCompressedLoaderReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+    if ($ScriptText -notmatch '(?i)\bFromBase64String\b' -or
+        $ScriptText -notmatch '(?i)\b(?:DeflateStream|GZipStream)\b' -or
+        $ScriptText -notmatch '(?i)\bReadToEnd\b') {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $parse = Get-ScriptParseInfo -ScriptText $ScriptText
+    if (-not $parse.IsValid -or -not $parse.Ast) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $ctx = New-WholeScriptStaticResolutionContext
+    try {
+        $state = Get-StaticEvalState -Context $ctx
+        if ($state) {
+            $state.ValueDepthLimit = 96
+            $state.StringCompatDepthLimit = 72
+        }
+        $ctx.SafeMode = $true
+
+        $topLevelStatements = @(Get-TopLevelScriptStatementsFromText -ScriptText $ScriptText)
+        if ($topLevelStatements.Count -gt 0) {
+            [void](Initialize-WholeScriptStaticAssignments -Statements $topLevelStatements -Context $ctx)
+        }
+
+        foreach ($statement in @($topLevelStatements)) {
+            if ($null -eq $statement -or -not $statement.Extent) { continue }
+
+            $extentText = [string]$statement.Extent.Text
+            if ($extentText -notmatch '(?i)\bFromBase64String\b' -or
+                $extentText -notmatch '(?i)\b(?:DeflateStream|GZipStream)\b' -or
+                $extentText -notmatch '(?i)\bReadToEnd\b') {
+                continue
+            }
+
+            $decoded = Try-DecodeCompressedScriptTextFromAst -Ast $statement -Context $ctx
+            if ([string]::IsNullOrWhiteSpace($decoded)) {
+                $skipped += New-SkipRecord -Reason 'static_compressed_loader_decode_failed' -Message 'Compressed loader did not decode to valid script text' -Item ([PSCustomObject]@{
+                        StartOffset = [int]$statement.Extent.StartOffset
+                        EndOffset   = [int]$statement.Extent.EndOffset
+                        Type        = 'DynamicInvoke'
+                        Depth       = $null
+                        NodeId      = $null
+                    })
+                continue
+            }
+
+            $candidateText = Try-NormalizeRecoveredScriptText -Text $decoded
+            if (-not $candidateText) {
+                $candidateText = Remove-RecoveredTextTransportArtifacts -Text $decoded
+            }
+            $replacement = Get-WholeScriptReplacementCandidateText -OriginalText $extentText -CandidateText $candidateText
+            if ([string]::IsNullOrWhiteSpace($replacement) -or $replacement -eq $extentText) {
+                continue
+            }
+
+            $candidate = [PSCustomObject]@{
+                StartOffset             = [int]$statement.Extent.StartOffset
+                EndOffset               = [int]$statement.Extent.EndOffset
+                Replacement             = [string]$replacement
+                Original                = $extentText
+                Type                    = 'DynamicInvoke'
+                Depth                   = $null
+                NodeId                  = $null
+                SourceKind              = 'StaticCompressedLoader'
+                Confidence              = 'High'
+                UsedEmptyFallback       = $false
+                ResultType              = 'String'
+                Executed                = $false
+                ProtectsInnerCandidates = $true
+                MaterializationKind     = 'static_compressed_loader_statement'
+                DynamicStopReason       = 'StaticCompressedLoader'
+                DynamicStopMessage      = 'Recovered compressed loader without rewriting inner base64 bytes'
+            }
+
+            if (Test-ReplacementCandidateSyntaxValidity -ScriptText $ScriptText -Candidate $candidate) {
+                $candidates += $candidate
+            } else {
+                $skipped += New-SkipRecord -Reason 'static_compressed_loader_invalid_syntax' -Message 'Compressed loader replacement would break syntax' -Item $candidate
+            }
+        }
+    } finally {
+        Close-WholeScriptStaticResolutionContext -Context $ctx
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($candidates)
+        Skipped    = @($skipped)
     }
 }
 
@@ -19965,6 +20170,7 @@ function Invoke-NormalizeMandatoryBase64Expressions {
                 }, $true) | Sort-Object -Property @{ Expression = { [int]$_.Extent.StartOffset } }, @{ Expression = { -([int]$_.Extent.EndOffset - [int]$_.Extent.StartOffset) } })
         foreach ($exprAst in $exprAsts) {
             if (-not $exprAst -or -not $exprAst.Extent) { continue }
+            if (Test-MandatoryBase64BinaryConsumerContext -Ast $exprAst) { continue }
 
             $replacement = Get-MandatoryBase64ExpressionReplacementText -Ast $exprAst -Context $ctx
             if ([string]::IsNullOrWhiteSpace($replacement)) {
@@ -20856,6 +21062,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         } else {
             $wholeScriptDynamic = Get-WholeScriptDynamicLoaderReplacementCandidates -Context $ctx -ScriptText $scriptText
         }
+        $staticCompressed = Get-StaticCompressedLoaderReplacementCandidates -Context $ctx -ScriptText $scriptText
         $literalized = Get-LiteralizedCommandReplacementCandidates -Context $ctx -ScriptText $scriptText
         $sensitive = Get-SensitiveSinkReplacementCandidates -Context $ctx -ScriptText $scriptText
         $mandatoryBase64 = Get-MandatoryBase64ReplacementCandidates -Context $ctx -ScriptText $scriptText
@@ -20876,7 +21083,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         } else {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
-        $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
+        $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
         $functionSpecialized = Get-FunctionSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $preSpecializedCandidates
         $scriptBlockSpecialized = Get-ScriptBlockSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $preSpecializedCandidates -TargetCandidates @($scriptBlockTargets.Candidates)
         $merged = Merge-ReplacementCandidatesByRange -Candidates (@($preSpecializedCandidates) + @($functionSpecialized.Candidates) + @($scriptBlockSpecialized.Candidates))
@@ -20885,7 +21092,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
         $candidates = @($preferred.Candidates)
-        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($staticCompressed.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
         $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
         $autoCandidates = @()
