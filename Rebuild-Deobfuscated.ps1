@@ -53,7 +53,7 @@ param(
     [object]$SafeMode = $true,
 
     [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-    [string]$PreExecutionGateMode = 'Balanced',
+    [string]$PreExecutionGateMode = 'Disabled',
 
     [ValidateSet('Default', 'Cmdline', 'AdaptiveCoverage')]
     [string]$OptimizationProfile = 'Default',
@@ -366,6 +366,25 @@ function Get-ReusableScriptBlockDefinitionRanges {
     $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
     if ($ast -and (-not $errors -or $errors.Count -eq 0)) {
+        $functionDefinitions = @($ast.FindAll({
+                    param($n)
+                    return ($n -is [System.Management.Automation.Language.FunctionDefinitionAst])
+                }, $true))
+        foreach ($funcAst in @($functionDefinitions)) {
+            if (-not $funcAst -or -not $funcAst.Body -or -not $funcAst.Body.Extent) { continue }
+            $start = [int]$funcAst.Body.Extent.StartOffset
+            $end = [int]$funcAst.Body.Extent.EndOffset
+            if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) { continue }
+            $key = "$start`:$end"
+            if ($seenRanges.ContainsKey($key)) { continue }
+            $seenRanges[$key] = $true
+            $ranges += [PSCustomObject]@{
+                BlockName   = ('function:' + [string]$funcAst.Name)
+                StartOffset = $start
+                EndOffset   = $end
+            }
+        }
+
         $assignedBlocks = @($ast.FindAll({
                     param($n)
                     if ($n -isnot [System.Management.Automation.Language.AssignmentStatementAst]) { return $false }
@@ -1873,7 +1892,7 @@ function Filter-ReplacementCandidatesByContext {
         $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
         $withinPipelineVariable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineVariableRanges)
         $withinPipelineSensitiveExpression = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineSensitiveExpressionRanges)
-        $highValueSourceKinds = @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline')
+        $highValueSourceKinds = @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline')
         $allowInsideDynamicRange = $false
 
         $definitionRange = Get-ContainingReusableScriptBlockRange -StartOffset $start -EndOffset $end -Ranges $reusableScriptBlockRanges
@@ -1900,7 +1919,7 @@ function Filter-ReplacementCandidatesByContext {
 
         $allowInExpandable = $false
         if ($withinExpandable) {
-            if ($sourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'LiteralizedCommand', 'Resolvable')) {
+            if ($sourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'LiteralizedCommand', 'Resolvable')) {
                 $allowInExpandable = $true
             } elseif ($sourceKind -eq 'Static' -and $cand.PSObject.Properties['Confidence'] -and [string]$cand.Confidence -eq 'High') {
                 $allowInExpandable = $true
@@ -1951,7 +1970,7 @@ function Filter-ReplacementCandidatesByContext {
             continue
         }
 
-        if ($isExactCommandNameRange -and $sourceKind -notin @('FunctionResult', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline') -and -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
+        if ($isExactCommandNameRange -and $sourceKind -notin @('FunctionResult', 'FunctionSpecializedInline', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline') -and -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
             $skipped += New-SkipRecord -Reason 'invalid_command_name_replacement' -Message '命令位点替换结果不是高置信合法命令名，跳过' -Item $cand
             continue
         }
@@ -4140,7 +4159,7 @@ function Try-Resolve-WholeScriptStaticPayloadInfoSafe {
         [Parameter(Mandatory)][string]$ScriptText,
         [string]$WarningContext = 'whole_script_static',
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [hashtable]$PreExecutionGateCache = $null,
         [bool]$SafeMode = $true
     )
@@ -6825,6 +6844,7 @@ function Get-ReplacementCandidatePriority {
         if ($isCmdline) { return 500 }
         return 430
     }
+    if ($sourceKind -eq 'FunctionSpecializedInline') { return 422 }
     if ($sourceKind -eq 'FunctionResult' -or $sourceKind -eq 'ScriptBlockInvocation') {
         if ($protectsInner) {
             if ($isCmdline) { return 470 }
@@ -7399,6 +7419,25 @@ function Get-FunctionInvokeReplacementCandidates {
 
     foreach ($rec in @($Context.FunctionInvokeResults)) {
         if (-not $rec) { continue }
+        $start = if ($rec -is [hashtable]) { $rec['StartOffset'] } else { $rec.StartOffset }
+        $end = if ($rec -is [hashtable]) { $rec['EndOffset'] } else { $rec.EndOffset }
+        $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
+        $funcName = if ($rec -is [hashtable]) { [string]$rec['FunctionName'] } else { [string]$rec.FunctionName }
+        $skipped += New-SkipRecord -Reason 'function_result_replaced_by_specialized_inline' -Message "函数返回值不再直接回写调用点，改由调用点专用函数体承载: $funcName" -Item ([PSCustomObject]@{
+                StartOffset = $start
+                EndOffset   = $end
+                Type        = 'FunctionInvoke'
+                Depth       = $null
+                NodeId      = $nodeId
+            })
+    }
+    return [PSCustomObject]@{
+        Candidates = @()
+        Skipped    = @($skipped)
+    }
+
+    foreach ($rec in @($Context.FunctionInvokeResults)) {
+        if (-not $rec) { continue }
 
         $start = if ($rec -is [hashtable]) { $rec['StartOffset'] } else { $rec.StartOffset }
         $end = if ($rec -is [hashtable]) { $rec['EndOffset'] } else { $rec.EndOffset }
@@ -7456,6 +7495,248 @@ function Get-FunctionInvokeReplacementCandidates {
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Get-FunctionDefinitionAstByName {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][string]$FunctionName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FunctionName)) { return $null }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    if (-not $ast -or ($errors -and $errors.Count -gt 0)) { return $null }
+
+    $matches = @($ast.FindAll({
+                param($n)
+                if ($n -isnot [System.Management.Automation.Language.FunctionDefinitionAst]) { return $false }
+                return ([string]$n.Name -ieq [string]$FunctionName)
+            }, $true))
+
+    if ($matches.Count -eq 0) { return $null }
+    return $matches[0]
+}
+
+function Get-FunctionInvocationArgumentText {
+    param(
+        [AllowNull()][string]$InvocationText,
+        [AllowNull()][string]$FunctionName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($InvocationText)) { return '' }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput([string]$InvocationText, [ref]$tokens, [ref]$errors)
+    if (-not $ast -or ($errors -and $errors.Count -gt 0)) { return '' }
+
+    $cmd = @($ast.FindAll({
+                param($n)
+                if ($n -isnot [System.Management.Automation.Language.CommandAst]) { return $false }
+                $name = $n.GetCommandName()
+                if ([string]::IsNullOrWhiteSpace($FunctionName)) { return $true }
+                return ($name -and [string]$name -ieq [string]$FunctionName)
+            }, $true) | Select-Object -First 1)
+
+    if ($cmd.Count -eq 0) { return '' }
+    $cmdAst = $cmd[0]
+    $elements = @($cmdAst.CommandElements)
+    if ($elements.Count -lt 2 -or -not $elements[0].Extent) { return '' }
+
+    $argStart = [int]$elements[0].Extent.EndOffset
+    $argEnd = [int]$cmdAst.Extent.EndOffset
+    if ($argStart -lt 0 -or $argEnd -le $argStart -or $argEnd -gt $InvocationText.Length) { return '' }
+
+    return ([string]$InvocationText).Substring($argStart, $argEnd - $argStart).Trim()
+}
+
+function Add-FunctionParameterBlockIfNeeded {
+    param(
+        [Parameter(Mandatory)][string]$ScriptBlockText,
+        [AllowNull()][System.Management.Automation.Language.FunctionDefinitionAst]$FunctionAst
+    )
+
+    if ($null -eq $FunctionAst -or $null -eq $FunctionAst.Body) { return $ScriptBlockText }
+    if ($FunctionAst.Body.ParamBlock) { return $ScriptBlockText }
+    if (-not $FunctionAst.Parameters -or @($FunctionAst.Parameters).Count -eq 0) { return $ScriptBlockText }
+
+    $trimmed = ([string]$ScriptBlockText).Trim()
+    if (-not ($trimmed.StartsWith('{') -and $trimmed.EndsWith('}'))) { return $ScriptBlockText }
+
+    $paramText = 'param(' + ((@($FunctionAst.Parameters) | ForEach-Object {
+                if ($_.Extent) { [string]$_.Extent.Text } else { '$null' }
+            }) -join ', ') + ')'
+    $inner = $trimmed.Substring(1, $trimmed.Length - 2)
+
+    return "{`n$paramText`n$inner`n}"
+}
+
+function New-SpecializedFunctionTextForInvocation {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)]$CallInstance,
+        [AllowEmptyCollection()][array]$BaseCandidates
+    )
+
+    $funcName = Get-RecordFieldValue -Record $CallInstance -Name 'FunctionName' -Default $null
+    $invocationId = Get-RecordFieldValue -Record $CallInstance -Name 'InvocationId' -Default $null
+    if ([string]::IsNullOrWhiteSpace([string]$funcName) -or [string]::IsNullOrWhiteSpace([string]$invocationId)) {
+        return $null
+    }
+
+    $funcAst = Get-FunctionDefinitionAstByName -ScriptText $ScriptText -FunctionName ([string]$funcName)
+    if (-not $funcAst -or -not $funcAst.Body -or -not $funcAst.Body.Extent) { return $null }
+
+    $bodyStart = [int]$funcAst.Body.Extent.StartOffset
+    $bodyEnd = [int]$funcAst.Body.Extent.EndOffset
+    if ($bodyStart -lt 0 -or $bodyEnd -le $bodyStart -or $bodyEnd -gt $ScriptText.Length) { return $null }
+
+    $bodyText = $ScriptText.Substring($bodyStart, $bodyEnd - $bodyStart)
+    if ([string]::IsNullOrWhiteSpace($bodyText)) { return $null }
+
+    $contextInfo = Get-ReplacementContextInfoFromScriptText -ScriptText $ScriptText
+    $relativeCandidates = @()
+    foreach ($cand in @($BaseCandidates)) {
+        if (-not $cand) { continue }
+        if (-not $cand.PSObject.Properties['StartOffset'] -or -not $cand.PSObject.Properties['EndOffset']) { continue }
+
+        $sourceKind = if ($cand.PSObject.Properties['SourceKind']) { [string]$cand.SourceKind } else { '' }
+        if ($sourceKind -in @('FunctionSpecializedInline', 'FunctionResult', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'ScriptBlockInvocation')) { continue }
+
+        $start = [int]$cand.StartOffset
+        $end = [int]$cand.EndOffset
+        if ($start -lt $bodyStart -or $end -gt $bodyEnd -or $end -le $start) { continue }
+        if ($sourceKind -eq 'VariableRead' -and
+            (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)) {
+            continue
+        }
+
+        $isDefinitionSafe = Test-ReusableScriptBlockDefinitionCandidateAllowed -Candidate $cand
+        $isInvocationSpecific = Test-CandidateMatchesScopeInvocation -Candidate $cand -InvocationId ([string]$invocationId)
+        if (-not $isDefinitionSafe -and -not $isInvocationSpecific) { continue }
+
+        $relativeCandidates += [PSCustomObject]@{
+            StartOffset = [int]($start - $bodyStart)
+            EndOffset   = [int]($end - $bodyStart)
+            Replacement = [string]$cand.Replacement
+            Original    = if ($cand.PSObject.Properties['Original']) { [string]$cand.Original } else { $bodyText.Substring(($start - $bodyStart), ($end - $start)) }
+            Type        = if ($cand.PSObject.Properties['Type']) { $cand.Type } else { $sourceKind }
+            Depth       = if ($cand.PSObject.Properties['Depth']) { $cand.Depth } else { $null }
+            NodeId      = if ($cand.PSObject.Properties['NodeId']) { $cand.NodeId } else { $null }
+            SourceKind  = $sourceKind
+            Confidence  = if ($cand.PSObject.Properties['Confidence']) { $cand.Confidence } else { 'High' }
+            ProtectsInnerCandidates = if ($cand.PSObject.Properties['ProtectsInnerCandidates']) { [bool]$cand.ProtectsInnerCandidates } else { $false }
+        }
+    }
+
+    $newBodyText = $bodyText
+    if ($relativeCandidates.Count -gt 0) {
+        $sel = Select-NonOverlappingReplacements -Candidates $relativeCandidates -Strategy $effectiveOverlapStrategy
+        $selected = @($sel.Selected)
+        if ($selected.Count -gt 0) {
+            $newBodyText = Apply-ReplacementsToText -Text $bodyText -Replacements $selected
+        }
+    }
+
+    $newBodyText = Add-FunctionParameterBlockIfNeeded -ScriptBlockText $newBodyText -FunctionAst $funcAst
+    $syntax = Test-PowerShellSyntax -ScriptText $newBodyText
+    if (-not $syntax.IsValid) { return $null }
+
+    return $newBodyText
+}
+
+function Get-FunctionSpecializedInlineReplacementCandidates {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][string]$ScriptText,
+        [AllowEmptyCollection()][array]$BaseCandidates
+    )
+
+    $candidates = @()
+    $skipped = @()
+
+    if (-not $Context.ContainsKey('FunctionCallInstances') -or -not $Context.FunctionCallInstances) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $used = @{}
+    foreach ($call in @($Context.FunctionCallInstances)) {
+        if (-not $call) { continue }
+
+        $funcName = [string](Get-RecordFieldValue -Record $call -Name 'FunctionName' -Default '')
+        $invocationId = [string](Get-RecordFieldValue -Record $call -Name 'InvocationId' -Default '')
+        $start = Get-RecordFieldValue -Record $call -Name 'StartOffset' -Default $null
+        $end = Get-RecordFieldValue -Record $call -Name 'EndOffset' -Default $null
+        if ([string]::IsNullOrWhiteSpace($funcName) -or [string]::IsNullOrWhiteSpace($invocationId)) { continue }
+
+        $baseItem = [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Type        = 'FunctionSpecializedInline'
+            Depth       = $null
+            NodeId      = Get-RecordFieldValue -Record $call -Name 'CallerNodeId' -Default $null
+        }
+
+        if ($null -eq $start -or $null -eq $end) {
+            $skipped += New-SkipRecord -Reason 'function_specialized_no_offset' -Message "函数调用无 offset，跳过专用展开: $funcName" -Item $baseItem
+            continue
+        }
+        $start = [int]$start
+        $end = [int]$end
+        if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+            $skipped += New-SkipRecord -Reason 'function_specialized_out_of_range' -Message "函数调用 offset 越界: [$start-$end]" -Item $baseItem
+            continue
+        }
+
+        $key = "$start`:$end`:$invocationId"
+        if ($used.ContainsKey($key)) { continue }
+        $used[$key] = $true
+
+        $specializedText = New-SpecializedFunctionTextForInvocation -Context $Context -ScriptText $ScriptText -CallInstance $call -BaseCandidates $BaseCandidates
+        if ([string]::IsNullOrWhiteSpace($specializedText)) {
+            $skipped += New-SkipRecord -Reason 'function_specialized_empty' -Message "函数调用实例没有可安全展开的函数体: $funcName" -Item $baseItem
+            continue
+        }
+
+        $original = $ScriptText.Substring($start, $end - $start)
+        $invocationText = [string](Get-RecordFieldValue -Record $call -Name 'InvocationText' -Default $original)
+        if ([string]::IsNullOrWhiteSpace($invocationText)) { $invocationText = $original }
+        $argumentText = Get-FunctionInvocationArgumentText -InvocationText $invocationText -FunctionName $funcName
+        $suffix = if ([string]::IsNullOrWhiteSpace($argumentText)) { '' } else { ' ' + $argumentText }
+        $replacement = "(& $specializedText$suffix)"
+
+        if ($replacement -eq $original) {
+            $skipped += New-SkipRecord -Reason 'function_specialized_no_change' -Message "函数调用专用展开无变化，跳过: $funcName" -Item $baseItem
+            continue
+        }
+
+        $candidates += [PSCustomObject]@{
+            StartOffset = $start
+            EndOffset   = $end
+            Replacement = $replacement
+            Original    = $original
+            Type        = 'FunctionSpecializedInline'
+            Depth       = $null
+            NodeId      = Get-RecordFieldValue -Record $call -Name 'CallerNodeId' -Default $null
+            SourceKind  = 'FunctionSpecializedInline'
+            Confidence  = 'High'
+            UsedEmptyFallback = $false
+            ResultType  = 'FunctionCall'
+            Executed    = $true
+            FunctionName = $funcName
+            InvocationId = $invocationId
+            ProtectsInnerCandidates = $true
+        }
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($candidates)
+        Skipped    = @($skipped)
     }
 }
 
@@ -9070,7 +9351,7 @@ function Get-StaticReplacementCandidates {
         [Parameter(Mandatory)][string]$ScriptText,
         [int]$TimeBudgetMs = 0,
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [hashtable]$PreExecutionGateCache = $null,
         [bool]$SafeMode = $true
     )
@@ -9445,6 +9726,11 @@ function Get-ReplacementsFromResolvableResults {
                 Type        = $type
                 Depth       = $depth
                 NodeId      = $nodeId
+            }
+
+            if ($type -eq 'Inline') {
+                $skipped += New-SkipRecord -Reason 'inline_function_result_replaced_by_specialized_inline' -Message '内联函数返回值不直接回写，改由调用点专用函数体承载' -Item $baseItem
+                continue
             }
 
             $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id $nodeId } else { $null }
@@ -12734,7 +13020,7 @@ function Try-EvaluateWholeScriptPayloadExpression {
         [int]$TimeoutMs = 4000,
         [bool]$SafeMode = $true,
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [hashtable]$PreExecutionGateCache = $null
     )
 
@@ -12847,7 +13133,7 @@ function Try-EvaluateWholeScriptPayloadExpressionWithLocalHelpers {
         [int]$TimeoutMs = 4000,
         [bool]$SafeMode = $true,
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [hashtable]$PreExecutionGateCache = $null
     )
 
@@ -13631,7 +13917,7 @@ function Invoke-ExpandWholeScriptLocalIexPayloads {
     param(
         [Parameter(Mandatory)][string]$ScriptText,
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [hashtable]$PreExecutionGateCache = $null
     )
 
@@ -16438,7 +16724,7 @@ function Resolve-WholeScriptStaticPayloadInfo {
     param(
         [Parameter(Mandatory)][string]$ScriptText,
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [hashtable]$PreExecutionGateCache = $null,
         [bool]$SafeMode = $true
     )
@@ -19736,7 +20022,7 @@ function Invoke-PostProcessDeobfuscatedScriptText {
     param(
         [Parameter(Mandatory)][string]$ScriptText,
         [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
-        [string]$PreExecutionGateMode = 'Balanced',
+        [string]$PreExecutionGateMode = 'Disabled',
         [bool]$SafeMode = $true,
         [hashtable]$PreExecutionGateCache = $null
     )
@@ -20498,6 +20784,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             ($ctx.ContainsKey('CanonicalCommandInvocationResults') -and $ctx.CanonicalCommandInvocationResults -and $ctx.CanonicalCommandInvocationResults.Count -gt 0) -or
             ($ctx.ContainsKey('CommandTargetAssignmentResults') -and $ctx.CommandTargetAssignmentResults -and $ctx.CommandTargetAssignmentResults.Count -gt 0) -or
         ($ctx.ContainsKey('FunctionInvokeResults') -and $ctx.FunctionInvokeResults -and $ctx.FunctionInvokeResults.Count -gt 0) -or
+        ($ctx.ContainsKey('FunctionCallInstances') -and $ctx.FunctionCallInstances -and $ctx.FunctionCallInstances.Count -gt 0) -or
         ($ctx.ContainsKey('ScriptBlockInvocationResults') -and $ctx.ScriptBlockInvocationResults -and $ctx.ScriptBlockInvocationResults.Count -gt 0) -or
         ($ctx.ContainsKey('ScriptBlockCallInstances') -and $ctx.ScriptBlockCallInstances -and $ctx.ScriptBlockCallInstances.Count -gt 0)
         ))
@@ -20590,14 +20877,15 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
         $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
+        $functionSpecialized = Get-FunctionSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $preSpecializedCandidates
         $scriptBlockSpecialized = Get-ScriptBlockSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $preSpecializedCandidates -TargetCandidates @($scriptBlockTargets.Candidates)
-        $merged = Merge-ReplacementCandidatesByRange -Candidates (@($preSpecializedCandidates) + @($scriptBlockSpecialized.Candidates))
+        $merged = Merge-ReplacementCandidatesByRange -Candidates (@($preSpecializedCandidates) + @($functionSpecialized.Candidates) + @($scriptBlockSpecialized.Candidates))
         $scriptBlockInvocationFiltered = Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks -Candidates @($merged.Candidates)
         $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($scriptBlockInvocationFiltered.Candidates) -Context $ctx -ScriptText $scriptText
         $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
         $candidates = @($preferred.Candidates)
-        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
         $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
         $autoCandidates = @()

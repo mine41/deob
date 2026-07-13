@@ -156,7 +156,7 @@ Notes:
 | `-GlobalTimeBudgetMs` | `120000` | Overall time budget in milliseconds. `0` means unlimited. |
 | `-DynamicTimeBudgetMs` | `15000` | Time budget for one dynamic expansion in milliseconds. `0` means unlimited. |
 | `-SafeMode` | `$true` | Whether to keep safety protections enabled |
-| `-PreExecutionGateMode` | `Balanced` | Complexity-aware pre-execution gate: `Disabled` / `Conservative` / `Balanced` / `Aggressive` |
+| `-PreExecutionGateMode` | `Disabled` | Complexity-aware pre-execution gate: `Disabled` / `Conservative` / `Balanced` / `Aggressive` |
 | `-OptimizationProfile` | `Default` | Behavior-tuning profile: `Default` / `Cmdline` / `AdaptiveCoverage` |
 | `-RunMetadataPath` | unset | Optional JSON summary output path for run metadata |
 | `-DryRun` | `$false` | Analyze only, do not write the final output |
@@ -187,7 +187,7 @@ Pre-execution gate modes:
 
 - `Disabled`: do not apply the gate. The tool behaves like the old always-deepen strategy.
 - `Conservative`: stop or downscale only obviously risky or very expensive fragments.
-- `Balanced`: default mode. Good general setting for fixed-budget experiments such as `120s`.
+- `Balanced`: optional complexity-aware mode for fixed-budget experiments such as `120s`.
 - `Aggressive`: prioritize finishing within budget. More fragments are shallow-processed or skipped early.
 
 The gate can classify a fragment as:
@@ -199,7 +199,7 @@ The gate can classify a fragment as:
 Recommended baseline for a `120s` experiment:
 
 ```powershell
-.\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -FullOutput $false -MaxRounds 5 -GlobalTimeBudgetMs 120000 -DynamicTimeBudgetMs 5000 -SafeMode $false -PreExecutionGateMode Balanced
+.\Rebuild-Deobfuscated.ps1 -ScriptPath .\target.ps1 -FullOutput $false -MaxRounds 5 -GlobalTimeBudgetMs 120000 -DynamicTimeBudgetMs 5000 -SafeMode $false -PreExecutionGateMode Disabled
 ```
 
 Round reports may also include gate-related fields such as `GateMode`, `GateDecision`, `GateScore`, `GateReasons`, and `GateMetrics`.

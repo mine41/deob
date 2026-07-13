@@ -2218,6 +2218,86 @@ function Record-ScriptBlockCallInstance {
     }
 }
 
+function Record-FunctionCallInstance {
+    param(
+        [hashtable]$Context,
+        [string]$FuncName,
+        $CallerNode = $null,
+        $CallerInfo = $null,
+        [string]$InvocationId,
+        [array]$Arguments = @(),
+        [hashtable]$NamedArguments = $null,
+        $ExplicitStartOffset = $null,
+        $ExplicitEndOffset = $null,
+        [AllowNull()][string]$ExplicitInvocationText = $null,
+        [AllowNull()][string]$ParentInvocationId = $null
+    )
+
+    if (-not $Context -or [string]::IsNullOrWhiteSpace($FuncName)) { return }
+    if ([string]::IsNullOrWhiteSpace($InvocationId)) { return }
+    if (-not $Context.FunctionSubgraphs -or -not $Context.FunctionSubgraphs.ContainsKey($FuncName)) { return }
+
+    $funcStartId = $Context.FunctionSubgraphs[$FuncName]
+
+    $cmdAst = $null
+    if ($CallerInfo -and $CallerInfo.Success) {
+        if ($CallerInfo.TopLevelCommandAst) {
+            $cmdAst = $CallerInfo.TopLevelCommandAst
+        } elseif ($CallerInfo.CommandAst) {
+            $cmdAst = $CallerInfo.CommandAst
+        } elseif ($CallerInfo.Statement) {
+            $cmdAst = $CallerInfo.Statement
+        }
+    }
+
+    $extent = if ($CallerNode -and $cmdAst) { Get-NodeAstGlobalExtent -Node $CallerNode -Ast $cmdAst } else { $null }
+    $startOffset = if ($null -ne $ExplicitStartOffset) {
+        $ExplicitStartOffset
+    } elseif ($extent) {
+        $extent.StartOffset
+    } elseif ($CallerNode -and $CallerNode.PSObject.Properties['TextStartOffset']) {
+        $CallerNode.TextStartOffset
+    } else {
+        $null
+    }
+    $endOffset = if ($null -ne $ExplicitEndOffset) {
+        $ExplicitEndOffset
+    } elseif ($extent) {
+        $extent.EndOffset
+    } elseif ($CallerNode -and $CallerNode.PSObject.Properties['TextEndOffset']) {
+        $CallerNode.TextEndOffset
+    } else {
+        $null
+    }
+    $text = if (-not [string]::IsNullOrWhiteSpace($ExplicitInvocationText)) {
+        [string]$ExplicitInvocationText
+    } elseif ($extent -and $extent.PSObject.Properties['Text']) {
+        [string]$extent.Text
+    } elseif ($CallerNode -and $CallerNode.PSObject.Properties['Text']) {
+        [string]$CallerNode.Text
+    } else {
+        $null
+    }
+
+    if (-not $Context.ContainsKey('FunctionCallInstances') -or $null -eq $Context.FunctionCallInstances) {
+        $Context.FunctionCallInstances = @()
+    }
+
+    $Context.FunctionCallInstances += [PSCustomObject]@{
+        InvocationId       = [string]$InvocationId
+        ParentInvocationId = $ParentInvocationId
+        FunctionName       = [string]$FuncName
+        CallerNodeId       = if ($CallerNode -and $CallerNode.PSObject.Properties['Id']) { [int]$CallerNode.Id } else { $null }
+        StartOffset        = $startOffset
+        EndOffset          = $endOffset
+        InvocationText     = $text
+        FunctionStartNodeId = [int]$funcStartId
+        Arguments          = @($Arguments)
+        NamedArguments     = if ($NamedArguments) { $NamedArguments } else { @{} }
+        Timestamp          = Get-Date
+    }
+}
+
 function Test-SensitiveSinkText {
     param(
         [AllowNull()][string]$Text,
@@ -5563,7 +5643,7 @@ function Invoke-NodeDirect {
                 Action   = "Execute"
             }
         }
-        $code = Resolve-EmbeddedFunctionCalls -Code $code -Ast $parseInfo.Ast -Context $Context -NodeId $Node.Id
+        $code = Resolve-EmbeddedFunctionCalls -Code $code -Ast $parseInfo.Ast -Context $Context -NodeId $Node.Id -CallerNode $Node
     }
 
     $code = Convert-CodeForCurrentScope -Code $code -Context $Context
@@ -7972,6 +8052,16 @@ function Invoke-FunctionCall {
     }
 
     $targetVarName = if ($callerInfo -and $callerInfo.Success) { $callerInfo.TargetVarName } else { $null }
+    $invocationId = "func_" + [guid]::NewGuid().ToString("N").Substring(0, 12)
+    $parentInvocationId = $null
+    if ($Context.ScopeStack.Count -gt 0) {
+        $parentScope = $Context.ScopeStack[-1]
+        if ($parentScope -and $parentScope.ContainsKey('InvocationId')) {
+            $parentInvocationId = $parentScope.InvocationId
+        }
+    }
+
+    Record-FunctionCallInstance -Context $Context -FuncName $FuncName -CallerNode $CallerNode -CallerInfo $callerInfo -InvocationId $invocationId -Arguments $arguments -NamedArguments $namedArguments -ParentInvocationId $parentInvocationId
 
     Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName -ReturnNodeId $returnNodeId -EndNodeId $funcEndId
     if ($Context.ScopeStack.Count -gt 0) {
@@ -7980,6 +8070,8 @@ function Invoke-FunctionCall {
         $Context.ScopeStack[-1].NamedArguments = $namedArguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
         $Context.ScopeStack[-1].CallerNodeId = $CallerNode.Id
+        $Context.ScopeStack[-1].InvocationId = $invocationId
+        $Context.ScopeStack[-1].ParentInvocationId = $parentInvocationId
         $cmdExtent = Get-NodeAstGlobalExtent -Node $CallerNode -Ast $cmdAst
         if ($cmdExtent) {
             $Context.ScopeStack[-1].InvocationStartOffset = [int]$cmdExtent.StartOffset
@@ -8012,7 +8104,9 @@ function Invoke-FunctionInline {
         [string]$FuncName,
         [array]$Arguments,
         [hashtable]$NamedArguments = $null,
-        [hashtable]$Context
+        [hashtable]$Context,
+        [AllowNull()][string]$InvocationId = $null,
+        [AllowNull()][string]$ParentInvocationId = $null
     )
 
     if ($Context.CallStack.Count -ge $Context.MaxCallDepth) {
@@ -8055,6 +8149,16 @@ function Invoke-FunctionInline {
         Write-ExecutionLog -Context $Context -Message "  [INLINE] Direct helper fallback returned null for '$FuncName'; falling back to CFG traversal"
     }
 
+    if ([string]::IsNullOrWhiteSpace($InvocationId)) {
+        $InvocationId = "func_" + [guid]::NewGuid().ToString("N").Substring(0, 12)
+    }
+    if ([string]::IsNullOrWhiteSpace($ParentInvocationId) -and $Context.ScopeStack.Count -gt 0) {
+        $parentScope = $Context.ScopeStack[-1]
+        if ($parentScope -and $parentScope.ContainsKey('InvocationId')) {
+            $ParentInvocationId = $parentScope.InvocationId
+        }
+    }
+
     $baselineScopeDepth = $Context.ScopeStack.Count
 
     Push-ExecutionScope -Context $Context -ScopeType "Function" -ScopeName $FuncName `
@@ -8064,6 +8168,8 @@ function Invoke-FunctionInline {
     $scope.Arguments = $Arguments
     $scope.NamedArguments = if ($NamedArguments) { $NamedArguments } else { @{} }
     $scope.TargetVarName = $null
+    $scope.InvocationId = $InvocationId
+    $scope.ParentInvocationId = $ParentInvocationId
     if ($hasProcessBlock) {
         Initialize-ProcessInputForCurrentScope -Context $Context -InputItems @() -SourcePipeVar $null -InputVarName $processInputVarName
     }
@@ -8153,7 +8259,8 @@ function Resolve-EmbeddedFunctionCalls {
         [string]$Code,
         $Ast,
         [hashtable]$Context,
-        [int]$NodeId = -1
+        [int]$NodeId = -1,
+        $CallerNode = $null
     )
 
     if (-not $Ast) { return $Code }
@@ -8219,7 +8326,29 @@ function Resolve-EmbeddedFunctionCalls {
 
         Write-ExecutionLog -Context $Context -Message ({ "  [INLINE] Resolving: $($call.Text) with args: $($logParts -join ', ')" }).GetNewClosure()
 
-        $funcResult = Invoke-FunctionInline -FuncName $call.FuncName -Arguments $args -NamedArguments $namedArgs -Context $Context
+        $invocationId = "func_" + [guid]::NewGuid().ToString("N").Substring(0, 12)
+        $parentInvocationId = $null
+        if ($Context.ScopeStack.Count -gt 0) {
+            $parentScope = $Context.ScopeStack[-1]
+            if ($parentScope -and $parentScope.ContainsKey('InvocationId')) {
+                $parentInvocationId = $parentScope.InvocationId
+            }
+        }
+
+        $effectiveCallerNode = $CallerNode
+        if (-not $effectiveCallerNode -and $NodeId -ge 0 -and $Context.CFG) {
+            $effectiveCallerNode = Get-NodeById -CFG $Context.CFG -Id $NodeId
+        }
+        $globalStart = [int]$call.Start
+        $globalEnd = [int]$call.End
+        if ($effectiveCallerNode -and $effectiveCallerNode.PSObject.Properties['TextStartOffset'] -and $null -ne $effectiveCallerNode.TextStartOffset) {
+            $globalStart = [int]$effectiveCallerNode.TextStartOffset + [int]$call.Start
+            $globalEnd = [int]$effectiveCallerNode.TextStartOffset + [int]$call.End
+        }
+
+        Record-FunctionCallInstance -Context $Context -FuncName $call.FuncName -CallerNode $effectiveCallerNode -InvocationId $invocationId -Arguments $args -NamedArguments $namedArgs -ExplicitStartOffset $globalStart -ExplicitEndOffset $globalEnd -ExplicitInvocationText ([string]$call.Text) -ParentInvocationId $parentInvocationId
+
+        $funcResult = Invoke-FunctionInline -FuncName $call.FuncName -Arguments $args -NamedArguments $namedArgs -Context $Context -InvocationId $invocationId -ParentInvocationId $parentInvocationId
 
         $tempVar = "_inline_" + [guid]::NewGuid().ToString("N").Substring(0,8)
 
@@ -11868,6 +11997,7 @@ function Invoke-CFGTraversal {
         MaxCallDepth          = 100
         DynamicInvokeResults  = @()
         FunctionInvokeResults = @()
+        FunctionCallInstances = @()
         ScriptBlockInvocationResults = @()
         ScriptBlockCallInstances = @()
         CanonicalCommandInvocationResults = @()
@@ -12047,6 +12177,7 @@ function New-CFGExecutionSession {
         MaxCallDepth           = 100
         DynamicInvokeResults   = @()
         FunctionInvokeResults  = @()
+        FunctionCallInstances  = @()
         ScriptBlockInvocationResults = @()
         ScriptBlockCallInstances = @()
         CanonicalCommandInvocationResults = @()
