@@ -2095,7 +2095,8 @@ function Record-ScriptBlockInvocationResult {
         $CallerNode,
         [hashtable]$Context,
         [string]$BlockName,
-        [AllowNull()][array]$Arguments = $null
+        [AllowNull()][array]$Arguments = $null,
+        [hashtable]$NamedArguments = $null
     )
 
     if ($null -eq $CallerNode -or $null -eq $Context -or [string]::IsNullOrWhiteSpace($BlockName)) {
@@ -2104,7 +2105,8 @@ function Record-ScriptBlockInvocationResult {
     if (-not $Context.ScriptBlockSubgraphs -or -not $Context.ScriptBlockSubgraphs.ContainsKey($BlockName)) {
         return
     }
-    if ($Arguments -and $Arguments.Count -gt 0) {
+    if (($Arguments -and $Arguments.Count -gt 0) -or
+        ($NamedArguments -and $NamedArguments.Count -gt 0)) {
         return
     }
 
@@ -2154,7 +2156,8 @@ function Record-ScriptBlockCallInstance {
         $CallerNode,
         $CallerInfo,
         [string]$InvocationId,
-        [array]$Arguments = @()
+        [array]$Arguments = @(),
+        [hashtable]$NamedArguments = $null
     )
 
     if (-not $Context -or [string]::IsNullOrWhiteSpace($BlockName) -or -not $CallerNode) { return }
@@ -2214,6 +2217,7 @@ function Record-ScriptBlockCallInstance {
         BlockStartOffset = if ($blockStartNode.PSObject.Properties['TextStartOffset']) { $blockStartNode.TextStartOffset } else { $null }
         BlockEndOffset   = if ($blockStartNode.PSObject.Properties['TextEndOffset']) { $blockStartNode.TextEndOffset } else { $null }
         Arguments        = @($Arguments)
+        NamedArguments   = if ($NamedArguments) { $NamedArguments } else { @{} }
         Timestamp        = Get-Date
     }
 }
@@ -4412,13 +4416,17 @@ function Get-NodeTextScriptBlockArguments {
     $execInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
     if (-not $execInfo.Success) {
         return [PSCustomObject]@{
-            Success   = $false
-            Error     = $execInfo.Error
-            Arguments = @()
+            Success        = $false
+            Error          = $execInfo.Error
+            Arguments      = @()
+            NamedArguments = [ordered]@{}
+            LogEntries     = @()
         }
     }
 
     $arguments = @()
+    $namedArguments = [ordered]@{}
+    $namedArguments = [ordered]@{}
     $scriptAst = $execInfo.ParseInfo.Ast
 
     $invokeAst = $scriptAst.Find({
@@ -4441,18 +4449,22 @@ function Get-NodeTextScriptBlockArguments {
         }
 
         return [PSCustomObject]@{
-            Success   = $true
-            Error     = $null
-            Arguments = $arguments
+            Success        = $true
+            Error          = $null
+            Arguments      = $arguments
+            NamedArguments = [ordered]@{}
+            LogEntries     = @()
         }
     }
 
     $cmdAst = $execInfo.CommandAst
     if (-not $cmdAst) {
         return [PSCustomObject]@{
-            Success   = $true
-            Error     = $null
-            Arguments = @()
+            Success        = $true
+            Error          = $null
+            Arguments      = @()
+            NamedArguments = [ordered]@{}
+            LogEntries     = @()
         }
     }
 
@@ -4479,9 +4491,11 @@ function Get-NodeTextScriptBlockArguments {
         }
 
         return [PSCustomObject]@{
-            Success   = $true
-            Error     = $null
-            Arguments = $arguments
+            Success        = $true
+            Error          = $null
+            Arguments      = $arguments
+            NamedArguments = [ordered]@{}
+            LogEntries     = @()
         }
     }
 
@@ -4497,26 +4511,16 @@ function Get-NodeTextScriptBlockArguments {
         }
     }
 
-    for ($i = $startIndex; $i -lt $cmdAst.CommandElements.Count; $i++) {
-        $argAst = $cmdAst.CommandElements[$i]
-        if ($argAst -is [System.Management.Automation.Language.CommandParameterAst]) {
-            continue
-        }
-
-        $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
-        $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-        if ($argResult.Success) {
-            $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
-            $arguments += ,$argValue
-        } else {
-            $arguments += ,$null
-        }
-    }
+    $bindingInfo = Get-CommandInvocationBindings -CommandAst $cmdAst -Context $Context -StartIndex $startIndex -CallerNodeId $CallerNode.Id
+    $arguments = @($bindingInfo.PositionalArguments)
+    $namedArguments = if ($bindingInfo.NamedArguments) { $bindingInfo.NamedArguments } else { [ordered]@{} }
 
     return [PSCustomObject]@{
-        Success   = $true
-        Error     = $null
-        Arguments = $arguments
+        Success        = $true
+        Error          = $null
+        Arguments      = $arguments
+        NamedArguments = $namedArguments
+        LogEntries     = @($bindingInfo.LogEntries)
     }
 }
 
@@ -5729,11 +5733,12 @@ function Invoke-NodeSafe {
             $targetVarName = [string]$Node.CaptureTargetVar
         }
         if (-not [string]::IsNullOrWhiteSpace($targetVarName)) {
-            $existingValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $targetVarName
+            $actualTargetVarName = Resolve-CFGVariableStackActualName -Context $Context -VariableName $targetVarName
+            $existingValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualTargetVarName
             $combinedOutputs = @()
             if ($null -ne $existingValue) { $combinedOutputs += @($existingValue) }
             if ($outputs.Count -gt 0) { $combinedOutputs += $outputs }
-            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($targetVarName, $combinedOutputs)
+            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($actualTargetVarName, $combinedOutputs)
         }
         return @{
             Success  = $true
@@ -8547,9 +8552,17 @@ function Invoke-ScriptBlockCall {
             }
         } else {
             $arguments = @($argInfo.Arguments)
+            $namedArguments = if ($argInfo.NamedArguments) { $argInfo.NamedArguments } else { [ordered]@{} }
             for ($i = 0; $i -lt $arguments.Count; $i++) {
                 if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
                     Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: (text-parsed) = $(Format-VariableValue $arguments[$i])" }).GetNewClosure()
+                }
+            }
+            foreach ($key in @($namedArguments.Keys)) {
+                if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
+                    $nameForLog = [string]$key
+                    $valueForLog = $namedArguments[$key]
+                    Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] -$($nameForLog): (text-parsed) = $(Format-VariableValue $valueForLog)" }).GetNewClosure()
                 }
             }
         }
@@ -8564,8 +8577,8 @@ function Invoke-ScriptBlockCall {
     }
     $invocationId = [guid]::NewGuid().ToString("N")
 
-    Record-ScriptBlockInvocationResult -CallerNode $CallerNode -Context $Context -BlockName $BlockName -Arguments $arguments
-    Record-ScriptBlockCallInstance -Context $Context -BlockName $BlockName -CallerNode $CallerNode -CallerInfo $callerInfo -InvocationId $invocationId -Arguments $arguments
+    Record-ScriptBlockInvocationResult -CallerNode $CallerNode -Context $Context -BlockName $BlockName -Arguments $arguments -NamedArguments $namedArguments
+    Record-ScriptBlockCallInstance -Context $Context -BlockName $BlockName -CallerNode $CallerNode -CallerInfo $callerInfo -InvocationId $invocationId -Arguments $arguments -NamedArguments $namedArguments
 
     $targetVarName = if ($callerInfo -and $callerInfo.Success) { $callerInfo.TargetVarName } else { $null }
 
@@ -8573,6 +8586,7 @@ function Invoke-ScriptBlockCall {
     if ($Context.ScopeStack.Count -gt 0) {
         $Context.ScopeStack[-1].LocalVars = @($localVars)
         $Context.ScopeStack[-1].Arguments = $arguments
+        $Context.ScopeStack[-1].NamedArguments = $namedArguments
         $Context.ScopeStack[-1].TargetVarName = $targetVarName
         $Context.ScopeStack[-1].InvocationId = $invocationId
         $Context.ScopeStack[-1].ParentInvocationId = $parentInvocationId
