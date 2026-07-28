@@ -653,6 +653,7 @@ function Build-Checkpoints {
         [Parameter(Mandatory)][int]$Interval
     )
 
+    $Frames = @($Frames)
     $cps = @()
     $stateVars = @{}
     $scopeStack = @()
@@ -700,6 +701,7 @@ function Build-Checkpoints {
         )
 
         if (-not $Frame) { return }
+        $ScopeStack = @($ScopeStack)
         foreach ($ev in @($Frame.Events)) {
             switch ($ev.Kind) {
                 'ScopePush' {
@@ -739,7 +741,7 @@ function Build-Checkpoints {
     }
 
     for ($i = 0; $i -lt $Frames.Count; $i++) {
-        $scopeStack = Apply-FrameEvents -Vars $stateVars -ScopeStack $scopeStack -Frame $Frames[$i]
+        $scopeStack = @(Apply-FrameEvents -Vars $stateVars -ScopeStack $scopeStack -Frame $Frames[$i])
         if (($i % $Interval) -eq 0) {
             $cps += [PSCustomObject]@{
                 Index      = $i

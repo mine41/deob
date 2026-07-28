@@ -1940,7 +1940,8 @@ function Record-CanonicalCommandInvocationResult {
     if (-not ($CommandInfo.Ast -is [System.Management.Automation.Language.CommandAst])) {
         return
     }
-    if ($CommandInfo.Ast.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Ampersand) {
+    $invocationOperator = [string]$CommandInfo.Ast.InvocationOperator
+    if ($invocationOperator -notin @('Ampersand', 'Dot')) {
         return
     }
     if (-not $CommandInfo.PSObject.Properties['ResolutionConfidence'] -or [string]$CommandInfo.ResolutionConfidence -ne 'High') {
@@ -1963,18 +1964,20 @@ function Record-CanonicalCommandInvocationResult {
     $cmdStart = [int]$cmdAst.Extent.StartOffset
     $targetStart = [int]$targetAst.Extent.StartOffset
     $targetEnd = [int]$targetAst.Extent.EndOffset
+    $localTargetStart = $targetStart - $cmdStart
     $localTargetEnd = $targetEnd - $cmdStart
     if ($cmdStart -lt 0 -or $targetStart -lt $cmdStart -or $targetEnd -le $targetStart) {
         return
     }
 
     $nodeText = [string]$Node.Text
-    if ($localTargetEnd -le 0 -or $localTargetEnd -gt $nodeText.Length) {
+    if ($localTargetStart -lt 0 -or $localTargetEnd -le 0 -or $localTargetEnd -gt $nodeText.Length) {
         return
     }
 
     $tail = $nodeText.Substring($localTargetEnd)
-    $replacement = ([string]$CommandInfo.ResolvedName) + $tail
+    $prefix = if ($invocationOperator -eq 'Dot') { $nodeText.Substring(0, $localTargetStart) } else { '' }
+    $replacement = $prefix + ([string]$CommandInfo.ResolvedName) + $tail
     if ([string]::IsNullOrWhiteSpace($replacement) -or [string]$replacement -eq [string]$Node.Text) {
         return
     }
@@ -4426,7 +4429,6 @@ function Get-NodeTextScriptBlockArguments {
 
     $arguments = @()
     $namedArguments = [ordered]@{}
-    $namedArguments = [ordered]@{}
     $scriptAst = $execInfo.ParseInfo.Ast
 
     $invokeAst = $scriptAst.Find({
@@ -5431,9 +5433,7 @@ function Format-TypedScalarResolvableValue {
 
     if ($null -eq $Value) { return $null }
 
-    if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
-        $Value = $Value.BaseObject
-    }
+    $Value = Unwrap-SafePSBaseObject -Value $Value
 
     $typeName = $null
     $literal = $null
@@ -5727,7 +5727,10 @@ function Invoke-NodeSafe {
 
     if ($Node.Type -eq 'OutputCaptureEnd') {
         $frame = Pop-OutputCapture -Context $Context
-        $outputs = if ($frame -and $frame.Outputs) { @($frame.Outputs) } else { @() }
+        $outputs = @()
+        if ($frame -and $frame.ContainsKey('Outputs') -and $null -ne $frame['Outputs']) {
+            $outputs = @($frame['Outputs'])
+        }
         $targetVarName = $null
         if ($Node.PSObject.Properties.Match('CaptureTargetVar').Count -gt 0) {
             $targetVarName = [string]$Node.CaptureTargetVar
@@ -6201,8 +6204,8 @@ function Add-OutputsToCurrentCapture {
     if ($null -eq $Result) { return }
 
     $frame = $Context.OutputCaptureStack[-1]
-    if (-not $frame.ContainsKey('Outputs') -or $null -eq $frame.Outputs) {
-        $frame.Outputs = @()
+    if (-not $frame.ContainsKey('Outputs') -or $null -eq $frame['Outputs']) {
+        $frame['Outputs'] = @()
     }
 
     $items = [object[]]@(Get-ExecutionResultItems -Value $Result -TreatArraysAsSequence)
@@ -6211,7 +6214,7 @@ function Add-OutputsToCurrentCapture {
     }
 
     foreach ($item in $items) {
-        if ($null -ne $item) { $frame.Outputs += $item }
+        if ($null -ne $item) { $frame['Outputs'] = @($frame['Outputs']) + @($item) }
     }
 }
 
@@ -8504,6 +8507,7 @@ function Invoke-ScriptBlockCall {
     $returnNodeId = if ($returnNode) { $returnNode.Id } else { $null }
 
     $arguments = @()
+    $namedArguments = [ordered]@{}
     $callerInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
     if (-not $callerInfo.Success) {
         return @{
@@ -8533,7 +8537,7 @@ function Invoke-ScriptBlockCall {
     }
 
     if ($null -ne $PreParsedArguments) {
-        $arguments = $PreParsedArguments
+        $arguments = @($PreParsedArguments)
         for ($i = 0; $i -lt $arguments.Count; $i++) {
             if (Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogArgumentDetailsEnabled') {
                 Write-ExecutionLog -Context $Context -Message ({ "  [ARGS] Arg[$i]: (pre-parsed) = $(Format-VariableValue $arguments[$i])" }).GetNewClosure()
@@ -12975,18 +12979,21 @@ function Invoke-CFGStep {
                 if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsBefore.Count -gt 0) {
                     Write-ExecutionLog -Context $context -Message '  VarsRead:'
                     foreach ($kv in $varsBefore.GetEnumerator()) {
-                        Write-ExecutionLog -Context $context -Message ({ "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)" }).GetNewClosure()
+                        $formattedValue = Format-VariableValue $kv.Value
+                        Write-ExecutionLog -Context $context -Message "    `$$($kv.Key) = $formattedValue"
                     }
                 }
                 if ((Test-ExecutionLogDetailEnabled -Context $Context -FlagName 'LogVariableDetailsEnabled') -and $varsAfter.Count -gt 0) {
                     Write-ExecutionLog -Context $context -Message '  VarsWritten:'
                     foreach ($kv in $varsAfter.GetEnumerator()) {
-                        Write-ExecutionLog -Context $context -Message ({ "    `$$($kv.Key) = $(Format-VariableValue $kv.Value)" }).GetNewClosure()
+                        $formattedValue = Format-VariableValue $kv.Value
+                        Write-ExecutionLog -Context $context -Message "    `$$($kv.Key) = $formattedValue"
                     }
                 }
                 if ($null -ne $execOutput -and @($execOutput).Count -gt 0) {
                     if (Test-ExecutionLogDetailEnabled -Context $context -FlagName 'LogResultDetailsEnabled') {
-                        Write-ExecutionLog -Context $context -Message ({ "  Result: $(Format-VariableValue $execOutput)" }).GetNewClosure()
+                        $formattedResult = Format-VariableValue $execOutput
+                        Write-ExecutionLog -Context $context -Message "  Result: $formattedResult"
                     }
                     if ($context.ScopeStack.Count -gt 0) {
                         $context.LastSubgraphResult = Normalize-ExecutionResultValue -Value $execOutput -TreatArraysAsSequence

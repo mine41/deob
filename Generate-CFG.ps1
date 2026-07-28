@@ -341,8 +341,9 @@ function Resolve-SafeDynamicCommandNameExpressionValue {
     }
 
     if ($Ast -is [System.Management.Automation.Language.ParenExpressionAst]) {
-        if ($Ast.Pipeline -and $Ast.Pipeline.PipelineElements -and $Ast.Pipeline.PipelineElements.Count -eq 1) {
-            $elem = $Ast.Pipeline.PipelineElements[0]
+        $pipeElements = if ($Ast.Pipeline -and $Ast.Pipeline.PipelineElements) { @($Ast.Pipeline.PipelineElements) } else { @() }
+        if ($pipeElements.Count -eq 1) {
+            $elem = $pipeElements[0]
             if ($elem -is [System.Management.Automation.Language.CommandAst]) {
                 return Resolve-SafeDynamicCommandNameExpressionValue -Ast $elem -Depth ($Depth + 1)
             }
@@ -1409,8 +1410,11 @@ function Get-AllNestedPipelines {
         if ($n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
             return $false
         }
-        $n -is [System.Management.Automation.Language.PipelineAst] -and
-        $n.PipelineElements.Count -gt 1
+        if ($n -isnot [System.Management.Automation.Language.PipelineAst]) {
+            return $false
+        }
+        $pipelineElements = @($n.PipelineElements)
+        return ($pipelineElements.Count -gt 1)
     }, $true)
 
     $pipelines = @($pipelines | Where-Object {
@@ -1649,9 +1653,10 @@ function Get-UnwrappedScriptBlockBindingAst {
     while ($null -ne $current) {
         if ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
             $pipe = $current.Pipeline
-            if ($pipe -and $pipe.PipelineElements.Count -eq 1 -and
-                $pipe.PipelineElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
-                $current = $pipe.PipelineElements[0].Expression
+            $pipeElements = if ($pipe -and $pipe.PipelineElements) { @($pipe.PipelineElements) } else { @() }
+            if ($pipeElements.Count -eq 1 -and
+                $pipeElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+                $current = $pipeElements[0].Expression
                 continue
             }
         }
@@ -1984,7 +1989,7 @@ function Expand-ForEachObjectPipelineElement {
     $currentNode = $initNode
     $breakLoopEnd = Add-Node -cfg $cfg -type 'LoopEnd' -text 'Break ForEach-Object' -line $CommandAst.Extent.EndLineNumber -ast $null -ownerAst $CommandAst
 
-    $beginStatements = if ($info.BeginBlockAst -and $info.BeginBlockAst.EndBlock) { @($info.BeginBlockAst.EndBlock.Statements) } else { @() }
+    $beginStatements = @(if ($info.BeginBlockAst -and $info.BeginBlockAst.EndBlock) { $info.BeginBlockAst.EndBlock.Statements } else { @() })
     if ($beginStatements.Count -gt 0) {
         $beginCaptureStart = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureStart' -Text 'Capture Begin Output' -Line $line -TargetVarName $null -OwnerAst $CommandAst
         $beginNormalCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Begin Output' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
@@ -2020,7 +2025,7 @@ function Expand-ForEachObjectPipelineElement {
     $processContinueCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append Process Output (Continue)' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
     Add-Edge -cfg $cfg -from $bindNode.Id -to $processCaptureStart.Id
 
-    $processStatements = if ($info.ProcessBlockAst -and $info.ProcessBlockAst.EndBlock) { @($info.ProcessBlockAst.EndBlock.Statements) } else { @() }
+    $processStatements = @(if ($info.ProcessBlockAst -and $info.ProcessBlockAst.EndBlock) { $info.ProcessBlockAst.EndBlock.Statements } else { @() })
     $processPrevNodeRef = [ref]$processCaptureStart
     $processLoopContext = [PSCustomObject]@{
         LoopEnd      = $processBreakCaptureEnd
@@ -2037,7 +2042,7 @@ function Expand-ForEachObjectPipelineElement {
     Add-Edge -cfg $cfg -from $iterNode.Id -to $conditionNode.Id
 
     $currentNode = $normalLoopEnd
-    $endStatements = if ($info.EndBlockAst -and $info.EndBlockAst.EndBlock) { @($info.EndBlockAst.EndBlock.Statements) } else { @() }
+    $endStatements = @(if ($info.EndBlockAst -and $info.EndBlockAst.EndBlock) { $info.EndBlockAst.EndBlock.Statements } else { @() })
     if ($endStatements.Count -gt 0) {
         $endCaptureStart = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureStart' -Text 'Capture End Output' -Line $line -TargetVarName $null -OwnerAst $CommandAst
         $endNormalCaptureEnd = New-OutputCaptureNode -cfg $cfg -Type 'OutputCaptureEnd' -Text 'Append End Output' -Line $line -TargetVarName $outputVar -OwnerAst $CommandAst
@@ -2294,8 +2299,9 @@ function Expand-NestedScriptBlocks {
             if ($parent -is [System.Management.Automation.Language.CommandExpressionAst] -and
                 $parent.Expression -eq $sb) {
                 $grandParent = $parent.Parent
+                $grandParentElements = if ($grandParent -is [System.Management.Automation.Language.PipelineAst]) { @($grandParent.PipelineElements) } else { @() }
                 if ($grandParent -is [System.Management.Automation.Language.PipelineAst] -and
-                    $grandParent.PipelineElements.Count -eq 1) {
+                    $grandParentElements.Count -eq 1) {
                     $greatGrandParent = $grandParent.Parent
                     if ($greatGrandParent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
                         $isDirectAssignment = $true
@@ -2356,9 +2362,10 @@ function Expand-NestedScriptBlocks {
             if ($parent -is [System.Management.Automation.Language.CommandExpressionAst]) {
                 if ($parent.Expression -eq $sb) {
                     $grandParent = $parent.Parent
+                    $grandParentElements = if ($grandParent -is [System.Management.Automation.Language.PipelineAst]) { @($grandParent.PipelineElements) } else { @() }
                     if ($grandParent -is [System.Management.Automation.Language.PipelineAst] -and
-                        $grandParent.PipelineElements.Count -eq 1 -and
-                        $grandParent.PipelineElements[0] -eq $parent -and
+                        $grandParentElements.Count -eq 1 -and
+                        $grandParentElements[0] -eq $parent -and
                         $grandParent -eq $ast) {
                         $isStandaloneDeferred = $true
                     }
@@ -2490,9 +2497,10 @@ function Expand-NestedScriptBlocks {
             if ($parent -is [System.Management.Automation.Language.CommandAst] -and $parent -eq $ast) {
                 $isStandaloneInvoke = $true
             }
+            $astElements = if ($ast -is [System.Management.Automation.Language.PipelineAst]) { @($ast.PipelineElements) } else { @() }
             if ($ast -is [System.Management.Automation.Language.PipelineAst] -and
-                $ast.PipelineElements.Count -eq 1 -and
-                $ast.PipelineElements[0] -eq $parent) {
+                $astElements.Count -eq 1 -and
+                $astElements[0] -eq $parent) {
                 $isStandaloneInvoke = $true
             }
         }
@@ -2600,7 +2608,7 @@ function Expand-NestedPipelines {
         $depth = 0
         $ancestor = $_.Parent
         while ($null -ne $ancestor -and $ancestor -ne $ast) {
-            if ($ancestor -is [System.Management.Automation.Language.PipelineAst] -and $ancestor.PipelineElements.Count -gt 1) {
+            if ($ancestor -is [System.Management.Automation.Language.PipelineAst] -and @($ancestor.PipelineElements).Count -gt 1) {
                 $depth++
             }
             $ancestor = $ancestor.Parent
@@ -2622,7 +2630,7 @@ function Expand-NestedPipelines {
         $pipeVar = "_pipe_$guid"
         $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVar; Scope = [VarScope]::Unspecified }
 
-        $elements = $pipeline.PipelineElements
+        $elements = @($pipeline.PipelineElements)
         $lastIndex = $elements.Count - 1
 
         for ($i = 0; $i -lt $elements.Count - 1; $i++) {
@@ -4029,8 +4037,9 @@ function Convert-AssignmentAstNode {
         [ref]$prevNodeRef
     )
 
+    $rightPipelineElements = if ($assignAst.Right -is [System.Management.Automation.Language.PipelineAst]) { @($assignAst.Right.PipelineElements) } else { @() }
     if ($assignAst.Right -is [System.Management.Automation.Language.PipelineAst] -and
-        $assignAst.Right.PipelineElements.Count -gt 1) {
+        $rightPipelineElements.Count -gt 1) {
         $leftText = $assignAst.Left.Extent.Text
         $operatorText = switch ($assignAst.Operator) {
             "Equals"           { "=" }
@@ -4042,7 +4051,7 @@ function Convert-AssignmentAstNode {
             default            { "=" }
         }
 
-        $elements = $assignAst.Right.PipelineElements
+        $elements = $rightPipelineElements
         $lastIndex = $elements.Count - 1
 
         $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
@@ -4160,13 +4169,14 @@ function Convert-AssignmentAstNode {
             $isDirectAssignment = $false
             if ($null -ne $varName) {
                 $rightAst = $assignAst.Right
+                $rightAstElements = if ($rightAst -is [System.Management.Automation.Language.PipelineAst]) { @($rightAst.PipelineElements) } else { @() }
                 if ($rightAst -is [System.Management.Automation.Language.CommandExpressionAst] -and
                     $rightAst.Expression -eq $sb) {
                     $isDirectAssignment = $true
                 }
                 elseif ($rightAst -is [System.Management.Automation.Language.PipelineAst] -and
-                    $rightAst.PipelineElements.Count -eq 1) {
-                    $element = $rightAst.PipelineElements[0]
+                    $rightAstElements.Count -eq 1) {
+                    $element = $rightAstElements[0]
                     if ($element -is [System.Management.Automation.Language.CommandExpressionAst] -and
                         $element.Expression -eq $sb) {
                         $isDirectAssignment = $true
@@ -4252,7 +4262,7 @@ function Convert-PipelineAstNode {
         $switchContext = $null
     )
 
-    $elements = $pipelineAst.PipelineElements
+    $elements = @($pipelineAst.PipelineElements)
     $lastIndex = $elements.Count - 1
 
     $guid = [guid]::NewGuid().ToString("N").Substring(0, 8)
@@ -4685,7 +4695,7 @@ function Convert-AstNode {
             $allScriptBlockReplacements = @{}
 
             foreach ($pipeline in $sortedPipelines) {
-                foreach ($element in $pipeline.PipelineElements) {
+                foreach ($element in @($pipeline.PipelineElements)) {
                     $nestedSBs = Get-AllNestedScriptBlocks -ast $element
                     foreach ($sb in $nestedSBs) {
                         if (-not $cfg.ProcessedScriptBlocks.ContainsKey($sb)) {
@@ -4709,7 +4719,7 @@ function Convert-AstNode {
                 $pipeVar = "_pipe_$guid"
                 $pipeVarEntry = [PSCustomObject]@{ Name = $pipeVar; Scope = [VarScope]::Unspecified }
 
-                $elements = $pipeline.PipelineElements
+                $elements = @($pipeline.PipelineElements)
                 $lastIndex = $elements.Count - 1
 
                 $modifiedPipelineText = $pipeline.Extent.Text

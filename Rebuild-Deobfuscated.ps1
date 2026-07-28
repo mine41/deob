@@ -1965,7 +1965,8 @@ function Filter-ReplacementCandidatesByContext {
             }
         }
 
-        if ((Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandNameRanges) -and -not $isExactCommandNameRange) {
+        $allowWholeCanonicalCommandInvocation = ($sourceKind -eq 'CanonicalCommandInvocation')
+        if ((Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.CommandNameRanges) -and -not $isExactCommandNameRange -and -not $allowWholeCanonicalCommandInvocation) {
             $skipped += New-SkipRecord -Reason 'command_name_context_protected' -Message '命令位点内部不允许局部替换，避免破坏命令解析' -Item $cand
             continue
         }
@@ -21084,8 +21085,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
         $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
-        $functionSpecialized = Get-FunctionSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $preSpecializedCandidates
-        $scriptBlockSpecialized = Get-ScriptBlockSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $preSpecializedCandidates -TargetCandidates @($scriptBlockTargets.Candidates)
+        $specializationBaseCandidates = @($dynamic.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
+        $functionSpecialized = Get-FunctionSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $specializationBaseCandidates
+        $scriptBlockSpecialized = Get-ScriptBlockSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $specializationBaseCandidates -TargetCandidates @($scriptBlockTargets.Candidates)
         $merged = Merge-ReplacementCandidatesByRange -Candidates (@($preSpecializedCandidates) + @($functionSpecialized.Candidates) + @($scriptBlockSpecialized.Candidates))
         $scriptBlockInvocationFiltered = Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks -Candidates @($merged.Candidates)
         $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($scriptBlockInvocationFiltered.Candidates) -Context $ctx -ScriptText $scriptText
