@@ -1944,6 +1944,9 @@ function Record-CanonicalCommandInvocationResult {
     if ($invocationOperator -notin @('Ampersand', 'Dot')) {
         return
     }
+    if ($invocationOperator -eq 'Dot') {
+        return
+    }
     if (-not $CommandInfo.PSObject.Properties['ResolutionConfidence'] -or [string]$CommandInfo.ResolutionConfidence -ne 'High') {
         return
     }

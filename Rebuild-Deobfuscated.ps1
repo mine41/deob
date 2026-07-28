@@ -1050,6 +1050,7 @@ function Get-ReplacementContextInfoFromScriptText {
     $result = [PSCustomObject]@{
         ExpandableStringRanges = @()
         CommandNameRangeKeys   = @{}
+        InvokedCommandNameRangeKeys = @{}
         CommandNameRanges      = @()
         DynamicPayloadRanges   = @()
         MemberNameRanges       = @()
@@ -1142,6 +1143,7 @@ function Get-ReplacementContextInfoFromScriptText {
     $pipelineSensitiveExpressionRanges = [System.Collections.Generic.List[object]]::new()
     $sensitiveArgumentRanges = [System.Collections.Generic.List[object]]::new()
     $commandNameRangeSeen = @{}
+    $invokedCommandNameRangeKeys = @{}
     $dynamicPayloadRangeSeen = @{}
     $memberNameRangeSeen = @{}
     $commandTargetAssignmentRangeSeen = @{}
@@ -1163,6 +1165,10 @@ function Get-ReplacementContextInfoFromScriptText {
         if ($null -eq $start -or $null -eq $end -or $end -le $start) { continue }
         $commandNameRangeKeys["$start`:$end"] = $true
         Add-UniqueContextRange -SeenMap $commandNameRangeSeen -List $commandNameRanges -StartOffset $start -EndOffset $end
+
+        if (([string]$cmdAst.InvocationOperator) -in @('Ampersand', 'Dot')) {
+            $invokedCommandNameRangeKeys["$start`:$end"] = $true
+        }
 
         if (($nameAst -is [System.Management.Automation.Language.VariableExpressionAst]) -and
             ([string]$cmdAst.InvocationOperator) -in @('Ampersand', 'Dot')) {
@@ -1305,6 +1311,7 @@ function Get-ReplacementContextInfoFromScriptText {
 
     $result.ExpandableStringRanges = @($expandableRanges)
     $result.CommandNameRangeKeys = $commandNameRangeKeys
+    $result.InvokedCommandNameRangeKeys = $invokedCommandNameRangeKeys
     $result.CommandNameRanges = @($commandNameRanges)
     $result.DynamicPayloadRanges = @($dynamicPayloadRanges)
     $result.MemberNameRanges = @($memberNameRanges)
@@ -1808,6 +1815,23 @@ function Test-ValidCommandNameReplacement {
     return ($null -ne (Get-Command -Name $text -ErrorAction SilentlyContinue | Select-Object -First 1))
 }
 
+function Test-InvokedCommandTargetStringExpressionReplacement {
+    param([AllowNull()][string]$Replacement)
+
+    if ([string]::IsNullOrWhiteSpace($Replacement)) { return $false }
+
+    $text = $Replacement.Trim()
+    if ($text -match "[`r`n]") { return $false }
+    if ($text -match "^\s*'([^']|'')*'\s*$") {
+        return $true
+    }
+    if ($text -match "^\s*\(\s*\[\s*(?:string|system\.string)\s*\]\s*('([^']|'')*')\s*\)\s*$") {
+        return $true
+    }
+
+    return $false
+}
+
 function Get-CmdlineProfileVariableReadGuardDecision {
     param(
         $Candidate,
@@ -1887,6 +1911,8 @@ function Filter-ReplacementCandidatesByContext {
         $sourceKind = if ($cand.PSObject.Properties['SourceKind']) { [string]$cand.SourceKind } else { '' }
         $rangeKey = "$start`:$end"
         $isExactCommandNameRange = $contextInfo.CommandNameRangeKeys.ContainsKey($rangeKey)
+        $isExactInvokedCommandNameRange = ($contextInfo.PSObject.Properties['InvokedCommandNameRangeKeys'] -and
+            $contextInfo.InvokedCommandNameRangeKeys.ContainsKey($rangeKey))
         $withinDynamicRange = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $dynamicRanges)
         $withinDynamicPayload = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.DynamicPayloadRanges)
         $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
@@ -1971,7 +1997,12 @@ function Filter-ReplacementCandidatesByContext {
             continue
         }
 
-        if ($isExactCommandNameRange -and $sourceKind -notin @('FunctionResult', 'FunctionSpecializedInline', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline') -and -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
+        $allowInvokedCommandTargetStringExpression = ($isExactInvokedCommandNameRange -and
+            $cand.PSObject.Properties['IsCommandTargetStringExpression'] -and [bool]$cand.IsCommandTargetStringExpression)
+        if ($isExactCommandNameRange -and
+            $sourceKind -notin @('FunctionResult', 'FunctionSpecializedInline', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline') -and
+            -not $allowInvokedCommandTargetStringExpression -and
+            -not (Test-ValidCommandNameReplacement -Replacement ([string]$cand.Replacement) -Context $Context)) {
             $skipped += New-SkipRecord -Reason 'invalid_command_name_replacement' -Message '命令位点替换结果不是高置信合法命令名，跳过' -Item $cand
             continue
         }
@@ -9685,6 +9716,7 @@ function Get-ReplacementsFromResolvableResults {
     $regionMap = @{}          # key -> candidate
     $conflictRegions = @{}    # key -> @{ Replacements = @() }
     $typedScalarRanges = Get-TypedScalarExpressionRanges -ScriptText $ScriptText
+    $contextInfo = Get-ReplacementContextInfoFromScriptText -ScriptText $ScriptText
 
     foreach ($rec in $Context.ResolvableResults.Values) {
         $r = $rec.Resolvable
@@ -9848,6 +9880,8 @@ function Get-ReplacementsFromResolvableResults {
 
             $rangeKey = "$start`:$end"
             $key = Get-ScopeAwareReplacementRangeKey -StartOffset $start -EndOffset $end -Record $rec
+            $isInvokedCommandTarget = ($contextInfo.PSObject.Properties['InvokedCommandNameRangeKeys'] -and
+                $contextInfo.InvokedCommandNameRangeKeys.ContainsKey($rangeKey))
             if ($type -eq 'VarRead' -and $varAccessKindMap.ContainsKey($rangeKey)) {
                 $accessKind = [string]$varAccessKindMap[$rangeKey]
                 if ($accessKind -ne 'Read') {
@@ -9893,6 +9927,10 @@ function Get-ReplacementsFromResolvableResults {
             }
 
             $original = $ScriptText.Substring($start, $end - $start)
+            $isCommandTargetStringExpression = $false
+            if ($isInvokedCommandTarget) {
+                $isCommandTargetStringExpression = Test-InvokedCommandTargetStringExpressionReplacement -Replacement $replacement
+            }
             if ((Test-TypedScalarExpressionText -Text $original) -or
                 (Test-ReplacementWithinRanges -StartOffset ([int]$start) -EndOffset ([int]$end) -Ranges $typedScalarRanges)) {
                 $skipped += New-SkipRecord -Reason 'var_already_typed_scalar' -Message '变量读取位于 typed scalar 内部，跳过重复包裹' -Item $baseItem
@@ -9920,6 +9958,8 @@ function Get-ReplacementsFromResolvableResults {
                 IsSimpleVariable = $true
                 IsValueChanged = ($uniqueValues.Count -ne 1)
                 ObservedValueCount = [int]$uniqueValues.Count
+                IsInvokedCommandTarget = [bool]$isInvokedCommandTarget
+                IsCommandTargetStringExpression = [bool]$isCommandTargetStringExpression
             }
             $cand = Add-RecordScopeMetadataToCandidate -Candidate $cand -Record $rec
 
@@ -9933,6 +9973,13 @@ function Get-ReplacementsFromResolvableResults {
             }
 
             $existing = $regionMap[$key]
+            $existingType = if ($existing.PSObject.Properties['Type']) { [string]$existing.Type } else { '' }
+            if (($cand.PSObject.Properties['IsCommandTargetStringExpression'] -and [bool]$cand.IsCommandTargetStringExpression) -and
+                $existingType -in @('Command', 'CommandName')) {
+                $regionMap[$key] = $cand
+                $skipped += New-SkipRecord -Reason 'command_target_varread_preferred' -Message "命令目标变量读取优先于解析后的命令名候选: [$start-$end]" -Item $existing
+                continue
+            }
             if ($existing.Replacement -eq $cand.Replacement) {
                 $skipped += New-SkipRecord -Reason 'duplicate' -Message "变量读取同区间重复记录，已去重: [$start-$end]" -Item $cand
                 continue
@@ -19775,6 +19822,7 @@ function Invoke-CanonicalizeIndirectCommandHeads {
 
         foreach ($cmdAst in $commandAsts) {
             if (-not $cmdAst.CommandElements -or $cmdAst.CommandElements.Count -eq 0) { continue }
+            if ([string]$cmdAst.InvocationOperator -eq 'Dot') { continue }
 
             $firstElement = $cmdAst.CommandElements[0]
             if (-not $firstElement -or -not $firstElement.Extent) { continue }
