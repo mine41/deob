@@ -1651,6 +1651,10 @@ function Get-UnwrappedScriptBlockBindingAst {
 
     $current = $Ast
     while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $current = $current.Expression
+            continue
+        }
         if ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
             $pipe = $current.Pipeline
             $pipeElements = if ($pipe -and $pipe.PipelineElements) { @($pipe.PipelineElements) } else { @() }
@@ -1659,6 +1663,12 @@ function Get-UnwrappedScriptBlockBindingAst {
                 $current = $pipeElements[0].Expression
                 continue
             }
+        }
+        if ($current -is [System.Management.Automation.Language.ConvertExpressionAst] -and
+            $current.Type -and $current.Type.TypeName -and
+            [string]$current.Type.TypeName.FullName -in @('scriptblock', 'System.Management.Automation.ScriptBlock')) {
+            $current = $current.Child
+            continue
         }
         break
     }
@@ -4168,10 +4178,13 @@ function Convert-AssignmentAstNode {
 
             $isDirectAssignment = $false
             if ($null -ne $varName) {
-                $rightAst = $assignAst.Right
+                $rightAst = Get-UnwrappedScriptBlockBindingAst -Ast $assignAst.Right
                 $rightAstElements = if ($rightAst -is [System.Management.Automation.Language.PipelineAst]) { @($rightAst.PipelineElements) } else { @() }
                 if ($rightAst -is [System.Management.Automation.Language.CommandExpressionAst] -and
                     $rightAst.Expression -eq $sb) {
+                    $isDirectAssignment = $true
+                }
+                elseif ($rightAst -eq $sb) {
                     $isDirectAssignment = $true
                 }
                 elseif ($rightAst -is [System.Management.Automation.Language.PipelineAst] -and

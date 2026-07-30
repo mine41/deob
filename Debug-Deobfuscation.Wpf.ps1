@@ -24,6 +24,9 @@ param(
     [int]$MaxTotalNodes = 50000,
     [int]$DynamicTimeBudgetMs = 60000,
 
+    [ValidateSet('Full', 'InitialOnly')]
+    [string]$RuntimeSubgraphMode = 'Full',
+
     [switch]$NoUI
 )
 
@@ -3093,7 +3096,7 @@ try {
 }
 $layout = Get-DotPlainLayout -DotPath $cfgDotPath
 $scriptText = Get-FullScriptTextFromFile -Path $scriptPathFull
-$session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs
+$session = New-CFGExecutionSession -CFG $cfg -LogPath $logPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode
 $currentHostDisplay = Format-PowerShellHostInfo -HostInfo $session.Context.HostInfo
 $script:CurrentHostDisplay = $currentHostDisplay
 $preview = Build-DebugPreview -Context $session.Context -ScriptText $scriptText -Strategy $OverlapStrategy
@@ -3118,7 +3121,9 @@ if ($NoUI) {
         Nodes        = $cfg.Nodes.Count
         Steps        = $session.StepCounter
         HasGraphPng  = [bool](Test-Path -LiteralPath $cfgPngPath)
+        RuntimeSubgraphMode = $RuntimeSubgraphMode
         RuntimeSubgraphs = if ($session.Context.ContainsKey('RuntimeSubgraphs') -and $session.Context.RuntimeSubgraphs) { [int]$session.Context.RuntimeSubgraphs.Count } else { 0 }
+        RuntimeExpansionDisabledCount = if ($session.Context.ContainsKey('RuntimeExpansionDisabledCount')) { [int]$session.Context.RuntimeExpansionDisabledCount } else { 0 }
         Candidates   = $preview.Candidates.Count
         Selected     = $preview.Selected.Count
         Skipped      = $preview.Skipped.Count
@@ -4261,7 +4266,7 @@ function Reset-DebugSession {
     $script:DebugState.Cfg = $freshCfg
     $script:DebugState.Layout = $null
     $script:DebugState.OriginalText = Get-FullScriptTextFromFile -Path $script:DebugState.ScriptPath
-    $script:DebugState.Session = New-CFGExecutionSession -CFG $script:DebugState.Cfg -LogPath $script:DebugState.LogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs
+    $script:DebugState.Session = New-CFGExecutionSession -CFG $script:DebugState.Cfg -LogPath $script:DebugState.LogPath -MaxIterations $MaxIterations -MaxTotalNodes $MaxTotalNodes -DynamicTimeBudgetMs $DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode
     $script:DebugState.Steps = New-Object System.Collections.ArrayList
     $script:DebugState.UserSelection = @{}
     $script:DebugState.SelectionVersion = 0
@@ -4305,7 +4310,9 @@ function Export-DebugResult {
         CandidateCount  = $p.Candidates.Count
         SelectedCount   = $p.Selected.Count
         SkippedCount    = $p.Skipped.Count
+        RuntimeSubgraphMode = $RuntimeSubgraphMode
         RuntimeSubgraphCount = if ($script:DebugState.Session.Context.ContainsKey('RuntimeSubgraphs') -and $script:DebugState.Session.Context.RuntimeSubgraphs) { [int]$script:DebugState.Session.Context.RuntimeSubgraphs.Count } else { 0 }
+        RuntimeExpansionDisabledCount = if ($script:DebugState.Session.Context.ContainsKey('RuntimeExpansionDisabledCount')) { [int]$script:DebugState.Session.Context.RuntimeExpansionDisabledCount } else { 0 }
         StaticHighCount = $staticHigh
         StaticLowCount  = $staticLow
         RuntimeSubgraphs = @(Get-ContextRuntimeSubgraphs -Context $script:DebugState.Session.Context)

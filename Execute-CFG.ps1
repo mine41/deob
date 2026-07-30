@@ -223,7 +223,9 @@ function New-ExecutionContext {
         [ValidateSet('Runspace', 'SubprocessReplay')]
         [string]$Backend = 'Runspace',
         [ValidateSet('powershell', 'pwsh', 'current')]
-        [string]$ChildHost = 'powershell'
+        [string]$ChildHost = 'powershell',
+        [ValidateSet('Shared', 'Isolated')]
+        [string]$ExecutionStateMode = 'Shared'
     )
 
     if ($Backend -eq 'SubprocessReplay') {
@@ -237,6 +239,7 @@ function New-ExecutionContext {
             ChildHostExe     = Resolve-ExecutionContextChildHostExecutable -PreferredHost $ChildHost
             TempRoot         = $tempRoot
             ReplayStatements = (New-Object 'System.Collections.Generic.List[string]')
+            ExecutionStateMode = $ExecutionStateMode
         }
     }
 
@@ -244,9 +247,47 @@ function New-ExecutionContext {
     $runspace.Open()
 
     return @{
-        Runspace = $runspace
-        Backend  = 'Runspace'
+        Runspace                 = $runspace
+        Backend                  = 'Runspace'
+        ExecutionStateMode       = $ExecutionStateMode
+        NodeScopedRunspaceResetCount = 0
     }
+}
+
+function Reset-ExecutionContextRunspace {
+    param(
+        [hashtable]$ExecContext
+    )
+
+    if ($null -eq $ExecContext) { return $false }
+    if (-not $ExecContext.ContainsKey('ExecutionStateMode') -or [string]$ExecContext.ExecutionStateMode -ne 'Isolated') {
+        return $false
+    }
+    if ($ExecContext.ContainsKey('Backend') -and [string]$ExecContext.Backend -ne 'Runspace') {
+        return $false
+    }
+
+    if ($ExecContext.Runspace) {
+        try {
+            $ExecContext.Runspace.Close()
+            $ExecContext.Runspace.Dispose()
+        } catch {
+        }
+    }
+
+    $newRunspace = [runspacefactory]::CreateRunspace()
+    $newRunspace.Open()
+    $ExecContext.Runspace = $newRunspace
+    if ($ExecContext.ContainsKey('NodeScopedRunspaceResetCount')) {
+        try {
+            $ExecContext.NodeScopedRunspaceResetCount = [int]$ExecContext.NodeScopedRunspaceResetCount + 1
+        } catch {
+            $ExecContext.NodeScopedRunspaceResetCount = 1
+        }
+    } else {
+        $ExecContext.NodeScopedRunspaceResetCount = 1
+    }
+    return $true
 }
 
 function Get-ProcessDescendantIds {
@@ -1715,6 +1756,10 @@ function Get-UnwrappedAssignmentExpressionAst {
 
     $current = $Ast
     while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $current = $current.Expression
+            continue
+        }
         if ($current -is [System.Management.Automation.Language.ParenExpressionAst]) {
             $pipeline = $current.Pipeline
             if ($pipeline -and $pipeline.PipelineElements.Count -eq 1 -and
@@ -1722,6 +1767,12 @@ function Get-UnwrappedAssignmentExpressionAst {
                 $current = $pipeline.PipelineElements[0].Expression
                 continue
             }
+        }
+        if ($current -is [System.Management.Automation.Language.ConvertExpressionAst] -and
+            $current.Type -and $current.Type.TypeName -and
+            [string]$current.Type.TypeName.FullName -in @('scriptblock', 'System.Management.Automation.ScriptBlock')) {
+            $current = $current.Child
+            continue
         }
         break
     }
@@ -2147,6 +2198,8 @@ function Record-ScriptBlockInvocationResult {
         EndOffset       = [int]$CallerNode.TextEndOffset
         OriginalText    = [string]$CallerNode.Text
         ReplacementText = [string]$replacement
+        RuntimeGenerated = ($CallerNode.PSObject.Properties['RuntimeGenerated'] -and [bool]$CallerNode.RuntimeGenerated)
+        RuntimeBlockName = if ($CallerNode.PSObject.Properties['RuntimeBlockName']) { [string]$CallerNode.RuntimeBlockName } else { $null }
         Timestamp       = Get-Date
     }
     $record = Add-CurrentScopeMetadataToRecord -Record $record -Context $Context
@@ -4438,18 +4491,25 @@ function Get-NodeTextScriptBlockArguments {
         param($n)
         if (-not ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst])) { return $false }
         if (-not ($n.Member -is [System.Management.Automation.Language.StringConstantExpressionAst])) { return $false }
-        return $n.Member.Value -eq "Invoke"
+        return $n.Member.Value -in @("Invoke", "InvokeWithContext")
     }, $true)
 
     if ($invokeAst -and $invokeAst.Arguments) {
-        foreach ($argAst in $invokeAst.Arguments) {
-            $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
-            $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
-            if ($argResult.Success) {
-                $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
-                $arguments += ,$argValue
-            } else {
-                $arguments += ,$null
+        $memberName = [string]$invokeAst.Member.Value
+        if ($memberName -eq "InvokeWithContext") {
+            if ($invokeAst.Arguments.Count -ge 3) {
+                $arguments = @(Get-ArgumentListValues -Ast $invokeAst.Arguments[2] -Context $Context)
+            }
+        } else {
+            foreach ($argAst in $invokeAst.Arguments) {
+                $argCode = Convert-CodeForCurrentScope -Code $argAst.Extent.Text -Context $Context
+                $argResult = Invoke-InContext -ExecContext $Context.ExecContext -Code $argCode
+                if ($argResult.Success) {
+                    $argValue = Normalize-ExecutionResultValue -Value $argResult.Result -TreatArraysAsSequence
+                    $arguments += ,$argValue
+                } else {
+                    $arguments += ,$null
+                }
             }
         }
 
@@ -5425,6 +5485,32 @@ function Format-ResolvableValue {
     return ConvertTo-Expression -Object $Value -Expand -1
 }
 
+function Format-ScriptBlockScalarExpression {
+    param(
+        [AllowNull()][string]$ScriptText,
+        [switch]$NoParentheses
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ScriptText)) { return $null }
+
+    $body = ([string]$ScriptText).Trim()
+    if ($body.StartsWith('{') -and $body.EndsWith('}') -and $body.Length -ge 2) {
+        $body = $body.Substring(1, $body.Length - 2).Trim()
+    }
+
+    $expr = if ($body -match "[`r`n]") {
+        "[scriptblock] {`r`n$body`r`n}"
+    } else {
+        "[scriptblock] { $body }"
+    }
+
+    if ($NoParentheses) {
+        return $expr
+    }
+
+    return "($expr)"
+}
+
 function Format-TypedScalarResolvableValue {
     param($Value)
 
@@ -5447,6 +5533,8 @@ function Format-TypedScalarResolvableValue {
         } else {
             $literal = "'" + ([string]$Value).Replace("'", "''") + "'"
         }
+    } elseif ($Value -is [scriptblock]) {
+        return (Format-ScriptBlockScalarExpression -ScriptText ([string]$Value.ToString()))
     } elseif ($Value -is [char]) {
         $typeName = 'char'
         $literal = if ([char]$Value -eq [char]39) {
@@ -6227,16 +6315,33 @@ function Invoke-PipelineScriptBlockOnce {
         [string]$BlockName,
         $CurrentValue,
         [array]$ProcessInputItems = @(),
-        [hashtable]$Context
+        [hashtable]$Context,
+        $CallerNode = $null,
+        $CallerInfo = $null
     )
 
     if ([string]::IsNullOrWhiteSpace($BlockName)) { return @() }
 
     Push-PipelineCurrent -Context $Context -Value $CurrentValue
     Push-OutputCapture -Context $Context
+    $invocationId = $null
+    $parentInvocationId = $null
+    if ($CallerNode -and $Context) {
+        $invocationId = [guid]::NewGuid().ToString("N")
+        if ($Context.ScopeStack -and $Context.ScopeStack.Count -gt 0) {
+            $parentScope = $Context.ScopeStack[-1]
+            if ($parentScope -and $parentScope.ContainsKey('InvocationId')) {
+                $parentInvocationId = $parentScope.InvocationId
+            }
+        }
+        if (-not $CallerInfo) {
+            $CallerInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
+        }
+        Record-ScriptBlockCallInstance -Context $Context -BlockName $BlockName -CallerNode $CallerNode -CallerInfo $CallerInfo -InvocationId $invocationId -Arguments @() -NamedArguments @{}
+    }
 
     try {
-        $null = Invoke-ScriptBlockInline -BlockName $BlockName -Context $Context -Arguments @() -ProcessInputItems $ProcessInputItems
+        $null = Invoke-ScriptBlockInline -BlockName $BlockName -Context $Context -Arguments @() -ProcessInputItems $ProcessInputItems -CallerNode $CallerNode -CallerInfo $CallerInfo -InvocationId $invocationId -ParentInvocationId $parentInvocationId
     }
     finally {
         $cap = Pop-OutputCapture -Context $Context
@@ -6358,7 +6463,11 @@ function Invoke-ScriptBlockInline {
         [string]$BlockName,
         [hashtable]$Context,
         [array]$Arguments = @(),
-        [array]$ProcessInputItems = $null
+        [array]$ProcessInputItems = $null,
+        $CallerNode = $null,
+        $CallerInfo = $null,
+        [AllowNull()][string]$InvocationId = $null,
+        [AllowNull()][string]$ParentInvocationId = $null
     )
 
     if ([string]::IsNullOrWhiteSpace($BlockName)) { return $null }
@@ -6388,6 +6497,37 @@ function Invoke-ScriptBlockInline {
     $scope.LocalVars = @($paramVars)
     $scope.Arguments = $Arguments
     $scope.TargetVarName = $null
+    if (-not [string]::IsNullOrWhiteSpace($InvocationId)) {
+        $scope.InvocationId = $InvocationId
+        $scope.ParentInvocationId = $ParentInvocationId
+        if ($CallerNode -and $CallerNode.PSObject.Properties['Id']) {
+            $scope.CallerNodeId = $CallerNode.Id
+        }
+        if ($CallerNode) {
+            if (-not $CallerInfo) {
+                $CallerInfo = Get-NodeTextExecutionInfo -Node $CallerNode -Context $Context
+            }
+            $cmdAst = if ($CallerInfo -and $CallerInfo.Success -and $CallerInfo.TopLevelCommandAst) {
+                $CallerInfo.TopLevelCommandAst
+            } elseif ($CallerInfo -and $CallerInfo.Success -and $CallerInfo.CommandAst) {
+                $CallerInfo.CommandAst
+            } elseif ($CallerInfo -and $CallerInfo.Success) {
+                $CallerInfo.Statement
+            } else {
+                $null
+            }
+            $cmdExtent = if ($cmdAst) { Get-NodeAstGlobalExtent -Node $CallerNode -Ast $cmdAst } else { $null }
+            if ($cmdExtent) {
+                $scope.InvocationStartOffset = [int]$cmdExtent.StartOffset
+                $scope.InvocationEndOffset = [int]$cmdExtent.EndOffset
+                $scope.InvocationText = [string]$cmdExtent.Text
+            } elseif ($CallerNode.PSObject.Properties['TextStartOffset'] -and $CallerNode.PSObject.Properties['TextEndOffset']) {
+                $scope.InvocationStartOffset = [int]$CallerNode.TextStartOffset
+                $scope.InvocationEndOffset = [int]$CallerNode.TextEndOffset
+                $scope.InvocationText = [string]$CallerNode.Text
+            }
+        }
+    }
 
     $hasProcessBlock = ($blockStartNode.PSObject.Properties['HasProcessBlock'] -and [bool]$blockStartNode.HasProcessBlock)
     $processInputVarName = if ($blockStartNode.PSObject.Properties['ProcessInputVar']) {
@@ -7084,7 +7224,7 @@ function Invoke-ForEachObjectCmdlet {
     # Begin
     if ($info.BeginBlockName) {
         $Context.LastPipelineFlowControl = $null
-        $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.BeginBlockName -CurrentValue $null -ProcessInputItems @() -Context $Context
+        $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.BeginBlockName -CurrentValue $null -ProcessInputItems @() -Context $Context -CallerNode $Node
         if ($Context.LastPipelineFlowControl -eq "Break") {
             $stopAll = $true
         }
@@ -7103,7 +7243,7 @@ function Invoke-ForEachObjectCmdlet {
         } else {
             foreach ($item in $items) {
                 $Context.LastPipelineFlowControl = $null
-                $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.ProcessBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+                $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.ProcessBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context -CallerNode $Node
                 if ($Context.LastPipelineFlowControl -eq "Break") {
                     $stopAll = $true
                     break
@@ -7114,7 +7254,7 @@ function Invoke-ForEachObjectCmdlet {
 
     if (-not $stopAll -and $info.EndBlockName) {
         $Context.LastPipelineFlowControl = $null
-        $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.EndBlockName -CurrentValue $null -ProcessInputItems @() -Context $Context
+        $allOutputs += Invoke-PipelineScriptBlockOnce -BlockName $info.EndBlockName -CurrentValue $null -ProcessInputItems @() -Context $Context -CallerNode $Node
     }
 
     $writesPipeVar = $false
@@ -7277,7 +7417,7 @@ function Invoke-WhereObjectCmdlet {
 
     foreach ($item in $items) {
         $Context.LastPipelineFlowControl = $null
-        $filterOutputs = Invoke-PipelineScriptBlockOnce -BlockName $info.FilterBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+        $filterOutputs = Invoke-PipelineScriptBlockOnce -BlockName $info.FilterBlockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context -CallerNode $Node
 
         $match = [bool]@($filterOutputs)
         if ($match) {
@@ -7873,7 +8013,7 @@ function Invoke-SelectObjectCmdlet {
                     $blockName = [string]$spec.BlockName
 
                     $Context.LastPipelineFlowControl = $null
-                    $exprOutputs = Invoke-PipelineScriptBlockOnce -BlockName $blockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context
+                    $exprOutputs = Invoke-PipelineScriptBlockOnce -BlockName $blockName -CurrentValue $item -ProcessInputItems @($item) -Context $Context -CallerNode $Node
 
                     $value = $null
                     if ($exprOutputs.Count -eq 1) {
@@ -9009,6 +9149,35 @@ function Handle-DynamicInvoke {
     }
     $dynamicRecord.ReplacementText = $replacementText
 
+    $runtimeSubgraphMode = if ($Context.ContainsKey('RuntimeSubgraphMode') -and
+        -not [string]::IsNullOrWhiteSpace([string]$Context.RuntimeSubgraphMode)) {
+        [string]$Context.RuntimeSubgraphMode
+    } else {
+        'Full'
+    }
+    $dynamicRecord.RuntimeSubgraphMode = $runtimeSubgraphMode
+    if ($runtimeSubgraphMode -eq 'InitialOnly') {
+        $dynamicRecord.RecursionStopped = $true
+        $dynamicRecord.StopReason = 'RuntimeSubgraphExpansionDisabled'
+        $dynamicRecord.StopMessage = 'Runtime subgraph expansion is disabled by RuntimeSubgraphMode=InitialOnly; recorded the materialized dynamic payload without creating a runtime CFG subgraph.'
+        if ($Context.ContainsKey('RuntimeExpansionDisabledCount')) {
+            $Context.RuntimeExpansionDisabledCount = [int]$Context.RuntimeExpansionDisabledCount + 1
+        } else {
+            $Context.RuntimeExpansionDisabledCount = 1
+        }
+        Write-ExecutionLog -Context $Context -Message "  [DYNAMIC] $($dynamicRecord.StopMessage)"
+
+        return @{
+            Success       = $true
+            Executed      = $true
+            Result        = $argumentValue
+            Error         = $null
+            Action        = "DynamicInvoke"
+            DynamicRecord = $dynamicRecord
+            StopReason    = $dynamicRecord.StopReason
+        }
+    }
+
     $dynamicInvocationStopwatch = if ($Context.DynamicTimeBudgetMs -gt 0) { [System.Diagnostics.Stopwatch]::StartNew() } else { $null }
     $dynamicBudgetStatus = Get-StopwatchBudgetStatus -BudgetMs $Context.DynamicTimeBudgetMs -Stopwatch $dynamicInvocationStopwatch -StopReason 'DynamicInvocationBudgetExceeded'
     if ($dynamicBudgetStatus.Exceeded) {
@@ -9290,6 +9459,8 @@ function Invoke-NodeTraverse {
             Write-ExecutionLog -Context $Context -Message "=== 执行结束 ==="
             break
         }
+
+        $null = Reset-ExecutionContextRunspace -ExecContext $Context.ExecContext
 
         if ($currentNode.Type -eq "FuncEnd" -or $currentNode.Type -eq "BlockEnd") {
             Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
@@ -11515,9 +11686,24 @@ function Get-ScriptBlockCallInfo {
             }
         }
     }
+    if (-not $invokeAst -and $Node.Ast) {
+        $candidateInvokeAsts = @($Node.Ast.FindAll({
+                param($n)
+                if ($n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) { return $false }
+                if ($n.Member -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) { return $false }
+                return $n.Member.Value -in @('Invoke', 'InvokeWithContext')
+            }, $true))
+        foreach ($candidate in $candidateInvokeAsts) {
+            $candidateBlockName = Get-ScriptBlockNameFromAst -Ast $candidate.Expression -Context $Context -KnownBlockNames $knownBlockNames
+            if ($candidateBlockName) {
+                $invokeAst = $candidate
+                break
+            }
+        }
+    }
 
     if ($invokeAst -and $invokeAst.Member -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
-        $invokeAst.Member.Value -eq 'Invoke') {
+        $invokeAst.Member.Value -in @('Invoke', 'InvokeWithContext')) {
         return Get-InvokeMemberCallInfo -InvokeAst $invokeAst -Context $Context -KnownBlockNames $knownBlockNames
     }
 
@@ -11565,10 +11751,16 @@ function Get-InvokeMemberCallInfo {
         return $null
     }
 
+    $memberName = if ($InvokeAst.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        [string]$InvokeAst.Member.Value
+    } else {
+        'Invoke'
+    }
+
     return @{
         BlockName = $blockName
         Arguments = $null
-        CallType  = "InvokeMethod"
+        CallType  = $memberName
     }
 }
 
@@ -11919,12 +12111,16 @@ function Invoke-CFGTraversal {
         [int]$MaxTotalNodes = 50000,
         [int]$GlobalTimeBudgetMs = 0,
         [int]$DynamicTimeBudgetMs = 60000,
-        [bool]$SafeMode = $true
+        [bool]$SafeMode = $true,
+        [ValidateSet('Full', 'InitialOnly')]
+        [string]$RuntimeSubgraphMode = 'Full',
+        [ValidateSet('Shared', 'Isolated')]
+        [string]$ExecutionStateMode = 'Shared'
     )
 
     Initialize-ExecutionLogFile -LogPath $LogPath
 
-    $execContext = New-ExecutionContext
+    $execContext = New-ExecutionContext -ExecutionStateMode $ExecutionStateMode
 
     $context = @{
         CFG                 = $CFG
@@ -11936,6 +12132,8 @@ function Invoke-CFGTraversal {
         MaxTotalNodes       = $MaxTotalNodes
         GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs = $DynamicTimeBudgetMs
+        RuntimeSubgraphMode = $RuntimeSubgraphMode
+        ExecutionStateMode  = $ExecutionStateMode
         SafeMode            = $SafeMode
         PreExecutionGateMode = 'Balanced'
         PreExecutionGateCache = @{}
@@ -12014,6 +12212,7 @@ function Invoke-CFGTraversal {
         VarToBlockMapping     = @{}
         RuntimeSubgraphs      = @{}
         RuntimeSubgraphOrder  = @()
+        RuntimeExpansionDisabledCount = 0
         CallStack             = @()
         MaxCallDepth          = 100
         DynamicInvokeResults  = @()
@@ -12044,6 +12243,7 @@ function Invoke-CFGTraversal {
     }
     $context.ExecContext.GlobalTimeBudgetMs = $GlobalTimeBudgetMs
     $context.ExecContext.ExecutionStopwatch = $context.ExecutionStopwatch
+    $context.ExecContext.ExecutionStateMode = $ExecutionStateMode
 
     Ensure-CFGExecutionNodeShapes -CFG $CFG
     Write-ExecutionLog -Context $context -Message "=== CFG 执行开始 ==="
@@ -12057,6 +12257,8 @@ function Invoke-CFGTraversal {
         Write-ExecutionLog -Context $context -Message "TimeBudget: Global=${GlobalTimeBudgetMs}ms, Dynamic=${DynamicTimeBudgetMs}ms"
     }
     Write-ExecutionLog -Context $context -Message "SafeMode: $SafeMode"
+    Write-ExecutionLog -Context $context -Message "RuntimeSubgraphMode: $RuntimeSubgraphMode"
+    Write-ExecutionLog -Context $context -Message "ExecutionStateMode: $ExecutionStateMode"
     Write-ExecutionLog -Context $context -Message ""
 
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
@@ -12079,6 +12281,15 @@ function Invoke-CFGTraversal {
         Write-ExecutionLog -Context $context -Message "=== 执行统计 ==="
         Write-ExecutionLog -Context $context -Message "Total visits: $($context.TotalVisits)"
         Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
+        Write-ExecutionLog -Context $context -Message "Runtime subgraphs: $($context.RuntimeSubgraphs.Count)"
+        Write-ExecutionLog -Context $context -Message "Runtime expansion disabled: $($context.RuntimeExpansionDisabledCount)"
+        $nodeScopedRunspaceResetCount = if ($context.ExecContext -and $context.ExecContext.ContainsKey('NodeScopedRunspaceResetCount')) {
+            [int]$context.ExecContext.NodeScopedRunspaceResetCount
+        } else {
+            0
+        }
+        $context.NodeScopedRunspaceResetCount = $nodeScopedRunspaceResetCount
+        Write-ExecutionLog -Context $context -Message "Node-scoped runspace resets: $nodeScopedRunspaceResetCount"
         if ($context.StopReason) {
             Write-ExecutionLog -Context $context -Message "StopReason: $($context.StopReason)"
         }
@@ -12100,12 +12311,16 @@ function New-CFGExecutionSession {
         [int]$MaxTotalNodes = 50000,
         [int]$GlobalTimeBudgetMs = 0,
         [int]$DynamicTimeBudgetMs = 60000,
-        [bool]$SafeMode = $true
+        [bool]$SafeMode = $true,
+        [ValidateSet('Full', 'InitialOnly')]
+        [string]$RuntimeSubgraphMode = 'Full',
+        [ValidateSet('Shared', 'Isolated')]
+        [string]$ExecutionStateMode = 'Shared'
     )
 
     Initialize-ExecutionLogFile -LogPath $LogPath
 
-    $execContext = New-ExecutionContext
+    $execContext = New-ExecutionContext -ExecutionStateMode $ExecutionStateMode
     $context = @{
         CFG                 = $CFG
         ExecContext         = $execContext
@@ -12116,6 +12331,8 @@ function New-CFGExecutionSession {
         MaxTotalNodes       = $MaxTotalNodes
         GlobalTimeBudgetMs  = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs = $DynamicTimeBudgetMs
+        RuntimeSubgraphMode = $RuntimeSubgraphMode
+        ExecutionStateMode  = $ExecutionStateMode
         SafeMode            = $SafeMode
         PreExecutionGateMode = 'Balanced'
         PreExecutionGateCache = @{}
@@ -12194,6 +12411,7 @@ function New-CFGExecutionSession {
         VarToBlockMapping      = @{}
         RuntimeSubgraphs       = @{}
         RuntimeSubgraphOrder   = @()
+        RuntimeExpansionDisabledCount = 0
         CallStack              = @()
         MaxCallDepth           = 100
         DynamicInvokeResults   = @()
@@ -12224,6 +12442,7 @@ function New-CFGExecutionSession {
     }
     $context.ExecContext.GlobalTimeBudgetMs = $GlobalTimeBudgetMs
     $context.ExecContext.ExecutionStopwatch = $context.ExecutionStopwatch
+    $context.ExecContext.ExecutionStateMode = $ExecutionStateMode
 
     Ensure-CFGExecutionNodeShapes -CFG $CFG
     Write-ExecutionLog -Context $context -Message "=== CFG 调试会话开始 ==="
@@ -12237,6 +12456,8 @@ function New-CFGExecutionSession {
         Write-ExecutionLog -Context $context -Message "TimeBudget: Global=${GlobalTimeBudgetMs}ms, Dynamic=${DynamicTimeBudgetMs}ms"
     }
     Write-ExecutionLog -Context $context -Message "SafeMode: $SafeMode"
+    Write-ExecutionLog -Context $context -Message "RuntimeSubgraphMode: $RuntimeSubgraphMode"
+    Write-ExecutionLog -Context $context -Message "ExecutionStateMode: $ExecutionStateMode"
     Write-ExecutionLog -Context $context -Message ""
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
     Initialize-SubgraphMappings -CFG $CFG -Context $context
@@ -12324,6 +12545,8 @@ function Write-CFGExecutionSummary {
     Write-ExecutionLog -Context $context -Message "=== 执行统计 ==="
     Write-ExecutionLog -Context $context -Message "Total visits: $($context.TotalVisits)"
     Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
+    Write-ExecutionLog -Context $context -Message "Runtime subgraphs: $($context.RuntimeSubgraphs.Count)"
+    Write-ExecutionLog -Context $context -Message "Runtime expansion disabled: $($context.RuntimeExpansionDisabledCount)"
     if ($Session.StopReason) {
         Write-ExecutionLog -Context $context -Message "StopReason: $($Session.StopReason)"
     }

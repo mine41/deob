@@ -50,6 +50,12 @@ param(
 
     [int]$DynamicTimeBudgetMs = 15000,
 
+    [ValidateSet('Full', 'InitialOnly')]
+    [string]$RuntimeSubgraphMode = 'Full',
+
+    [ValidateSet('Shared', 'Isolated')]
+    [string]$ExecutionStateMode = 'Shared',
+
     [object]$SafeMode = $true,
 
     [ValidateSet('Disabled', 'Conservative', 'Balanced', 'Aggressive')]
@@ -282,7 +288,11 @@ function Test-ReusableScriptBlockDefinitionCandidateAllowed {
     if (-not $Candidate -or -not $Candidate.PSObject.Properties['SourceKind']) { return $false }
 
     $sourceKind = [string]$Candidate.SourceKind
-    if ($sourceKind -in @('MandatoryBase64', 'StaticPath', 'StaticCompressedLoader')) { return $true }
+    if ($sourceKind -in @('MandatoryBase64', 'StaticPath', 'StaticCompressedLoader', 'ScriptBlockScalar')) { return $true }
+    if ($sourceKind -eq 'ScriptBlockTargetInline') {
+        if ($Candidate.PSObject.Properties['RuntimeGenerated'] -and [bool]$Candidate.RuntimeGenerated) { return $false }
+        return $true
+    }
 
     if ($sourceKind -eq 'Static') {
         if ($Candidate.PSObject.Properties['UsedEmptyFallback'] -and [bool]$Candidate.UsedEmptyFallback) { return $false }
@@ -799,7 +809,8 @@ function Test-TypedScalarTypeName {
         'uint64', 'ulong', 'system.uint64',
         'float', 'single', 'system.single',
         'double', 'system.double',
-        'decimal', 'system.decimal'
+        'decimal', 'system.decimal',
+        'scriptblock', 'system.management.automation.scriptblock'
     )
 
     return ($scalarTypeNames -contains ([string]$Name).ToLowerInvariant())
@@ -829,6 +840,7 @@ function Test-SimpleTypedScalarCastAst {
     $child = Get-UnwrappedParenthesizedExpressionAst -Ast $current.Child
     if ($child -is [System.Management.Automation.Language.StringConstantExpressionAst]) { return $true }
     if ($child -is [System.Management.Automation.Language.ConstantExpressionAst]) { return $true }
+    if ($child -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) { return $true }
     if ($child -is [System.Management.Automation.Language.VariableExpressionAst]) {
         $name = if ($child.VariablePath) { [string]$child.VariablePath.UserPath } else { '' }
         return ($name -match '^(?i:true|false)$')
@@ -1749,7 +1761,7 @@ function Test-EffectiveDynamicReplacementCandidate {
 
     if (-not $Candidate) { return $false }
     if (-not $Candidate.PSObject.Properties['SourceKind']) { return $false }
-    if ([string]$Candidate.SourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult')) { return $false }
+    if ([string]$Candidate.SourceKind -notin @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'ScriptBlockScalar')) { return $false }
 
     $replacement = if ($Candidate.PSObject.Properties['Replacement']) { [string]$Candidate.Replacement } else { $null }
     $original = if ($Candidate.PSObject.Properties['Original']) { [string]$Candidate.Original } else { $null }
@@ -1758,6 +1770,47 @@ function Test-EffectiveDynamicReplacementCandidate {
     if ($null -ne $original -and $replacement -eq $original) { return $false }
 
     return ($null -ne $Candidate.StartOffset -and $null -ne $Candidate.EndOffset)
+}
+
+function Convert-ScriptBlockCreateReplacementToScalarForm {
+    param(
+        [Parameter(Mandatory)][string]$Original,
+        [Parameter(Mandatory)][string]$ScriptBlockBody
+    )
+
+    $scalar = Format-ScriptBlockScalarExpression -ScriptText $ScriptBlockBody
+    if ([string]::IsNullOrWhiteSpace([string]$scalar)) { return $null }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($Original, [ref]$tokens, [ref]$errors)
+    if (-not $ast -or ($errors -and $errors.Count -gt 0)) {
+        return $scalar
+    }
+
+    $statement = Get-FirstStatementFromScriptAst -ScriptAst $ast
+    if ($statement -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $statement.Left -and $statement.Left.Extent -and
+        $statement.Right -and $statement.Right.Extent) {
+        $leftText = [string]$statement.Left.Extent.Text
+        $operatorStart = [int]$statement.Left.Extent.EndOffset
+        $operatorEnd = [int]$statement.Right.Extent.StartOffset
+        $operatorText = if ($operatorEnd -gt $operatorStart) {
+            $Original.Substring($operatorStart, $operatorEnd - $operatorStart).Trim()
+        } else {
+            '='
+        }
+        if ([string]::IsNullOrWhiteSpace($operatorText)) { $operatorText = '=' }
+        return ("{0} {1} {2}" -f $leftText, $operatorText, $scalar)
+    }
+
+    $commandAst = Get-TopLevelCommandAstFromStatementAst -StatementAst $statement
+    if ($commandAst -and [string]$commandAst.InvocationOperator -in @('Ampersand', 'Dot')) {
+        $op = if ([string]$commandAst.InvocationOperator -eq 'Dot') { '.' } else { '&' }
+        return ("{0} {1}" -f $op, $scalar)
+    }
+
+    return $scalar
 }
 
 function Get-ProtectedDynamicReplacementRanges {
@@ -1918,7 +1971,7 @@ function Filter-ReplacementCandidatesByContext {
         $withinExpandable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.ExpandableStringRanges)
         $withinPipelineVariable = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineVariableRanges)
         $withinPipelineSensitiveExpression = (Test-ReplacementWithinRanges -StartOffset $start -EndOffset $end -Ranges $contextInfo.PipelineSensitiveExpressionRanges)
-        $highValueSourceKinds = @('DynamicInvoke', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline')
+        $highValueSourceKinds = @('DynamicInvoke', 'ScriptBlockScalar', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline')
         $allowInsideDynamicRange = $false
 
         $definitionRange = Get-ContainingReusableScriptBlockRange -StartOffset $start -EndOffset $end -Ranges $reusableScriptBlockRanges
@@ -1945,7 +1998,7 @@ function Filter-ReplacementCandidatesByContext {
 
         $allowInExpandable = $false
         if ($withinExpandable) {
-            if ($sourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'LiteralizedCommand', 'Resolvable')) {
+            if ($sourceKind -in @('DynamicInvoke', 'ScriptBlockScalar', 'LoaderMaterialized', 'FunctionResult', 'FunctionSpecializedInline', 'CanonicalCommandInvocation', 'CommandTargetAssignment', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'LiteralizedCommand', 'Resolvable')) {
                 $allowInExpandable = $true
             } elseif ($sourceKind -eq 'Static' -and $cand.PSObject.Properties['Confidence'] -and [string]$cand.Confidence -eq 'High') {
                 $allowInExpandable = $true
@@ -2034,7 +2087,7 @@ function Test-StaticReplacementScalarValue {
     if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
         $Value = $Value.BaseObject
     }
-    if ($Value -is [scriptblock]) { return $false }
+    if ($Value -is [scriptblock]) { return $true }
     if ($Value -is [BlockedCommandPlaceholder]) { return $false }
 
     if ($Value -is [string])  { return $true }
@@ -2061,7 +2114,7 @@ function Test-StaticBindingValue {
     if ($Value -is [psobject] -and $null -ne $Value.BaseObject -and $Value.BaseObject -ne $Value) {
         $Value = $Value.BaseObject
     }
-    if ($Value -is [scriptblock]) { return $false }
+    if ($Value -is [scriptblock]) { return $true }
     if ($Value -is [BlockedCommandPlaceholder]) { return $false }
     if ($Value -is [System.Collections.IDictionary]) {
         return (Test-StaticDictionaryBindingValue -Value $Value)
@@ -6937,6 +6990,10 @@ function Get-ReplacementCandidatePriority {
         }
         return 400
     }
+    if ($sourceKind -eq 'ScriptBlockScalar') {
+        if ($isCmdline) { return 535 }
+        return 455
+    }
     if ($sourceKind -eq 'LoaderMaterialized') {
         if ($isCmdline) { return 500 }
         return 430
@@ -7391,6 +7448,9 @@ function Get-DynamicInvokeReplacementCandidates {
         } else {
             if ($rec.PSObject.Properties['MaterializationKind'] -and $null -ne $rec.MaterializationKind) { [string]$rec.MaterializationKind } else { $null }
         }
+        $dynamicCommand = [string](Get-RecordFieldValue -Record $rec -Name 'Command' -Default '')
+        $isScriptBlockCreateDynamic = ($dynamicCommand -in @('ScriptBlockCreate', 'NewScriptBlock'))
+        $blockName = [string](Get-RecordFieldValue -Record $rec -Name 'BlockName' -Default '')
 
         $baseItem = [PSCustomObject]@{
             StartOffset = if ($node) { $node.TextStartOffset } else { $null }
@@ -7398,10 +7458,15 @@ function Get-DynamicInvokeReplacementCandidates {
             Type        = 'DynamicInvoke'
             Depth       = $null
             NodeId      = $nodeId
+            BlockName   = $blockName
         }
 
         if (-not $node) {
             $skipped += New-SkipRecord -Reason 'dynamic_node_missing' -Message "DynamicInvoke 节点不存在: NodeId=$nodeId" -Item $baseItem
+            continue
+        }
+        if ($isScriptBlockCreateDynamic -and (Test-RuntimeGeneratedNode -Node $node)) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_create_runtime_generated' -Message '运行时生成子图中的 ScriptBlock 创建点不映射回外层源码，等待源码化后的下一轮处理' -Item $baseItem
             continue
         }
 
@@ -7456,6 +7521,20 @@ function Get-DynamicInvokeReplacementCandidates {
         }
 
         $original = $ScriptText.Substring($start, $end - $start)
+        $sourceKind = 'DynamicInvoke'
+        $typeName = 'DynamicInvoke'
+        $resultType = 'String'
+        if ($isScriptBlockCreateDynamic) {
+            $scalarReplacement = Convert-ScriptBlockCreateReplacementToScalarForm -Original $original -ScriptBlockBody $replacement
+            if ([string]::IsNullOrWhiteSpace([string]$scalarReplacement)) {
+                $skipped += New-SkipRecord -Reason 'scriptblock_scalar_empty' -Message 'ScriptBlock 创建点无法生成脚本块标量 replacement，跳过' -Item $baseItem
+                continue
+            }
+            $replacement = [string]$scalarReplacement
+            $sourceKind = 'ScriptBlockScalar'
+            $typeName = 'ScriptBlockScalar'
+            $resultType = 'ScriptBlock'
+        }
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'dynamic_outer_candidate_ineffective' -Message 'DynamicInvoke replacement 与原片段一致，外层候选不参与压制内层候选' -Item $baseItem
             continue
@@ -7466,13 +7545,13 @@ function Get-DynamicInvokeReplacementCandidates {
             EndOffset   = $end
             Replacement = $replacement
             Original    = $original
-            Type        = 'DynamicInvoke'
+            Type        = $typeName
             Depth       = $null
             NodeId      = $nodeId
-            SourceKind  = 'DynamicInvoke'
+            SourceKind  = $sourceKind
             Confidence  = 'High'
             UsedEmptyFallback = $false
-            ResultType  = 'String'
+            ResultType  = $resultType
             Executed    = $true
             OriginStartOffset = $start
             OriginEndOffset = $end
@@ -7483,6 +7562,8 @@ function Get-DynamicInvokeReplacementCandidates {
             OriginResolutionMode = [string]$resolvedRange.ResolutionMode
             DynamicRecordIndex = $recordIndex
             ProtectsInnerCandidates = $true
+            BlockName = $blockName
+            DynamicCommand = $dynamicCommand
             MaterializationKind = $materializationKind
             DynamicStopReason = if ($rec -is [hashtable]) { [string]$rec['StopReason'] } else { [string]$rec.StopReason }
             DynamicStopMessage = if ($rec -is [hashtable]) { [string]$rec['StopMessage'] } else { [string]$rec.StopMessage }
@@ -7703,7 +7784,7 @@ function New-SpecializedFunctionTextForInvocation {
         if (-not $cand.PSObject.Properties['StartOffset'] -or -not $cand.PSObject.Properties['EndOffset']) { continue }
 
         $sourceKind = if ($cand.PSObject.Properties['SourceKind']) { [string]$cand.SourceKind } else { '' }
-        if ($sourceKind -in @('FunctionSpecializedInline', 'FunctionResult', 'ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'ScriptBlockInvocation')) { continue }
+        if ($sourceKind -in @('FunctionSpecializedInline', 'FunctionResult', 'ScriptBlockSpecializedInline', 'ScriptBlockInvocation')) { continue }
 
         $start = [int]$cand.StartOffset
         $end = [int]$cand.EndOffset
@@ -7906,6 +7987,40 @@ function Resolve-KnownScriptBlockTargetName {
     return $null
 }
 
+function Test-VariableHasTypedScriptBlockAssignment {
+    param(
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][string]$VariableName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VariableName)) { return $false }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    if (-not $ast -or ($errors -and $errors.Count -gt 0)) { return $false }
+
+    $assignments = @($ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.AssignmentStatementAst]
+        }, $true))
+
+    foreach ($assignment in $assignments) {
+        if ($assignment.Left -isnot [System.Management.Automation.Language.VariableExpressionAst] -or
+            -not $assignment.Left.VariablePath -or
+            [string]$assignment.Left.VariablePath.UserPath -ine $VariableName) {
+            continue
+        }
+
+        $rightText = if ($assignment.Right -and $assignment.Right.Extent) { [string]$assignment.Right.Extent.Text } else { '' }
+        if ($rightText -match '(?i)\[\s*(?:System\.Management\.Automation\.)?ScriptBlock\s*\]') {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function New-ScriptBlockTargetInlineReplacementCandidate {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
@@ -7919,6 +8034,12 @@ function New-ScriptBlockTargetInlineReplacementCandidate {
     if (-not $varAst -or -not $varAst.Extent) { return $null }
 
     $blockName = Resolve-KnownScriptBlockTargetName -Ast $varAst -Context $Context
+    $blockStartNode = $null
+    if (-not [string]::IsNullOrWhiteSpace([string]$blockName) -and
+        $Context.ScriptBlockSubgraphs -and
+        $Context.ScriptBlockSubgraphs.ContainsKey($blockName)) {
+        $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $Context.ScriptBlockSubgraphs[$blockName]
+    }
     $blockText = Get-ScriptBlockInlineTextByBlockName -Context $Context -BlockName $blockName
     if ([string]::IsNullOrWhiteSpace($blockText)) { return $null }
 
@@ -7946,6 +8067,7 @@ function New-ScriptBlockTargetInlineReplacementCandidate {
         BlockName   = [string]$blockName
         CallKind    = $CallKind
         Parenthesize = [bool]$Parenthesize
+        RuntimeGenerated = (Test-RuntimeGeneratedNode -Node $blockStartNode)
         ProtectsInnerCandidates = $false
     }
 }
@@ -7957,6 +8079,58 @@ function Get-CommandElementNameText {
         return ([string]$Ast.Value)
     }
     return $null
+}
+
+function Get-HashtableValueExpressionAstForRebuild {
+    param([AllowNull()]$StatementAst)
+
+    if ($null -eq $StatementAst) { return $null }
+    if ($StatementAst -is [System.Management.Automation.Language.PipelineAst] -and
+        $StatementAst.PipelineElements -and
+        $StatementAst.PipelineElements.Count -eq 1) {
+        $pipeElem = $StatementAst.PipelineElements[0]
+        if ($pipeElem -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            return $pipeElem.Expression
+        }
+    }
+
+    return $null
+}
+
+function Get-SelectObjectScriptBlockArgumentTargets {
+    param([AllowNull()]$Ast)
+
+    $targets = @()
+    if ($null -eq $Ast) { return @($targets) }
+
+    $items = if ($Ast -is [System.Management.Automation.Language.ArrayLiteralAst]) {
+        @($Ast.Elements)
+    } else {
+        @($Ast)
+    }
+
+    foreach ($item in @($items)) {
+        if ($item -isnot [System.Management.Automation.Language.HashtableAst]) { continue }
+        foreach ($kv in @($item.KeyValuePairs)) {
+            $keyAst = $kv.Item1
+            $keyText = if ($keyAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                [string]$keyAst.Value
+            } elseif ($keyAst -and $keyAst.Extent) {
+                [string]$keyAst.Extent.Text
+            } else {
+                ''
+            }
+            $keyNorm = $keyText.Trim("'`"").ToLowerInvariant()
+            if ($keyNorm -notin @('e', 'expression')) { continue }
+
+            $exprAst = Get-HashtableValueExpressionAstForRebuild -StatementAst $kv.Item2
+            if (Get-ScriptBlockTargetVariableAst -Ast $exprAst) {
+                $targets += $exprAst
+            }
+        }
+    }
+
+    return @($targets)
 }
 
 function Get-ScriptBlockCommandArgumentTargets {
@@ -7989,6 +8163,11 @@ function Get-ScriptBlockCommandArgumentTargets {
             $positionalAllowed = $true
             break
         }
+        { $_ -in @('select-object', 'select') } {
+            $namedParameters = @('property')
+            $positionalAllowed = $true
+            break
+        }
         default {
             return @()
         }
@@ -8010,7 +8189,15 @@ function Get-ScriptBlockCommandArgumentTargets {
             $null
         }
         if (-not $target) { continue }
-        if (Get-ScriptBlockTargetVariableAst -Ast $target) {
+        if ($lowerName -in @('select-object', 'select')) {
+            $selectTargets = @(Get-SelectObjectScriptBlockArgumentTargets -Ast $target)
+            if ($selectTargets.Count -gt 0) {
+                $targets += @($selectTargets)
+                if (-not $elem.Argument) {
+                    $consumed[$i + 1] = $true
+                }
+            }
+        } elseif (Get-ScriptBlockTargetVariableAst -Ast $target) {
             $targets += $target
             if (-not $elem.Argument) {
                 $consumed[$i + 1] = $true
@@ -8026,7 +8213,9 @@ function Get-ScriptBlockCommandArgumentTargets {
                 if (($i + 1) -lt $elements.Count) { $i++ }
                 continue
             }
-            if (Get-ScriptBlockTargetVariableAst -Ast $elem) {
+            if ($lowerName -in @('select-object', 'select')) {
+                $targets += @(Get-SelectObjectScriptBlockArgumentTargets -Ast $elem)
+            } elseif (Get-ScriptBlockTargetVariableAst -Ast $elem) {
                 $targets += $elem
             }
         }
@@ -8172,7 +8361,7 @@ function New-SpecializedScriptBlockTextForInvocation {
         if (-not $cand.PSObject.Properties['StartOffset'] -or -not $cand.PSObject.Properties['EndOffset']) { continue }
 
         $sourceKind = if ($cand.PSObject.Properties['SourceKind']) { [string]$cand.SourceKind } else { '' }
-        if ($sourceKind -in @('ScriptBlockTargetInline', 'ScriptBlockSpecializedInline', 'ScriptBlockInvocation')) { continue }
+        if ($sourceKind -in @('ScriptBlockSpecializedInline', 'ScriptBlockInvocation')) { continue }
 
         $start = [int]$cand.StartOffset
         $end = [int]$cand.EndOffset
@@ -8294,6 +8483,40 @@ function Get-ScriptBlockSpecializedInlineReplacementCandidates {
         }
     }
 
+    if ($candidates.Count -gt 1) {
+        $rangeMap = @{}
+        foreach ($cand in @($candidates)) {
+            if (-not $cand) { continue }
+            $key = Get-ReplacementRangeKey -StartOffset $cand.StartOffset -EndOffset $cand.EndOffset
+            if ([string]::IsNullOrWhiteSpace($key)) { continue }
+            if (-not $rangeMap.ContainsKey($key)) {
+                $rangeMap[$key] = @()
+            }
+            $rangeMap[$key] = @($rangeMap[$key]) + @($cand)
+        }
+
+        $filtered = @()
+        foreach ($key in @($rangeMap.Keys)) {
+            $group = @($rangeMap[$key])
+            if ($group.Count -eq 0) { continue }
+            $distinct = @($group | Select-Object -ExpandProperty Replacement -Unique)
+            if ($distinct.Count -gt 1) {
+                foreach ($cand in $group) {
+                    $skipped += New-SkipRecord -Reason 'scriptblock_specialized_same_range_conflict' -Message '同一脚本块目标位置存在多个不同调用实例结果，保守跳过专用内联候选' -Item $cand
+                }
+                continue
+            }
+
+            $filtered += $group[0]
+            if ($group.Count -gt 1) {
+                for ($i = 1; $i -lt $group.Count; $i++) {
+                    $skipped += New-SkipRecord -Reason 'scriptblock_specialized_duplicate' -Message '同一脚本块目标位置的专用内联候选结果相同，已去重' -Item $group[$i]
+                }
+            }
+        }
+        $candidates = @($filtered)
+    }
+
     return [PSCustomObject]@{
         Candidates = @($candidates)
         Skipped    = @($skipped)
@@ -8325,6 +8548,9 @@ function Get-ScriptBlockInvocationReplacementCandidates {
         $end = if ($rec.PSObject.Properties['EndOffset']) { $rec.EndOffset } else { $null }
         $nodeId = if ($rec.PSObject.Properties['NodeId']) { $rec.NodeId } else { $null }
         $replacement = if ($rec.PSObject.Properties['ReplacementText']) { [string]$rec.ReplacementText } else { $null }
+        $node = if ($Context.CFG -and $nodeId) { Get-NodeById -CFG $Context.CFG -Id ([int]$nodeId) } else { $null }
+        $runtimeGenerated = (($rec.PSObject.Properties['RuntimeGenerated'] -and [bool]$rec.RuntimeGenerated) -or
+            (Test-RuntimeGeneratedNode -Node $node))
 
         $baseItem = [PSCustomObject]@{
             StartOffset = $start
@@ -8332,8 +8558,13 @@ function Get-ScriptBlockInvocationReplacementCandidates {
             Type        = 'ScriptBlockInvocation'
             Depth       = $null
             NodeId      = $nodeId
+            RuntimeGenerated = $runtimeGenerated
         }
 
+        if ($runtimeGenerated) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_runtime_generated' -Message '运行时生成子图中的脚本块调用使用本地 offset，不直接回写原始脚本' -Item $baseItem
+            continue
+        }
         if ($null -eq $start -or $null -eq $end) {
             $skipped += New-SkipRecord -Reason 'scriptblock_invocation_no_offset' -Message '脚本块调用缺少 offset，跳过' -Item $baseItem
             continue
@@ -8359,6 +8590,12 @@ function Get-ScriptBlockInvocationReplacementCandidates {
         }
 
         $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+        $recordOriginal = if ($rec.PSObject.Properties['OriginalText']) { [string]$rec.OriginalText } else { $null }
+        if (-not [string]::IsNullOrEmpty($recordOriginal) -and
+            -not [string]::Equals($original, $recordOriginal, [System.StringComparison]::Ordinal)) {
+            $skipped += New-SkipRecord -Reason 'scriptblock_invocation_offset_mismatch' -Message '脚本块调用 offset 与记录原文不匹配，跳过' -Item $baseItem
+            continue
+        }
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'scriptblock_invocation_no_change' -Message '脚本块调用 replacement 与原片段一致，跳过' -Item $baseItem
             continue
@@ -9330,7 +9567,7 @@ function Filter-CandidatesPreferDynamicInvoke {
         }
     }
 
-    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult') })
+    $dynamicCandidates = @($Candidates | Where-Object { [string]$_.SourceKind -in @('DynamicInvoke', 'ScriptBlockScalar', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult') })
     if ($dynamicCandidates.Count -eq 0) {
         return [PSCustomObject]@{
             Candidates = @($Candidates)
@@ -9343,7 +9580,7 @@ function Filter-CandidatesPreferDynamicInvoke {
 
     foreach ($cand in $Candidates) {
         if (-not $cand) { continue }
-        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult')) {
+        if ([string]$cand.SourceKind -in @('DynamicInvoke', 'ScriptBlockScalar', 'LoaderMaterialized', 'StaticCompressedLoader', 'FunctionResult')) {
             $kept += $cand
             continue
         }
@@ -9424,6 +9661,30 @@ function Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks {
     return [PSCustomObject]@{
         Candidates = @($kept)
         Skipped    = @($skipped)
+    }
+}
+
+function Suppress-ScriptBlockInvocationWholeCallCandidates {
+    param([array]$Candidates)
+
+    $skipped = @()
+    foreach ($cand in @($Candidates)) {
+        if (-not $cand) { continue }
+        $skipped += New-SkipRecord -Reason 'scriptblock_invocation_target_policy' -Message '脚本块调用保留原调用方式，仅替换被调用目标，whole-call 候选不直接应用' -Item $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @()
+        Skipped    = @($skipped)
+    }
+}
+
+function Filter-ScriptBlockCallExpansionsForScalarDefinitions {
+    param([array]$Candidates)
+
+    return [PSCustomObject]@{
+        Candidates = @($Candidates)
+        Skipped    = @()
     }
 }
 
@@ -20624,6 +20885,8 @@ Write-Host "VarPolicy  : $effectiveVariableConflictPolicy" -ForegroundColor Gray
 Write-Host "DynPolicy  : $effectiveDynamicConflictPolicy" -ForegroundColor Gray
 Write-Host "SafeMode   : $SafeMode" -ForegroundColor Gray
 Write-Host "GateMode   : $PreExecutionGateMode" -ForegroundColor Gray
+Write-Host "RuntimeCFG : $RuntimeSubgraphMode" -ForegroundColor Gray
+Write-Host "ExecState  : $ExecutionStateMode" -ForegroundColor Gray
 if ($effectiveMaxRounds -ne $MaxRounds) {
     Write-Host ("MaxRounds  : {0} (requested {1})" -f $effectiveMaxRounds, $MaxRounds) -ForegroundColor Gray
 } else {
@@ -20671,6 +20934,8 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
     $ctx = $null
     $remainingStaticBudgetMs = $null
     $roundExecutionPlan = $null
+    $roundExecutionStateMode = $ExecutionStateMode
+    $roundNodeScopedRunspaceResetCount = 0
 
         if ($FullOutput) {
             $roundInPath = Join-Path $WorkDir ("round{0}.in.ps1" -f $roundLabel)
@@ -20699,6 +20964,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
+                        RuntimeSubgraphMode = $RuntimeSubgraphMode
+                        ExecutionStateMode = $roundExecutionStateMode
+                        RuntimeSubgraphCount = 0
+                        RuntimeExpansionDisabledCount = 0
+                        NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                         TerminatedBy       = 'parse_failure'
                         ParseError         = $roundParseInfo.FirstError
                         FinalSyntaxValid   = $false
@@ -20760,6 +21030,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
+                        RuntimeSubgraphMode = $RuntimeSubgraphMode
+                        ExecutionStateMode = $roundExecutionStateMode
+                        RuntimeSubgraphCount = 0
+                        RuntimeExpansionDisabledCount = 0
+                        NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                         GateMode           = $PreExecutionGateMode
                         TerminatedBy       = if ($continuedBySafeExtraction) { 'pre_execution_gate_safe_extracted' } else { 'pre_execution_gate' }
                         GateDecision       = $roundGate.Decision
@@ -20813,6 +21088,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgDotPath         = $roundCfgDotPath
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
+                        RuntimeSubgraphMode = $RuntimeSubgraphMode
+                        ExecutionStateMode = $roundExecutionStateMode
+                        RuntimeSubgraphCount = 0
+                        RuntimeExpansionDisabledCount = 0
+                        NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                         TerminatedBy       = 'pre_traversal_stop'
                         InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
                         PreTraversalCheckApplied = $true
@@ -20862,6 +21142,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                             CfgDotPath         = $roundCfgDotPath
                             CfgPngPath         = $roundCfgPngPath
                             SafeMode           = $SafeMode
+                            RuntimeSubgraphMode = $RuntimeSubgraphMode
+                            ExecutionStateMode = $roundExecutionStateMode
+                            RuntimeSubgraphCount = 0
+                            RuntimeExpansionDisabledCount = 0
+                            NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                             TerminatedBy       = 'cfg_generation_failed'
                             CfgError           = $cfgError
                             ParseError         = $roundParseInfo.FirstError
@@ -20885,7 +21170,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
                 $cfgTraversalError = $null
                 try {
-                    $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
+                    $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode -ExecutionStateMode $ExecutionStateMode -SafeMode:$SafeMode
                 } catch {
                     $cfgTraversalError = Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'CFG traversal failed'
                 }
@@ -20902,6 +21187,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                             CfgDotPath         = $roundCfgDotPath
                             CfgPngPath         = $roundCfgPngPath
                             SafeMode           = $SafeMode
+                            RuntimeSubgraphMode = $RuntimeSubgraphMode
+                            ExecutionStateMode = $roundExecutionStateMode
+                            RuntimeSubgraphCount = 0
+                            RuntimeExpansionDisabledCount = 0
+                            NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                             TerminatedBy       = 'cfg_traversal_failed'
                             TraversalError     = $cfgTraversalError
                             FinalSyntaxValid   = $true
@@ -20919,6 +21209,8 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                     $terminatedBy = 'cfg_traversal_failed'
                     break
                 }
+                $roundExecutionStateMode = if ($ctx -and $ctx.ContainsKey('ExecutionStateMode')) { [string]$ctx.ExecutionStateMode } else { $ExecutionStateMode }
+                $roundNodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { 0 }
                 $ctx.PreExecutionGateMode = $PreExecutionGateMode
                 $ctx.PreExecutionGateCache = $preExecutionGateCache
                 $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
@@ -21005,7 +21297,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             }
 
             try {
-                $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -SafeMode:$SafeMode
+                $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode -ExecutionStateMode $ExecutionStateMode -SafeMode:$SafeMode
             } catch {
                 $ctx = $null
             }
@@ -21014,6 +21306,8 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 $terminatedBy = 'cfg_traversal_failed'
                 break
             }
+            $roundExecutionStateMode = if ($ctx -and $ctx.ContainsKey('ExecutionStateMode')) { [string]$ctx.ExecutionStateMode } else { $ExecutionStateMode }
+            $roundNodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { 0 }
             $ctx.PreExecutionGateMode = $PreExecutionGateMode
             $ctx.PreExecutionGateCache = $preExecutionGateCache
             $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
@@ -21103,6 +21397,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         $functionResults = Get-FunctionInvokeReplacementCandidates -Context $ctx -ScriptText $scriptText
         $scriptBlockTargets = Get-ScriptBlockTargetInlineReplacementCandidates -Context $ctx -ScriptText $scriptText
         $scriptBlockInvocations = Get-ScriptBlockInvocationReplacementCandidates -Context $ctx -ScriptText $scriptText
+        $scriptBlockInvocationPolicy = Suppress-ScriptBlockInvocationWholeCallCandidates -Candidates @($scriptBlockInvocations.Candidates)
         if (($roundGate -and [bool]$roundGate.SkipWholeScriptDynamic) -or ($roundExecutionPlan -and [bool]$roundExecutionPlan.SkipWholeScriptDynamic)) {
             $wholeScriptDynamic = [PSCustomObject]@{
                 Candidates = @()
@@ -21132,17 +21427,18 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         } else {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
-        $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
-        $specializationBaseCandidates = @($dynamic.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($scriptBlockInvocations.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
+        $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
+        $specializationBaseCandidates = @($dynamic.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
         $functionSpecialized = Get-FunctionSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $specializationBaseCandidates
         $scriptBlockSpecialized = Get-ScriptBlockSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $specializationBaseCandidates -TargetCandidates @($scriptBlockTargets.Candidates)
         $merged = Merge-ReplacementCandidatesByRange -Candidates (@($preSpecializedCandidates) + @($functionSpecialized.Candidates) + @($scriptBlockSpecialized.Candidates))
-        $scriptBlockInvocationFiltered = Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks -Candidates @($merged.Candidates)
+        $scriptBlockScalarFiltered = Filter-ScriptBlockCallExpansionsForScalarDefinitions -Candidates @($merged.Candidates)
+        $scriptBlockInvocationFiltered = Filter-ScriptBlockInvocationCandidatesForUpdatedBlocks -Candidates @($scriptBlockScalarFiltered.Candidates)
         $contextFiltered = Filter-ReplacementCandidatesByContext -Candidates @($scriptBlockInvocationFiltered.Candidates) -Context $ctx -ScriptText $scriptText
         $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
         $candidates = @($preferred.Candidates)
-        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($staticCompressed.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($scriptBlockInvocationPolicy.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($staticCompressed.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockScalarFiltered.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
         $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
         $autoCandidates = @()
@@ -21228,6 +21524,8 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 CfgDotPath      = $roundCfgDotPath
                 CfgPngPath      = $roundCfgPngPath
                 SafeMode        = $SafeMode
+                RuntimeSubgraphMode = $RuntimeSubgraphMode
+                ExecutionStateMode = $roundExecutionStateMode
                 GateMode        = $PreExecutionGateMode
                 GateDecision    = if ($roundGate) { $roundGate.Decision } else { $null }
                 GateScore       = if ($roundGate) { $roundGate.Score } else { $null }
@@ -21237,6 +21535,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 CandidateCount  = $candidates.Count
                 SelectedCount   = 0
                 AppliedCount    = 0
+                RuntimeSubgraphCount = if ($ctx -and $ctx.ContainsKey('RuntimeSubgraphs') -and $ctx.RuntimeSubgraphs) { [int]$ctx.RuntimeSubgraphs.Count } else { 0 }
+                RuntimeExpansionDisabledCount = if ($ctx -and $ctx.ContainsKey('RuntimeExpansionDisabledCount')) { [int]$ctx.RuntimeExpansionDisabledCount } else { 0 }
+                NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                 SkippedCount    = $skipped.Count
                 Skipped         = $skipped
                 Timestamp       = (Get-Date).ToString('o')
@@ -21312,6 +21613,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         $dynamicCount = @($candidates | Where-Object { $_.SourceKind -eq 'DynamicInvoke' }).Count
         $literalizedCount = @($candidates | Where-Object { $_.SourceKind -eq 'LiteralizedCommand' }).Count
         $otherExecutedCount = @($candidates | Where-Object { $_.SourceKind -notin @('Static', 'DynamicInvoke', 'LiteralizedCommand', 'MandatoryBase64') }).Count
+        $runtimeSubgraphCount = if ($ctx -and $ctx.ContainsKey('RuntimeSubgraphs') -and $ctx.RuntimeSubgraphs) { [int]$ctx.RuntimeSubgraphs.Count } else { 0 }
+        $runtimeExpansionDisabledCount = if ($ctx -and $ctx.ContainsKey('RuntimeExpansionDisabledCount')) { [int]$ctx.RuntimeExpansionDisabledCount } else { 0 }
+        $roundNodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { $roundNodeScopedRunspaceResetCount }
 
         $report = [ordered]@{
             Round           = $round
@@ -21323,6 +21627,8 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             CfgPngPath      = $roundCfgPngPath
             HostInfo        = if ($ctx -and $ctx.PSObject.Properties['HostInfo']) { $ctx.HostInfo } else { $null }
             SafeMode        = $SafeMode
+            RuntimeSubgraphMode = $RuntimeSubgraphMode
+            ExecutionStateMode = $roundExecutionStateMode
             GateMode        = $PreExecutionGateMode
             GateDecision    = if ($roundGate) { $roundGate.Decision } else { $null }
             GateScore       = if ($roundGate) { $roundGate.Score } else { $null }
@@ -21334,6 +21640,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             MaxTotalNodes   = $effectiveRoundLimits.MaxTotalNodes
             GlobalTimeBudgetMs = $GlobalTimeBudgetMs
             DynamicTimeBudgetMs = $effectiveRoundLimits.DynamicTimeBudgetMs
+            RuntimeSubgraphCount = $runtimeSubgraphCount
+            RuntimeExpansionDisabledCount = $runtimeExpansionDisabledCount
+            NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
             ExecutionStopReason = if ($ctx -and $ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
             InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
             PreTraversalCheckApplied = [bool]$preTraversalCheck.ShouldCheck
@@ -21574,6 +21883,9 @@ if (-not [string]::IsNullOrWhiteSpace($RunMetadataPath)) {
         EffectiveMaxRounds      = $effectiveMaxRounds
         GlobalTimeBudgetMs      = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs     = $DynamicTimeBudgetMs
+        RuntimeSubgraphMode     = $RuntimeSubgraphMode
+        ExecutionStateMode      = $ExecutionStateMode
+        NodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { 0 }
         FinalizationReserveMs   = $profileSettings.FinalizationReserveMs
         ProfileChangedExecutionPlan = $profileChangedExecutionPlan
         Timestamp               = (Get-Date).ToString('o')
