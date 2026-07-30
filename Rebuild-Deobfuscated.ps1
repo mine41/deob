@@ -7597,31 +7597,11 @@ function Get-FunctionInvokeReplacementCandidates {
 
     foreach ($rec in @($Context.FunctionInvokeResults)) {
         if (-not $rec) { continue }
-        $start = if ($rec -is [hashtable]) { $rec['StartOffset'] } else { $rec.StartOffset }
-        $end = if ($rec -is [hashtable]) { $rec['EndOffset'] } else { $rec.EndOffset }
-        $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
-        $funcName = if ($rec -is [hashtable]) { [string]$rec['FunctionName'] } else { [string]$rec.FunctionName }
-        $skipped += New-SkipRecord -Reason 'function_result_replaced_by_specialized_inline' -Message "函数返回值不再直接回写调用点，改由调用点专用函数体承载: $funcName" -Item ([PSCustomObject]@{
-                StartOffset = $start
-                EndOffset   = $end
-                Type        = 'FunctionInvoke'
-                Depth       = $null
-                NodeId      = $nodeId
-            })
-    }
-    return [PSCustomObject]@{
-        Candidates = @()
-        Skipped    = @($skipped)
-    }
-
-    foreach ($rec in @($Context.FunctionInvokeResults)) {
-        if (-not $rec) { continue }
-
-        $start = if ($rec -is [hashtable]) { $rec['StartOffset'] } else { $rec.StartOffset }
-        $end = if ($rec -is [hashtable]) { $rec['EndOffset'] } else { $rec.EndOffset }
-        $nodeId = if ($rec -is [hashtable]) { $rec['NodeId'] } else { $rec.NodeId }
-        $funcName = if ($rec -is [hashtable]) { [string]$rec['FunctionName'] } else { [string]$rec.FunctionName }
-        $replacement = if ($rec -is [hashtable]) { [string]$rec['ReplacementText'] } else { [string]$rec.ReplacementText }
+        $start = Get-RecordFieldValue -Record $rec -Name 'StartOffset' -Default $null
+        $end = Get-RecordFieldValue -Record $rec -Name 'EndOffset' -Default $null
+        $nodeId = Get-RecordFieldValue -Record $rec -Name 'NodeId' -Default $null
+        $funcName = [string](Get-RecordFieldValue -Record $rec -Name 'FunctionName' -Default '')
+        $replacement = [string](Get-RecordFieldValue -Record $rec -Name 'ReplacementText' -Default '')
 
         $baseItem = [PSCustomObject]@{
             StartOffset = $start
@@ -7645,6 +7625,12 @@ function Get-FunctionInvokeReplacementCandidates {
         }
 
         $original = $ScriptText.Substring([int]$start, ([int]$end - [int]$start))
+        $recordOriginal = Get-RecordFieldValue -Record $rec -Name 'OriginalText' -Default $null
+        if (-not [string]::IsNullOrEmpty([string]$recordOriginal) -and
+            -not [string]::Equals($original, [string]$recordOriginal, [System.StringComparison]::Ordinal)) {
+            $skipped += New-SkipRecord -Reason 'function_result_offset_mismatch' -Message "函数返回值 offset 与记录原文不匹配，跳过: $funcName" -Item $baseItem
+            continue
+        }
         if ($original -eq $replacement) {
             $skipped += New-SkipRecord -Reason 'function_result_no_change' -Message "函数返回值 replacement 与原片段一致，跳过: $funcName" -Item $baseItem
             continue
@@ -7664,6 +7650,8 @@ function Get-FunctionInvokeReplacementCandidates {
             ResultType  = 'FunctionResult'
             Executed    = $true
             ProtectsInnerCandidates = $true
+            FunctionName = $funcName
+            InvocationId = [string](Get-RecordFieldValue -Record $rec -Name 'ScopeInvocationId' -Default '')
         }
         $cand = Add-RecordScopeMetadataToCandidate -Candidate $cand -Record $rec
         $candidates += $cand
@@ -7673,6 +7661,137 @@ function Get-FunctionInvokeReplacementCandidates {
     return [PSCustomObject]@{
         Candidates = @($merged.Candidates)
         Skipped    = @($skipped) + @($merged.Skipped)
+    }
+}
+
+function Test-FunctionResultScalarFallbackAllowed {
+    param(
+        [AllowNull()]$Candidate,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    if (-not $Candidate) {
+        return [PSCustomObject]@{ Allowed = $false; Reason = 'function_result_missing'; Message = '函数返回值候选为空，不能作为 fallback' }
+    }
+    if (-not $Candidate.PSObject.Properties['StartOffset'] -or -not $Candidate.PSObject.Properties['EndOffset']) {
+        return [PSCustomObject]@{ Allowed = $false; Reason = 'function_result_no_offset'; Message = '函数返回值候选缺少 offset，不能作为 fallback' }
+    }
+
+    $start = [int]$Candidate.StartOffset
+    $end = [int]$Candidate.EndOffset
+    if ($start -lt 0 -or $end -le $start -or $end -gt $ScriptText.Length) {
+        return [PSCustomObject]@{ Allowed = $false; Reason = 'function_result_out_of_range'; Message = '函数返回值候选 offset 越界，不能作为 fallback' }
+    }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$errors)
+    if (-not $ast -or ($errors -and $errors.Count -gt 0)) {
+        return [PSCustomObject]@{ Allowed = $false; Reason = 'function_result_context_parse_failed'; Message = '无法解析脚本 AST，不能判断函数返回值 fallback 上下文' }
+    }
+
+    $matches = @($ast.FindAll({
+                param($n)
+                return ($n -and $n.Extent -and
+                    [int]$n.Extent.StartOffset -eq $start -and
+                    [int]$n.Extent.EndOffset -eq $end)
+            }, $true) | Sort-Object @{ Expression = { [int]$_.Extent.EndOffset - [int]$_.Extent.StartOffset } })
+    if ($matches.Count -eq 0) {
+        return [PSCustomObject]@{ Allowed = $false; Reason = 'function_result_context_unknown'; Message = '找不到函数调用对应 AST，不能作为 fallback' }
+    }
+
+    $cur = $matches[0]
+    while ($cur -and $cur.Parent) {
+        $parent = $cur.Parent
+
+        if ($parent -is [System.Management.Automation.Language.AssignmentStatementAst]) {
+            if ($parent.Right -and $parent.Right.Extent -and
+                $start -ge [int]$parent.Right.Extent.StartOffset -and
+                $end -le [int]$parent.Right.Extent.EndOffset) {
+                return [PSCustomObject]@{ Allowed = $true; Reason = 'function_result_scalar_assignment_rhs'; Message = '函数返回值位于赋值右侧，可作为受限 fallback' }
+            }
+        }
+
+        if ($parent -is [System.Management.Automation.Language.BinaryExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.ParenExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.SubExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.ConvertExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.ArrayExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.ArrayLiteralAst] -or
+            $parent -is [System.Management.Automation.Language.IndexExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.MemberExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -or
+            $parent -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) {
+            return [PSCustomObject]@{ Allowed = $true; Reason = 'function_result_scalar_expression'; Message = '函数返回值位于标量表达式内部，可作为受限 fallback' }
+        }
+
+        if ($parent -is [System.Management.Automation.Language.StatementBlockAst] -or
+            $parent -is [System.Management.Automation.Language.NamedBlockAst] -or
+            $parent -is [System.Management.Automation.Language.ScriptBlockAst]) {
+            break
+        }
+
+        $cur = $parent
+    }
+
+    return [PSCustomObject]@{ Allowed = $false; Reason = 'function_result_not_scalar_context'; Message = '函数调用不在标量表达式或赋值右侧，保留调用边界，跳过返回值 fallback' }
+}
+
+function Filter-FunctionResultFallbackCandidates {
+    param(
+        [AllowEmptyCollection()][array]$Candidates,
+        [AllowEmptyCollection()][array]$FunctionSpecializedCandidates,
+        [AllowEmptyCollection()][array]$OuterCandidates,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    if (-not $Candidates -or $Candidates.Count -eq 0) {
+        return [PSCustomObject]@{ Candidates = @(); Skipped = @() }
+    }
+
+    $specializedRanges = @{}
+    foreach ($cand in @($FunctionSpecializedCandidates)) {
+        if (-not $cand) { continue }
+        $key = Get-ReplacementRangeKey -StartOffset $cand.StartOffset -EndOffset $cand.EndOffset
+        if (-not [string]::IsNullOrWhiteSpace($key)) { $specializedRanges[$key] = $true }
+    }
+
+    $kept = @()
+    $skipped = @()
+    foreach ($cand in @($Candidates)) {
+        if (-not $cand) { continue }
+        $rangeKey = Get-ReplacementRangeKey -StartOffset $cand.StartOffset -EndOffset $cand.EndOffset
+
+        if (-not [string]::IsNullOrWhiteSpace($rangeKey) -and $specializedRanges.ContainsKey($rangeKey)) {
+            $skipped += New-SkipRecord -Reason 'function_result_call_boundary_policy' -Message '函数调用可在调用点展开，返回值候选不直接应用' -Item $cand
+            continue
+        }
+
+        $coveredByOuter = @($OuterCandidates | Where-Object {
+                $_ -and $_.PSObject.Properties['SourceKind'] -and [string]$_.SourceKind -eq 'Resolvable' -and
+                [int]$_.StartOffset -le [int]$cand.StartOffset -and
+                [int]$_.EndOffset -ge [int]$cand.EndOffset -and
+                ([int]$_.StartOffset -lt [int]$cand.StartOffset -or [int]$_.EndOffset -gt [int]$cand.EndOffset)
+            } | Select-Object -First 1)
+        if ($coveredByOuter.Count -gt 0) {
+            $skipped += New-SkipRecord -Reason 'function_result_covered_by_outer_candidate' -Message '外层可求值表达式已覆盖该函数调用，优先保留 outer recovery' -Item $cand
+            continue
+        }
+
+        $decision = Test-FunctionResultScalarFallbackAllowed -Candidate $cand -ScriptText $ScriptText
+        if (-not $decision.Allowed) {
+            $skipped += New-SkipRecord -Reason $decision.Reason -Message $decision.Message -Item $cand
+            continue
+        }
+
+        $cand | Add-Member -NotePropertyName FunctionResultFallback -NotePropertyValue $true -Force
+        $cand | Add-Member -NotePropertyName FunctionResultFallbackReason -NotePropertyValue $decision.Reason -Force
+        $kept += $cand
+    }
+
+    return [PSCustomObject]@{
+        Candidates = @($kept)
+        Skipped    = @($skipped)
     }
 }
 
@@ -7910,6 +8029,40 @@ function Get-FunctionSpecializedInlineReplacementCandidates {
             InvocationId = $invocationId
             ProtectsInnerCandidates = $true
         }
+    }
+
+    if ($candidates.Count -gt 1) {
+        $rangeMap = @{}
+        foreach ($cand in @($candidates)) {
+            if (-not $cand) { continue }
+            $key = Get-ReplacementRangeKey -StartOffset $cand.StartOffset -EndOffset $cand.EndOffset
+            if ([string]::IsNullOrWhiteSpace($key)) { continue }
+            if (-not $rangeMap.ContainsKey($key)) {
+                $rangeMap[$key] = @()
+            }
+            $rangeMap[$key] = @($rangeMap[$key]) + @($cand)
+        }
+
+        $filtered = @()
+        foreach ($key in @($rangeMap.Keys)) {
+            $group = @($rangeMap[$key])
+            if ($group.Count -eq 0) { continue }
+            $distinct = @($group | Select-Object -ExpandProperty Replacement -Unique)
+            if ($distinct.Count -gt 1) {
+                foreach ($cand in $group) {
+                    $skipped += New-SkipRecord -Reason 'function_specialized_same_range_conflict' -Message '同一函数调用位置存在多个不同调用实例结果，保守跳过专用展开候选' -Item $cand
+                }
+                continue
+            }
+
+            $filtered += $group[0]
+            if ($group.Count -gt 1) {
+                for ($i = 1; $i -lt $group.Count; $i++) {
+                    $skipped += New-SkipRecord -Reason 'function_specialized_duplicate' -Message '同一函数调用位置的专用展开候选结果相同，已去重' -Item $group[$i]
+                }
+            }
+        }
+        $candidates = @($filtered)
     }
 
     return [PSCustomObject]@{
@@ -21427,9 +21580,10 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         } else {
             $static = Get-StaticReplacementCandidates -Context $ctx -ScriptText $scriptText -TimeBudgetMs $remainingStaticBudgetMs -PreExecutionGateMode $PreExecutionGateMode -PreExecutionGateCache $preExecutionGateCache -SafeMode:$SafeMode
         }
-        $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
-        $specializationBaseCandidates = @($dynamic.Candidates) + @($functionResults.Candidates) + @($scriptBlockTargets.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
+        $specializationBaseCandidates = @($dynamic.Candidates) + @($scriptBlockTargets.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
         $functionSpecialized = Get-FunctionSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $specializationBaseCandidates
+        $functionResultPolicy = Filter-FunctionResultFallbackCandidates -Candidates @($functionResults.Candidates) -FunctionSpecializedCandidates @($functionSpecialized.Candidates) -OuterCandidates @($base.Candidates) -ScriptText $scriptText
+        $preSpecializedCandidates = @($dynamic.Candidates) + @($canonicalCommand.Candidates) + @($commandTargetAssignments.Candidates) + @($functionResultPolicy.Candidates) + @($scriptBlockTargets.Candidates) + @($wholeScriptDynamic.Candidates) + @($staticCompressed.Candidates) + @($sensitive.Candidates) + @($literalized.Candidates) + @($mandatoryBase64.Candidates) + @($base.Candidates) + @($static.Candidates)
         $scriptBlockSpecialized = Get-ScriptBlockSpecializedInlineReplacementCandidates -Context $ctx -ScriptText $scriptText -BaseCandidates $specializationBaseCandidates -TargetCandidates @($scriptBlockTargets.Candidates)
         $merged = Merge-ReplacementCandidatesByRange -Candidates (@($preSpecializedCandidates) + @($functionSpecialized.Candidates) + @($scriptBlockSpecialized.Candidates))
         $scriptBlockScalarFiltered = Filter-ScriptBlockCallExpansionsForScalarDefinitions -Candidates @($merged.Candidates)
@@ -21438,7 +21592,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         $preferred = Filter-CandidatesPreferDynamicInvoke -Candidates @($contextFiltered.Candidates)
 
         $candidates = @($preferred.Candidates)
-        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($scriptBlockInvocationPolicy.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($staticCompressed.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockScalarFiltered.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
+        $skipped = @($dynamic.Skipped) + @($canonicalCommand.Skipped) + @($commandTargetAssignments.Skipped) + @($functionResults.Skipped) + @($functionResultPolicy.Skipped) + @($scriptBlockTargets.Skipped) + @($scriptBlockInvocations.Skipped) + @($scriptBlockInvocationPolicy.Skipped) + @($functionSpecialized.Skipped) + @($scriptBlockSpecialized.Skipped) + @($wholeScriptDynamic.Skipped) + @($staticCompressed.Skipped) + @($sensitive.Skipped) + @($literalized.Skipped) + @($mandatoryBase64.Skipped) + @($base.Skipped) + @($static.Skipped) + @($merged.Skipped) + @($scriptBlockScalarFiltered.Skipped) + @($scriptBlockInvocationFiltered.Skipped) + @($contextFiltered.Skipped) + @($preferred.Skipped)
 
         $contextInfoForLowConfidence = Get-ReplacementContextInfoFromScriptText -ScriptText $scriptText
         $autoCandidates = @()

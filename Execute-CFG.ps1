@@ -5689,6 +5689,74 @@ function Evaluate-NodeResolvables {
     }
 }
 
+function Record-AssignmentRightHandSideResult {
+    param(
+        $Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Node -or -not $Context -or
+        $Node.Ast -isnot [System.Management.Automation.Language.AssignmentStatementAst]) {
+        return
+    }
+
+    $assignment = $Node.Ast
+    if ($assignment.Operator -ne [System.Management.Automation.Language.TokenKind]::Equals) {
+        return
+    }
+    if (-not $assignment.Left -or
+        $assignment.Left -isnot [System.Management.Automation.Language.VariableExpressionAst] -or
+        -not $assignment.Right -or -not $assignment.Right.Extent) {
+        return
+    }
+    if (-not $assignment.Left.VariablePath.IsUnscopedVariable) { return }
+
+    $variableName = [string]$assignment.Left.VariablePath.UserPath
+    if ([string]::IsNullOrWhiteSpace($variableName)) { return }
+
+    $rightText = [string]$assignment.Right.Extent.Text
+    if ($rightText -notmatch '[&\.]\s*(?:\{|\$_block_)' -and
+        $rightText -notmatch '\[\s*(?:scriptblock|System\.Management\.Automation\.ScriptBlock)\s*\]') {
+        return
+    }
+
+    $value = Get-VariableFromContext -ExecContext $Context.ExecContext -Name $variableName
+    if ($null -eq $value -or
+        $value -is [BlockedCommandPlaceholder] -or
+        -not (Test-ResolvableValue $value)) {
+        return
+    }
+
+    $replacement = Format-TypedScalarResolvableValue $value
+    if ([string]::IsNullOrWhiteSpace([string]$replacement)) {
+        $replacement = Format-ResolvableValue $value
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$replacement)) { return }
+
+    $right = $assignment.Right
+    $baseKey = "$($Node.Id):$($right.Extent.StartOffset):$($right.Extent.EndOffset):assignment-rhs"
+    $key = Get-ScopeAwareExecutionResultKey -BaseKey $baseKey -Context $Context
+    if (-not $Context.ResolvableResults.ContainsKey($key)) {
+        $rec = @{
+            NodeId = $Node.Id
+            Resolvable = [PSCustomObject]@{
+                Type        = 'AssignmentRhs'
+                Text        = [string]$right.Extent.Text
+                StartOffset = [int]$right.Extent.StartOffset
+                EndOffset   = [int]$right.Extent.EndOffset
+                Depth       = 0
+                Ast         = $right
+                Mapped      = $true
+            }
+            Values = @()
+        }
+        $rec = Add-CurrentScopeMetadataToRecord -Record $rec -Context $Context
+        $Context.ResolvableResults[$key] = $rec
+    }
+
+    $Context.ResolvableResults[$key].Values += $replacement
+}
+
 function Invoke-NodeDirect {
     param(
         $Node,
@@ -6076,6 +6144,7 @@ function Invoke-NodeSafe {
                 Evaluate-NodeResolvables -Node $Node -Context $Context
             }
             if ($result.Success) {
+                Record-AssignmentRightHandSideResult -Node $Node -Context $Context
                 Record-LiteralizedCommandResult -Node $Node -Context $Context
                 Record-SensitiveSinkResult -Node $Node -Context $Context -CommandInfo $commandInfo
             }
@@ -6116,6 +6185,7 @@ function Invoke-NodeSafe {
                 Evaluate-NodeResolvables -Node $Node -Context $Context
             }
             if ($result.Success) {
+                Record-AssignmentRightHandSideResult -Node $Node -Context $Context
                 Record-LiteralizedCommandResult -Node $Node -Context $Context
                 Record-SensitiveSinkResult -Node $Node -Context $Context -CommandInfo $commandInfo
             }
@@ -12076,6 +12146,23 @@ function Record-AliasResolution {
     Record-CommandNameResolution -Node $Node -Context $Context -CommandInfo $CommandInfo
 }
 
+function New-ExecutableScriptBlockFromLiteralText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+
+    $trimmed = ([string]$Text).Trim()
+    if ($trimmed.StartsWith('{') -and $trimmed.EndsWith('}') -and $trimmed.Length -ge 2) {
+        $trimmed = $trimmed.Substring(1, $trimmed.Length - 2)
+    }
+
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return [scriptblock]::Create('')
+    }
+
+    return [scriptblock]::Create($trimmed)
+}
+
 function Initialize-SubgraphMappings {
     param(
         [hashtable]$CFG,
@@ -12094,6 +12181,17 @@ function Initialize-SubgraphMappings {
             if ($node.Text -match '^ScriptBlock\s+(.+)$') {
                 $blockName = $Matches[1]
                 $Context.ScriptBlockSubgraphs[$blockName] = $node.Id
+                if ($Context.ExecContext -and $Context.ExecContext.Runspace -and $node.PSObject.Properties['ScriptBlockText']) {
+                    try {
+                        $scriptBlockValue = New-ExecutableScriptBlockFromLiteralText -Text ([string]$node.ScriptBlockText)
+                        if ($null -ne $scriptBlockValue) {
+                            $Context.ExecContext.Runspace.SessionStateProxy.SetVariable($blockName, $scriptBlockValue)
+                            Write-ExecutionLog -Context $Context -Message "  [INIT] ScriptBlock variable: `$$blockName"
+                        }
+                    } catch {
+                        Write-ExecutionLog -Context $Context -Message "  [INIT] Warning: failed to initialize scriptblock variable `$$blockName`: $($_.Exception.Message)"
+                    }
+                }
                 Write-ExecutionLog -Context $Context -Message "  [INIT] ScriptBlock subgraph: $blockName -> Node $($node.Id)"
             }
         }
