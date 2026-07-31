@@ -156,6 +156,7 @@ Notes:
 | `-GlobalTimeBudgetMs` | `120000` | Overall time budget in milliseconds. `0` means unlimited. |
 | `-DynamicTimeBudgetMs` | `15000` | Time budget for one dynamic expansion in milliseconds. `0` means unlimited. |
 | `-RuntimeSubgraphMode` | `Full` | Runtime CFG expansion mode: `Full` / `InitialOnly`. `InitialOnly` is intended for ablation studies. |
+| `-DynamicDepthLimit` | unset | Maximum depth entered for runtime-generated CFG subgraphs. Unset means unlimited; `1` disables recursive runtime-subgraph entry and is intended for ablation studies. |
 | `-ExecutionStateMode` | `Shared` | Execution-state mode: `Shared` keeps one Runspace across CFG nodes; `Isolated` resets the Runspace before each CFG node and is intended for ablation studies. |
 | `-SafeMode` | `$true` | Whether to keep safety protections enabled |
 | `-PreExecutionGateMode` | `Disabled` | Complexity-aware pre-execution gate: `Disabled` / `Conservative` / `Balanced` / `Aggressive` |
@@ -180,6 +181,9 @@ Common examples:
 
 # Ablation: keep only initially constructed CFG subgraphs and disable runtime CFG expansion
 .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -RuntimeSubgraphMode InitialOnly -MaxRounds 1
+
+# Ablation: allow first-level runtime CFG expansion, but block recursive runtime subgraphs
+.\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -RuntimeSubgraphMode Full -DynamicDepthLimit 1 -MaxRounds 1
 
 # Ablation: reset the Runspace before each CFG node
 .\Rebuild-Deobfuscated.ps1 -ScriptPath .\in\in.ps1 -ExecutionStateMode Isolated -MaxRounds 1
@@ -216,7 +220,8 @@ Runtime CFG expansion modes:
 
 - `Full`: default behavior. Dynamically materialized code can be parsed into runtime CFG subgraphs and recursively executed.
 - `InitialOnly`: keep the CFG built from the initial script, including initially visible functions and script blocks, but do not create runtime CFG subgraphs for dynamically generated code. Dynamic payload text is still recorded as a reconstruction candidate, and reports record `RuntimeSubgraphMode`, `RuntimeSubgraphCount`, and `RuntimeExpansionDisabledCount`.
-- For a strict single-round ablation of runtime CFG expansion, use `-RuntimeSubgraphMode InitialOnly -MaxRounds 1`. Without `-MaxRounds 1`, later rebuilding rounds may parse already recovered payload text as a new input script, which is useful operationally but less isolated as an ablation.
+- `DynamicDepthLimit`: when `RuntimeSubgraphMode=Full`, this limits how deeply runtime-generated subgraphs are entered. Unset means unlimited. `0` records runtime payloads but does not enter them. `1` enters first-level runtime subgraphs but blocks nested runtime subgraphs, which is the recommended setting for the recursive runtime-CFG ablation.
+- For strict single-round ablations, use `-MaxRounds 1`. Without `-MaxRounds 1`, later rebuilding rounds may parse already recovered payload text as a new input script, which is useful operationally but less isolated as an ablation.
 
 Execution state modes:
 

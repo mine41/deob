@@ -53,6 +53,8 @@ param(
     [ValidateSet('Full', 'InitialOnly')]
     [string]$RuntimeSubgraphMode = 'Full',
 
+    [AllowNull()][Nullable[int]]$DynamicDepthLimit = $null,
+
     [ValidateSet('Shared', 'Isolated')]
     [string]$ExecutionStateMode = 'Shared',
 
@@ -693,8 +695,13 @@ function Get-EffectiveRoundExecutionLimits {
         [int]$BaseDynamicTimeBudgetMs,
         [int]$BaseMaxIterations,
         [int]$BaseMaxTotalNodes,
+        [AllowNull()][Nullable[int]]$RequestedDynamicDepthLimit = $null,
         [AllowNull()]$GateDecision = $null
     )
+
+    if ($null -ne $RequestedDynamicDepthLimit -and [int]$RequestedDynamicDepthLimit -lt 0) {
+        throw "DynamicDepthLimit must be greater than or equal to 0."
+    }
 
     $effectiveDynamicTimeBudgetMs = $BaseDynamicTimeBudgetMs
     $effectiveMaxIterations = $BaseMaxIterations
@@ -717,7 +724,9 @@ function Get-EffectiveRoundExecutionLimits {
     }
 
     $dynamicDepthLimit = $null
-    if ($GateDecision -and [string]$GateDecision.Decision -eq 'Shallow') {
+    if ($null -ne $RequestedDynamicDepthLimit) {
+        $dynamicDepthLimit = [int]$RequestedDynamicDepthLimit
+    } elseif ($GateDecision -and [string]$GateDecision.Decision -eq 'Shallow') {
         $dynamicDepthLimit = 1
     }
 
@@ -1810,7 +1819,191 @@ function Convert-ScriptBlockCreateReplacementToScalarForm {
         return ("{0} {1}" -f $op, $scalar)
     }
 
+    $invokeCommandReplacement = Convert-InvokeCommandScriptBlockArgumentToScalarForm -Original $Original -StatementAst $statement -Scalar $scalar
+    if (-not [string]::IsNullOrWhiteSpace([string]$invokeCommandReplacement)) {
+        return $invokeCommandReplacement
+    }
+
+    $invokeMemberReplacement = Convert-InvokeMemberScriptBlockReceiverToScalarForm -Original $Original -AstRoot $ast -Scalar $scalar
+    if (-not [string]::IsNullOrWhiteSpace([string]$invokeMemberReplacement)) {
+        return $invokeMemberReplacement
+    }
+
     return $scalar
+}
+
+function Test-ScriptBlockCreationInvokeAst {
+    param([AllowNull()]$Ast)
+
+    if ($Ast -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) { return $false }
+
+    $memberName = $null
+    if ($Ast.Member -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+        $memberName = [string]$Ast.Member.Value
+    } elseif ($Ast.Member -and $Ast.Member.Extent) {
+        $memberName = [string]$Ast.Member.Extent.Text
+    }
+
+    if ($Ast.Static -and $memberName -eq 'Create') {
+        $exprText = if ($Ast.Expression -and $Ast.Expression.Extent) { [string]$Ast.Expression.Extent.Text } else { '' }
+        return ($exprText -match '^\s*\[(?:System\.Management\.Automation\.)?ScriptBlock\]\s*$')
+    }
+
+    if (-not $Ast.Static -and $memberName -eq 'NewScriptBlock') {
+        return $true
+    }
+
+    return $false
+}
+
+function Get-ScriptBlockCreationInvokeAstFromAst {
+    param([AllowNull()]$Ast)
+
+    if (-not $Ast) { return $null }
+    if (Test-ScriptBlockCreationInvokeAst -Ast $Ast) { return $Ast }
+
+    $matches = @($Ast.FindAll({
+            param($n)
+            return (Test-ScriptBlockCreationInvokeAst -Ast $n)
+        }, $true))
+
+    if ($matches.Count -eq 0) { return $null }
+    return @($matches | Sort-Object { $_.Extent.StartOffset } | Select-Object -First 1)[0]
+}
+
+function Replace-AstExtentInOriginalText {
+    param(
+        [Parameter(Mandatory)][string]$Original,
+        [Parameter(Mandatory)]$Ast,
+        [Parameter(Mandatory)][string]$Replacement
+    )
+
+    if (-not $Ast -or -not $Ast.Extent) { return $null }
+    $start = [int]$Ast.Extent.StartOffset
+    $end = [int]$Ast.Extent.EndOffset
+    if ($start -lt 0 -or $end -le $start -or $end -gt $Original.Length) { return $null }
+
+    return ($Original.Substring(0, $start) + $Replacement + $Original.Substring($end))
+}
+
+function Test-InvokeCommandWrapperLocalOnly {
+    param([Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst)
+
+    $remoteOrAsyncParameters = @(
+        'computername', 'session', 'uri', 'connectionuri', 'vmname', 'vmid',
+        'containerid', 'hostname', 'sshconnection', 'asjob', 'indisconnectedsession',
+        'filepath'
+    )
+
+    foreach ($elem in @($CommandAst.CommandElements)) {
+        if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+        $paramName = ([string]$elem.ParameterName).ToLowerInvariant()
+        if ($paramName -in $remoteOrAsyncParameters) { return $false }
+    }
+
+    return $true
+}
+
+function Get-InvokeCommandScriptBlockArgumentAst {
+    param([Parameter(Mandatory)][System.Management.Automation.Language.CommandAst]$CommandAst)
+
+    $elements = @($CommandAst.CommandElements)
+    if ($elements.Count -lt 2) { return $null }
+
+    $consumed = @{}
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $elem = $elements[$i]
+        if ($elem -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+
+        $paramName = ([string]$elem.ParameterName).ToLowerInvariant()
+        if ($paramName -in @('scriptblock', 'sb')) {
+            if ($elem.Argument) { return $elem.Argument }
+            if (($i + 1) -lt $elements.Count) { return $elements[$i + 1] }
+            return $null
+        }
+
+        if ($elem.Argument) { continue }
+        if (($i + 1) -lt $elements.Count) { $consumed[$i + 1] = $true }
+    }
+
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        if ($consumed.ContainsKey($i)) { continue }
+        $elem = $elements[$i]
+        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+            if (-not $elem.Argument -and (($i + 1) -lt $elements.Count)) { $i++ }
+            continue
+        }
+        return $elem
+    }
+
+    return $null
+}
+
+function Convert-InvokeCommandScriptBlockArgumentToScalarForm {
+    param(
+        [Parameter(Mandatory)][string]$Original,
+        [AllowNull()]$StatementAst,
+        [Parameter(Mandatory)][string]$Scalar
+    )
+
+    $commandAst = Get-TopLevelCommandAstFromStatementAst -StatementAst $StatementAst
+    if (-not $commandAst) { return $null }
+
+    $cmdName = $commandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace([string]$cmdName)) {
+        if ($commandAst.CommandElements -and $commandAst.CommandElements.Count -gt 0 -and $commandAst.CommandElements[0].Extent) {
+            $cmdName = [string]$commandAst.CommandElements[0].Extent.Text
+        }
+    }
+    if ($cmdName -notin @('Invoke-Command', 'icm')) { return $null }
+    if (-not (Test-InvokeCommandWrapperLocalOnly -CommandAst $commandAst)) { return $null }
+
+    $targetAst = Get-InvokeCommandScriptBlockArgumentAst -CommandAst $commandAst
+    if (-not $targetAst) { return $null }
+
+    $createAst = Get-ScriptBlockCreationInvokeAstFromAst -Ast $targetAst
+    if (-not $createAst) { return $null }
+
+    $replacement = Replace-AstExtentInOriginalText -Original $Original -Ast $targetAst -Replacement $Scalar
+    if ([string]::IsNullOrWhiteSpace([string]$replacement)) {
+        $replacement = Replace-AstExtentInOriginalText -Original $Original -Ast $createAst -Replacement $Scalar
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$replacement)) { return $null }
+
+    $syntax = Test-PowerShellSyntax -ScriptText $replacement
+    if (-not $syntax.IsValid) { return $null }
+
+    return $replacement
+}
+
+function Convert-InvokeMemberScriptBlockReceiverToScalarForm {
+    param(
+        [Parameter(Mandatory)][string]$Original,
+        [AllowNull()]$AstRoot,
+        [Parameter(Mandatory)][string]$Scalar
+    )
+
+    if (-not $AstRoot) { return $null }
+
+    $invokeAsts = @($AstRoot.FindAll({
+            param($n)
+            if ($n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst]) { return $false }
+            if ($n.Member -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) { return $false }
+            return $n.Member.Value -in @('Invoke', 'InvokeWithContext')
+        }, $true))
+
+    foreach ($invokeAst in @($invokeAsts | Sort-Object { $_.Extent.StartOffset })) {
+        $createAst = Get-ScriptBlockCreationInvokeAstFromAst -Ast $invokeAst.Expression
+        if (-not $createAst) { continue }
+
+        $replacement = Replace-AstExtentInOriginalText -Original $Original -Ast $createAst -Replacement $Scalar
+        if ([string]::IsNullOrWhiteSpace([string]$replacement)) { continue }
+
+        $syntax = Test-PowerShellSyntax -ScriptText $replacement
+        if ($syntax.IsValid) { return $replacement }
+    }
+
+    return $null
 }
 
 function Get-ProtectedDynamicReplacementRanges {
@@ -21039,6 +21232,7 @@ Write-Host "DynPolicy  : $effectiveDynamicConflictPolicy" -ForegroundColor Gray
 Write-Host "SafeMode   : $SafeMode" -ForegroundColor Gray
 Write-Host "GateMode   : $PreExecutionGateMode" -ForegroundColor Gray
 Write-Host "RuntimeCFG : $RuntimeSubgraphMode" -ForegroundColor Gray
+Write-Host "DynDepth   : $(if ($null -ne $DynamicDepthLimit) { $DynamicDepthLimit } else { 'Unlimited' })" -ForegroundColor Gray
 Write-Host "ExecState  : $ExecutionStateMode" -ForegroundColor Gray
 if ($effectiveMaxRounds -ne $MaxRounds) {
     Write-Host ("MaxRounds  : {0} (requested {1})" -f $effectiveMaxRounds, $MaxRounds) -ForegroundColor Gray
@@ -21118,9 +21312,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
                         RuntimeSubgraphMode = $RuntimeSubgraphMode
+                        DynamicDepthLimit  = if ($null -ne $DynamicDepthLimit) { [int]$DynamicDepthLimit } else { $null }
                         ExecutionStateMode = $roundExecutionStateMode
                         RuntimeSubgraphCount = 0
                         RuntimeExpansionDisabledCount = 0
+                        DynamicDepthLimitStopCount = 0
                         NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                         TerminatedBy       = 'parse_failure'
                         ParseError         = $roundParseInfo.FirstError
@@ -21139,7 +21335,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             }
 
             $roundGate = Get-PreExecutionGateDecision -Scope 'Round' -ScriptText $rawRoundText -ParseInfo $roundParseInfo -Mode $PreExecutionGateMode -SafeMode:$SafeMode -Cache $preExecutionGateCache
-            $effectiveRoundLimits = Get-EffectiveRoundExecutionLimits -BaseDynamicTimeBudgetMs $DynamicTimeBudgetMs -BaseMaxIterations $MaxIterations -BaseMaxTotalNodes $MaxTotalNodes -GateDecision $roundGate
+            $effectiveRoundLimits = Get-EffectiveRoundExecutionLimits -BaseDynamicTimeBudgetMs $DynamicTimeBudgetMs -BaseMaxIterations $MaxIterations -BaseMaxTotalNodes $MaxTotalNodes -RequestedDynamicDepthLimit $DynamicDepthLimit -GateDecision $roundGate
             $roundExecutionPlan = Get-OptimizationProfileRoundPlan -ProfileSettings $profileSettings -GateDecision $roundGate -RemainingGlobalBudgetMs $remainingGlobalBudgetMs -Round $round -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
             if ($roundExecutionPlan.RoundMode -ne 'default' -or $roundExecutionPlan.StopAfterThisRound) {
                 $profileChangedExecutionPlan = $true
@@ -21184,9 +21380,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
                         RuntimeSubgraphMode = $RuntimeSubgraphMode
+                        DynamicDepthLimit  = $effectiveRoundLimits.DynamicDepthLimit
                         ExecutionStateMode = $roundExecutionStateMode
                         RuntimeSubgraphCount = 0
                         RuntimeExpansionDisabledCount = 0
+                        DynamicDepthLimitStopCount = 0
                         NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                         GateMode           = $PreExecutionGateMode
                         TerminatedBy       = if ($continuedBySafeExtraction) { 'pre_execution_gate_safe_extracted' } else { 'pre_execution_gate' }
@@ -21242,9 +21440,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                         CfgPngPath         = $roundCfgPngPath
                         SafeMode           = $SafeMode
                         RuntimeSubgraphMode = $RuntimeSubgraphMode
+                        DynamicDepthLimit  = $effectiveRoundLimits.DynamicDepthLimit
                         ExecutionStateMode = $roundExecutionStateMode
                         RuntimeSubgraphCount = 0
                         RuntimeExpansionDisabledCount = 0
+                        DynamicDepthLimitStopCount = 0
                         NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                         TerminatedBy       = 'pre_traversal_stop'
                         InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
@@ -21296,9 +21496,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                             CfgPngPath         = $roundCfgPngPath
                             SafeMode           = $SafeMode
                             RuntimeSubgraphMode = $RuntimeSubgraphMode
+                            DynamicDepthLimit  = $effectiveRoundLimits.DynamicDepthLimit
                             ExecutionStateMode = $roundExecutionStateMode
                             RuntimeSubgraphCount = 0
                             RuntimeExpansionDisabledCount = 0
+                            DynamicDepthLimitStopCount = 0
                             NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                             TerminatedBy       = 'cfg_generation_failed'
                             CfgError           = $cfgError
@@ -21323,7 +21525,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
 
                 $cfgTraversalError = $null
                 try {
-                    $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode -ExecutionStateMode $ExecutionStateMode -SafeMode:$SafeMode
+                    $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $roundLogPath -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode -ExecutionStateMode $ExecutionStateMode -DynamicDepthLimit $effectiveRoundLimits.DynamicDepthLimit -SafeMode:$SafeMode
                 } catch {
                     $cfgTraversalError = Get-ErrorSummaryText -ErrorObject $_ -DefaultMessage 'CFG traversal failed'
                 }
@@ -21341,9 +21543,11 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                             CfgPngPath         = $roundCfgPngPath
                             SafeMode           = $SafeMode
                             RuntimeSubgraphMode = $RuntimeSubgraphMode
+                            DynamicDepthLimit  = $effectiveRoundLimits.DynamicDepthLimit
                             ExecutionStateMode = $roundExecutionStateMode
                             RuntimeSubgraphCount = 0
                             RuntimeExpansionDisabledCount = 0
+                            DynamicDepthLimitStopCount = 0
                             NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                             TerminatedBy       = 'cfg_traversal_failed'
                             TraversalError     = $cfgTraversalError
@@ -21366,7 +21570,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 $roundNodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { 0 }
                 $ctx.PreExecutionGateMode = $PreExecutionGateMode
                 $ctx.PreExecutionGateCache = $preExecutionGateCache
-                $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+                if ($null -eq $ctx.DynamicDepthLimit -and $null -ne $effectiveRoundLimits.DynamicDepthLimit) {
+                    $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+                }
 
                 $scriptText = Get-FullScriptTextFromFile -Path $roundInPath
                 $currentText = $scriptText
@@ -21387,7 +21593,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         }
 
         $roundGate = Get-PreExecutionGateDecision -Scope 'Round' -ScriptText $currentText -ParseInfo $roundParseInfo -Mode $PreExecutionGateMode -SafeMode:$SafeMode -Cache $preExecutionGateCache
-        $effectiveRoundLimits = Get-EffectiveRoundExecutionLimits -BaseDynamicTimeBudgetMs $DynamicTimeBudgetMs -BaseMaxIterations $MaxIterations -BaseMaxTotalNodes $MaxTotalNodes -GateDecision $roundGate
+        $effectiveRoundLimits = Get-EffectiveRoundExecutionLimits -BaseDynamicTimeBudgetMs $DynamicTimeBudgetMs -BaseMaxIterations $MaxIterations -BaseMaxTotalNodes $MaxTotalNodes -RequestedDynamicDepthLimit $DynamicDepthLimit -GateDecision $roundGate
         $roundExecutionPlan = Get-OptimizationProfileRoundPlan -ProfileSettings $profileSettings -GateDecision $roundGate -RemainingGlobalBudgetMs $remainingGlobalBudgetMs -Round $round -IsMaterializedPayloadRound:$currentRoundIsMaterializedPayload
         if ($roundExecutionPlan.RoundMode -ne 'default' -or $roundExecutionPlan.StopAfterThisRound) {
             $profileChangedExecutionPlan = $true
@@ -21450,7 +21656,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             }
 
             try {
-                $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode -ExecutionStateMode $ExecutionStateMode -SafeMode:$SafeMode
+                $ctx = Invoke-CFGTraversal -CFG $cfg -LogPath $null -MaxIterations $effectiveRoundLimits.MaxIterations -MaxTotalNodes $effectiveRoundLimits.MaxTotalNodes -GlobalTimeBudgetMs $remainingGlobalBudgetMs -DynamicTimeBudgetMs $effectiveRoundLimits.DynamicTimeBudgetMs -RuntimeSubgraphMode $RuntimeSubgraphMode -ExecutionStateMode $ExecutionStateMode -DynamicDepthLimit $effectiveRoundLimits.DynamicDepthLimit -SafeMode:$SafeMode
             } catch {
                 $ctx = $null
             }
@@ -21463,7 +21669,9 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             $roundNodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { 0 }
             $ctx.PreExecutionGateMode = $PreExecutionGateMode
             $ctx.PreExecutionGateCache = $preExecutionGateCache
-            $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+            if ($null -eq $ctx.DynamicDepthLimit -and $null -ne $effectiveRoundLimits.DynamicDepthLimit) {
+                $ctx.DynamicDepthLimit = $effectiveRoundLimits.DynamicDepthLimit
+            }
         }
 
         $scriptText = $currentText
@@ -21679,6 +21887,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 CfgPngPath      = $roundCfgPngPath
                 SafeMode        = $SafeMode
                 RuntimeSubgraphMode = $RuntimeSubgraphMode
+                DynamicDepthLimit = if ($ctx -and $ctx.ContainsKey('DynamicDepthLimit') -and $null -ne $ctx.DynamicDepthLimit) { [int]$ctx.DynamicDepthLimit } else { $effectiveRoundLimits.DynamicDepthLimit }
                 ExecutionStateMode = $roundExecutionStateMode
                 GateMode        = $PreExecutionGateMode
                 GateDecision    = if ($roundGate) { $roundGate.Decision } else { $null }
@@ -21691,6 +21900,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
                 AppliedCount    = 0
                 RuntimeSubgraphCount = if ($ctx -and $ctx.ContainsKey('RuntimeSubgraphs') -and $ctx.RuntimeSubgraphs) { [int]$ctx.RuntimeSubgraphs.Count } else { 0 }
                 RuntimeExpansionDisabledCount = if ($ctx -and $ctx.ContainsKey('RuntimeExpansionDisabledCount')) { [int]$ctx.RuntimeExpansionDisabledCount } else { 0 }
+                DynamicDepthLimitStopCount = if ($ctx -and $ctx.ContainsKey('DynamicDepthLimitStopCount')) { [int]$ctx.DynamicDepthLimitStopCount } else { 0 }
                 NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
                 SkippedCount    = $skipped.Count
                 Skipped         = $skipped
@@ -21769,6 +21979,8 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
         $otherExecutedCount = @($candidates | Where-Object { $_.SourceKind -notin @('Static', 'DynamicInvoke', 'LiteralizedCommand', 'MandatoryBase64') }).Count
         $runtimeSubgraphCount = if ($ctx -and $ctx.ContainsKey('RuntimeSubgraphs') -and $ctx.RuntimeSubgraphs) { [int]$ctx.RuntimeSubgraphs.Count } else { 0 }
         $runtimeExpansionDisabledCount = if ($ctx -and $ctx.ContainsKey('RuntimeExpansionDisabledCount')) { [int]$ctx.RuntimeExpansionDisabledCount } else { 0 }
+        $dynamicDepthLimitStopCount = if ($ctx -and $ctx.ContainsKey('DynamicDepthLimitStopCount')) { [int]$ctx.DynamicDepthLimitStopCount } else { 0 }
+        $roundDynamicDepthLimit = if ($ctx -and $ctx.ContainsKey('DynamicDepthLimit') -and $null -ne $ctx.DynamicDepthLimit) { [int]$ctx.DynamicDepthLimit } else { $effectiveRoundLimits.DynamicDepthLimit }
         $roundNodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { $roundNodeScopedRunspaceResetCount }
 
         $report = [ordered]@{
@@ -21782,6 +21994,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             HostInfo        = if ($ctx -and $ctx.PSObject.Properties['HostInfo']) { $ctx.HostInfo } else { $null }
             SafeMode        = $SafeMode
             RuntimeSubgraphMode = $RuntimeSubgraphMode
+            DynamicDepthLimit = $roundDynamicDepthLimit
             ExecutionStateMode = $roundExecutionStateMode
             GateMode        = $PreExecutionGateMode
             GateDecision    = if ($roundGate) { $roundGate.Decision } else { $null }
@@ -21796,6 +22009,7 @@ for ($round = 1; $round -le $effectiveMaxRounds; $round++) {
             DynamicTimeBudgetMs = $effectiveRoundLimits.DynamicTimeBudgetMs
             RuntimeSubgraphCount = $runtimeSubgraphCount
             RuntimeExpansionDisabledCount = $runtimeExpansionDisabledCount
+            DynamicDepthLimitStopCount = $dynamicDepthLimitStopCount
             NodeScopedRunspaceResetCount = $roundNodeScopedRunspaceResetCount
             ExecutionStopReason = if ($ctx -and $ctx.ContainsKey('StopReason')) { $ctx.StopReason } else { $null }
             InputIsMaterializedPayloadRound = $currentRoundIsMaterializedPayload
@@ -22038,6 +22252,8 @@ if (-not [string]::IsNullOrWhiteSpace($RunMetadataPath)) {
         GlobalTimeBudgetMs      = $GlobalTimeBudgetMs
         DynamicTimeBudgetMs     = $DynamicTimeBudgetMs
         RuntimeSubgraphMode     = $RuntimeSubgraphMode
+        DynamicDepthLimit       = if ($null -ne $DynamicDepthLimit) { [int]$DynamicDepthLimit } else { $null }
+        DynamicDepthLimitStopCount = if ($ctx -and $ctx.ContainsKey('DynamicDepthLimitStopCount')) { [int]$ctx.DynamicDepthLimitStopCount } else { 0 }
         ExecutionStateMode      = $ExecutionStateMode
         NodeScopedRunspaceResetCount = if ($ctx -and $ctx.ContainsKey('NodeScopedRunspaceResetCount')) { [int]$ctx.NodeScopedRunspaceResetCount } else { 0 }
         FinalizationReserveMs   = $profileSettings.FinalizationReserveMs

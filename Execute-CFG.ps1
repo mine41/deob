@@ -4694,12 +4694,20 @@ function Get-DynamicArgumentCodeFromNodeText {
                 if ($invokeAst.Static -and $memberName -eq "Create" -and $invokeAst.Arguments -and $invokeAst.Arguments.Count -gt 0) {
                     $argCode = $invokeAst.Arguments[0].Extent.Text
                     $displayCode = $argCode
+                    if ($invokeAst.Extent) {
+                        $replacementStartOffset = [int]$invokeAst.Extent.StartOffset
+                        $replacementEndOffset = [int]$invokeAst.Extent.EndOffset
+                    }
                     break
                 }
             } elseif ($DynamicType -eq "NewScriptBlock") {
                 if (-not $invokeAst.Static -and $memberName -eq "NewScriptBlock" -and $invokeAst.Arguments -and $invokeAst.Arguments.Count -gt 0) {
                     $argCode = $invokeAst.Arguments[0].Extent.Text
                     $displayCode = $argCode
+                    if ($invokeAst.Extent) {
+                        $replacementStartOffset = [int]$invokeAst.Extent.StartOffset
+                        $replacementEndOffset = [int]$invokeAst.Extent.EndOffset
+                    }
                     break
                 }
             }
@@ -8669,6 +8677,11 @@ function Invoke-ScriptBlockCall {
 
         if ($runtimeDepth -ge [int]$Context.DynamicDepthLimit) {
             Write-ExecutionLog -Context $Context -Message "  [DYNAMIC-GATE] Runtime subgraph depth $runtimeDepth reached DynamicDepthLimit=$($Context.DynamicDepthLimit), stop entering nested subgraph $BlockName"
+            if ($Context.ContainsKey('DynamicDepthLimitStopCount')) {
+                $Context.DynamicDepthLimitStopCount = [int]$Context.DynamicDepthLimitStopCount + 1
+            } else {
+                $Context.DynamicDepthLimitStopCount = 1
+            }
             return @{
                 Success  = $true
                 Executed = $true
@@ -8676,7 +8689,7 @@ function Invoke-ScriptBlockCall {
                 Error    = $null
                 Action   = "CallScriptBlock"
                 Target   = $BlockName
-                StopReason = 'PreExecutionGate:DynamicDepthLimit'
+                StopReason = 'DynamicDepthLimit'
             }
         }
     }
@@ -9307,7 +9320,9 @@ function Handle-DynamicInvoke {
     if ($payloadStop -and $payloadStop.PSObject.Properties['Decision'] -and [string]$payloadStop.Decision -eq 'Shallow' -and
         $Context.ContainsKey('DynamicTimeBudgetMs') -and $null -ne $payloadStop.ReducedDynamicBudgetMs) {
         $Context.DynamicTimeBudgetMs = [Math]::Min([int]$Context.DynamicTimeBudgetMs, [int]$payloadStop.ReducedDynamicBudgetMs)
-        $Context.DynamicDepthLimit = 1
+        if (-not ($Context.ContainsKey('ExplicitDynamicDepthLimit') -and [bool]$Context.ExplicitDynamicDepthLimit)) {
+            $Context.DynamicDepthLimit = 1
+        }
         $dynamicRecord.StopFeatures = @($payloadStop.Features)
         $dynamicRecord.StopFeatureSummary = $payloadStop.FeatureSummary
         $dynamicRecord.GateScore = $payloadStop.GateScore
@@ -12213,8 +12228,13 @@ function Invoke-CFGTraversal {
         [ValidateSet('Full', 'InitialOnly')]
         [string]$RuntimeSubgraphMode = 'Full',
         [ValidateSet('Shared', 'Isolated')]
-        [string]$ExecutionStateMode = 'Shared'
+        [string]$ExecutionStateMode = 'Shared',
+        [AllowNull()][Nullable[int]]$DynamicDepthLimit = $null
     )
+
+    if ($null -ne $DynamicDepthLimit -and [int]$DynamicDepthLimit -lt 0) {
+        throw "DynamicDepthLimit must be greater than or equal to 0."
+    }
 
     Initialize-ExecutionLogFile -LogPath $LogPath
 
@@ -12235,7 +12255,9 @@ function Invoke-CFGTraversal {
         SafeMode            = $SafeMode
         PreExecutionGateMode = 'Balanced'
         PreExecutionGateCache = @{}
-        DynamicDepthLimit    = $null
+        DynamicDepthLimit    = if ($null -ne $DynamicDepthLimit) { [int]$DynamicDepthLimit } else { $null }
+        ExplicitDynamicDepthLimit = ($null -ne $DynamicDepthLimit)
+        DynamicDepthLimitStopCount = 0
         TotalVisits         = 0
         StopReason          = $null
         LastConditionResult = $true
@@ -12356,6 +12378,7 @@ function Invoke-CFGTraversal {
     }
     Write-ExecutionLog -Context $context -Message "SafeMode: $SafeMode"
     Write-ExecutionLog -Context $context -Message "RuntimeSubgraphMode: $RuntimeSubgraphMode"
+    Write-ExecutionLog -Context $context -Message "DynamicDepthLimit: $(if ($null -ne $context.DynamicDepthLimit) { $context.DynamicDepthLimit } else { 'Unlimited' })"
     Write-ExecutionLog -Context $context -Message "ExecutionStateMode: $ExecutionStateMode"
     Write-ExecutionLog -Context $context -Message ""
 
@@ -12381,6 +12404,7 @@ function Invoke-CFGTraversal {
         Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
         Write-ExecutionLog -Context $context -Message "Runtime subgraphs: $($context.RuntimeSubgraphs.Count)"
         Write-ExecutionLog -Context $context -Message "Runtime expansion disabled: $($context.RuntimeExpansionDisabledCount)"
+        Write-ExecutionLog -Context $context -Message "Dynamic depth-limit stops: $($context.DynamicDepthLimitStopCount)"
         $nodeScopedRunspaceResetCount = if ($context.ExecContext -and $context.ExecContext.ContainsKey('NodeScopedRunspaceResetCount')) {
             [int]$context.ExecContext.NodeScopedRunspaceResetCount
         } else {
@@ -12413,8 +12437,13 @@ function New-CFGExecutionSession {
         [ValidateSet('Full', 'InitialOnly')]
         [string]$RuntimeSubgraphMode = 'Full',
         [ValidateSet('Shared', 'Isolated')]
-        [string]$ExecutionStateMode = 'Shared'
+        [string]$ExecutionStateMode = 'Shared',
+        [AllowNull()][Nullable[int]]$DynamicDepthLimit = $null
     )
+
+    if ($null -ne $DynamicDepthLimit -and [int]$DynamicDepthLimit -lt 0) {
+        throw "DynamicDepthLimit must be greater than or equal to 0."
+    }
 
     Initialize-ExecutionLogFile -LogPath $LogPath
 
@@ -12434,7 +12463,9 @@ function New-CFGExecutionSession {
         SafeMode            = $SafeMode
         PreExecutionGateMode = 'Balanced'
         PreExecutionGateCache = @{}
-        DynamicDepthLimit    = $null
+        DynamicDepthLimit    = if ($null -ne $DynamicDepthLimit) { [int]$DynamicDepthLimit } else { $null }
+        ExplicitDynamicDepthLimit = ($null -ne $DynamicDepthLimit)
+        DynamicDepthLimitStopCount = 0
         TotalVisits         = 0
         StopReason          = $null
         LastConditionResult = $true
@@ -12555,6 +12586,7 @@ function New-CFGExecutionSession {
     }
     Write-ExecutionLog -Context $context -Message "SafeMode: $SafeMode"
     Write-ExecutionLog -Context $context -Message "RuntimeSubgraphMode: $RuntimeSubgraphMode"
+    Write-ExecutionLog -Context $context -Message "DynamicDepthLimit: $(if ($null -ne $context.DynamicDepthLimit) { $context.DynamicDepthLimit } else { 'Unlimited' })"
     Write-ExecutionLog -Context $context -Message "ExecutionStateMode: $ExecutionStateMode"
     Write-ExecutionLog -Context $context -Message ""
     Write-ExecutionLog -Context $context -Message "=== 初始化子图映射 ==="
@@ -12645,6 +12677,7 @@ function Write-CFGExecutionSummary {
     Write-ExecutionLog -Context $context -Message "Unique nodes: $($context.VisitedNodes.Count)"
     Write-ExecutionLog -Context $context -Message "Runtime subgraphs: $($context.RuntimeSubgraphs.Count)"
     Write-ExecutionLog -Context $context -Message "Runtime expansion disabled: $($context.RuntimeExpansionDisabledCount)"
+    Write-ExecutionLog -Context $context -Message "Dynamic depth-limit stops: $($context.DynamicDepthLimitStopCount)"
     if ($Session.StopReason) {
         Write-ExecutionLog -Context $context -Message "StopReason: $($Session.StopReason)"
     }
