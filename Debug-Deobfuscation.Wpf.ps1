@@ -1550,6 +1550,27 @@ function Resolve-KnownScriptBlockTargetName {
         }
     }
 
+    if ($Context.ExecContext -and $Context.ExecContext.Runspace) {
+        $actualName = if ($Context.ScopeStack) {
+            Resolve-CFGVariableStackActualName -Context $Context -VariableName $varName
+        } else {
+            $varName
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$actualName)) {
+            $runtimeValue = try {
+                Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualName
+            } catch {
+                $null
+            }
+            $runtimeBlockName = Resolve-RuntimeScriptBlockSubgraphName -Context $Context -Value $runtimeValue
+            if (-not [string]::IsNullOrWhiteSpace([string]$runtimeBlockName)) {
+                if (-not $Context.VarToBlockMapping) { $Context.VarToBlockMapping = @{} }
+                $Context.VarToBlockMapping[$varName] = $runtimeBlockName
+                return $runtimeBlockName
+            }
+        }
+    }
+
     return $null
 }
 

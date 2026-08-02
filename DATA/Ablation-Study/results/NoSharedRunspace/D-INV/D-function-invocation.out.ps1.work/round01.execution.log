@@ -1,0 +1,119 @@
+[01:10:54.028] === CFG 执行开始 ===
+[01:10:54.034] Host: Core 7.5.8 [pwsh]
+[01:10:54.035] HostExe: C:\Program Files\PowerShell\7\pwsh.exe
+[01:10:54.035] MaxIterations: 1000, MaxTotalNodes: 50000
+[01:10:54.035] TimeBudget: Global=29998ms, Dynamic=5000ms
+[01:10:54.035] SafeMode: True
+[01:10:54.035] RuntimeSubgraphMode: Full
+[01:10:54.036] DynamicDepthLimit: Unlimited
+[01:10:54.036] ExecutionStateMode: Isolated
+[01:10:54.036] 
+[01:10:54.036] === 初始化子图映射 ===
+[01:10:54.040]   [INIT] Function subgraph: Emit-Url -> Node 6
+[01:10:54.041]   [INIT] Total functions: 1, ScriptBlocks: 0
+[01:10:54.085] 
+[01:10:54.115] --- Node 1 [Start] ---
+[01:10:54.115]   Code: Script Start
+[01:10:54.136]   Status: SKIP
+[01:10:54.155] --- Node 3 [MainStart] ---
+[01:10:54.155]   Code: Main Script
+[01:10:54.172]   Status: SKIP
+[01:10:54.177] --- Node 5 [FunctionDef] ---
+[01:10:54.177]   Code: function Emit-Url
+[01:10:54.180]   Status: SKIP
+[01:10:54.185] --- Node 11 [PipelineElement] ---
+[01:10:54.185]   Code: Emit-Url 'http' 'noise.local' '/stage' 'decoy.dat'
+[01:10:54.200]   [CALL] Function: Emit-Url (pipeline fallback)
+[01:10:54.322]   [ARGS] Arg[0]: 'http' = "http"
+[01:10:54.323]   [ARGS] Arg[1]: 'noise.local' = "noise.local"
+[01:10:54.323]   [ARGS] Arg[2]: '/stage' = "/stage"
+[01:10:54.323]   [ARGS] Arg[3]: 'decoy.dat' = "decoy.dat"
+[01:10:54.333]   [SCOPE] Push: Function 'Emit-Url' (prefix=_sc_4a086185_, returnTo=12, endNode=7)
+[01:10:54.337]   [FUNC] Entering function 'Emit-Url' at Node 6
+[01:10:54.338]   Status: SKIP
+[01:10:54.338]   Action: CallFunction
+[01:10:54.338]   Target: Emit-Url
+[01:10:54.340]   [JUMP] Jumping to Node 6
+[01:10:54.343] --- Node 6 [FuncStart] ---
+[01:10:54.343]   Code: function Emit-Url
+[01:10:54.345]   Status: SKIP
+[01:10:54.349] --- Node 8 [FuncParams] ---
+[01:10:54.349]   Code: param( [string]$Scheme, [string]$Domain, [string]$Path, [string]$File )
+[01:10:54.359]   [BIND] $_sc_4a086185_Scheme = "http"
+[01:10:54.360]   [BIND] $_sc_4a086185_Domain = "noise.local"
+[01:10:54.360]   [BIND] $_sc_4a086185_Path = "/stage"
+[01:10:54.360]   [BIND] $_sc_4a086185_File = "decoy.dat"
+[01:10:54.371]   Status: SKIP
+[01:10:54.375] --- Node 9 [AssignmentStatementAst] ---
+[01:10:54.375]   Code: $url = $Scheme + '://' + $Domain + $Path + '/' + $File
+[01:10:54.683]   Status: OK
+[01:10:54.683]   VarsRead:
+[01:10:54.685]     $File = $null
+[01:10:54.685]     $Domain = $null
+[01:10:54.685]     $Path = $null
+[01:10:54.685]     $Scheme = $null
+[01:10:54.685]   VarsWritten:
+[01:10:54.686]     $url = ":///"
+[01:10:54.690] --- Node 10 [PipelineElement] ---
+[01:10:54.690]   Code: Write-Host $url
+[01:10:54.759]   Status: OK
+[01:10:54.759]   VarsRead:
+[01:10:54.760]     $url = $null
+[01:10:54.785] --- Node 7 [FuncEnd] ---
+[01:10:54.785]   Code: End function Emit-Url
+[01:10:54.791]   [SCOPE] Pop: Function 'Emit-Url' (returnTo=12)
+[01:10:54.793]   [RETURN] Returning from Function 'Emit-Url' to Node 12
+[01:10:54.797] --- Node 12 [PipelineElement] ---
+[01:10:54.797]   Code: Emit-Url ('ht' + 'tps') ('example' + '.org') ('/api' + '/v1') ('update' + '.bin')
+[01:10:54.799]   [CALL] Function: Emit-Url (pipeline fallback)
+[01:10:54.817]   [ARGS] Arg[0]: ('ht' + 'tps') = "https"
+[01:10:54.817]   [ARGS] Arg[1]: ('example' + '.org') = "example.org"
+[01:10:54.817]   [ARGS] Arg[2]: ('/api' + '/v1') = "/api/v1"
+[01:10:54.817]   [ARGS] Arg[3]: ('update' + '.bin') = "update.bin"
+[01:10:54.819]   [SCOPE] Push: Function 'Emit-Url' (prefix=_sc_470628a5_, returnTo=4, endNode=7)
+[01:10:54.819]   [FUNC] Entering function 'Emit-Url' at Node 6
+[01:10:54.819]   Status: SKIP
+[01:10:54.819]   Action: CallFunction
+[01:10:54.819]   Target: Emit-Url
+[01:10:54.820]   [JUMP] Jumping to Node 6
+[01:10:54.823] --- Node 6 [FuncStart] ---
+[01:10:54.823]   Code: function Emit-Url
+[01:10:54.825]   Status: SKIP
+[01:10:54.829] --- Node 8 [FuncParams] ---
+[01:10:54.829]   Code: param( [string]$Scheme, [string]$Domain, [string]$Path, [string]$File )
+[01:10:54.831]   [BIND] $_sc_470628a5_Scheme = "https"
+[01:10:54.831]   [BIND] $_sc_470628a5_Domain = "example.org"
+[01:10:54.832]   [BIND] $_sc_470628a5_Path = "/api/v1"
+[01:10:54.832]   [BIND] $_sc_470628a5_File = "update.bin"
+[01:10:54.835]   Status: SKIP
+[01:10:54.842] --- Node 9 [AssignmentStatementAst] ---
+[01:10:54.843]   Code: $url = $Scheme + '://' + $Domain + $Path + '/' + $File
+[01:10:55.037]   Status: OK
+[01:10:55.037]   VarsRead:
+[01:10:55.038]     $File = $null
+[01:10:55.039]     $Domain = $null
+[01:10:55.039]     $Path = $null
+[01:10:55.039]     $Scheme = $null
+[01:10:55.039]   VarsWritten:
+[01:10:55.039]     $url = ":///"
+[01:10:55.052] --- Node 10 [PipelineElement] ---
+[01:10:55.052]   Code: Write-Host $url
+[01:10:55.100]   Status: OK
+[01:10:55.100]   VarsRead:
+[01:10:55.101]     $url = $null
+[01:10:55.106] --- Node 7 [FuncEnd] ---
+[01:10:55.106]   Code: End function Emit-Url
+[01:10:55.107]   [SCOPE] Pop: Function 'Emit-Url' (returnTo=4)
+[01:10:55.107]   [RETURN] Returning from Function 'Emit-Url' to Node 4
+[01:10:55.110] --- Node 4 [MainEnd] ---
+[01:10:55.110]   Code: End Main Script
+[01:10:55.113]   Status: SKIP
+[01:10:55.114] === 执行结束 ===
+[01:10:55.114] 
+[01:10:55.114] === 执行统计 ===
+[01:10:55.115] Total visits: 14
+[01:10:55.116] Unique nodes: 10
+[01:10:55.116] Runtime subgraphs: 0
+[01:10:55.117] Runtime expansion disabled: 0
+[01:10:55.117] Dynamic depth-limit stops: 0
+[01:10:55.118] Node-scoped runspace resets: 16

@@ -1,0 +1,122 @@
+[01:10:01.574] === CFG 执行开始 ===
+[01:10:01.574] Host: Core 7.5.8 [pwsh]
+[01:10:01.574] HostExe: C:\Program Files\PowerShell\7\pwsh.exe
+[01:10:01.574] MaxIterations: 1000, MaxTotalNodes: 50000
+[01:10:01.574] SafeMode: True
+[01:10:01.574] RuntimeSubgraphMode: Full
+[01:10:01.575] DynamicDepthLimit: Unlimited
+[01:10:01.575] ExecutionStateMode: Shared
+[01:10:01.575] 
+[01:10:01.575] === 初始化子图映射 ===
+[01:10:01.575]   [INIT] ScriptBlock variable: $runner
+[01:10:01.575]   [INIT] ScriptBlock subgraph: runner -> Node 5
+[01:10:01.576]   [INIT] ScriptBlock variable: $_block_eaf16376
+[01:10:01.576]   [INIT] ScriptBlock subgraph: _block_eaf16376 -> Node 11
+[01:10:01.576]   [INIT] ScriptBlock variable: $_block_1ec4d4a8
+[01:10:01.577]   [INIT] ScriptBlock subgraph: _block_1ec4d4a8 -> Node 17
+[01:10:01.577]   [INIT] Total functions: 0, ScriptBlocks: 3
+[01:10:01.584] 
+[01:10:01.585] --- Node 1 [Start] ---
+[01:10:01.585]   Code: Script Start
+[01:10:01.586]   Status: SKIP
+[01:10:01.589] --- Node 3 [MainStart] ---
+[01:10:01.589]   Code: Main Script
+[01:10:01.590]   Status: SKIP
+[01:10:01.591] --- Node 10 [AssignmentStatementAst] ---
+[01:10:01.592]   Code: $runner = {
+    param(
+        [string]$Scheme,
+        [string]$Domain,
+        [string]$Path,
+        [string]$File
+    )
+
+    $url = $Scheme + '://' + $Domain + $Path + '/' + $File
+    Write-Host $url
+}
+[01:10:01.616]   [MAPPING] $runner -> runner
+[01:10:01.617]   Status: OK
+[01:10:01.617]   VarsWritten:
+[01:10:01.619]     $runner = [ScriptBlock] \n    param(\n        [string]$Scheme,\n        [string]$Domain,\n        [string]$Path,\n        [string]$File\n    ...
+[01:10:01.621] --- Node 16 [PipelineElement] ---
+[01:10:01.621]   Code: & $_block_eaf16376 'http' 'noise.local' '/stage' 'decoy.dat'
+[01:10:01.624]   [CALL] ScriptBlock: _block_eaf16376 (via Ampersand detection)
+[01:10:01.642]   [ARGS] Arg[0]: (text-parsed) = "http"
+[01:10:01.643]   [ARGS] Arg[1]: (text-parsed) = "noise.local"
+[01:10:01.643]   [ARGS] Arg[2]: (text-parsed) = "/stage"
+[01:10:01.643]   [ARGS] Arg[3]: (text-parsed) = "decoy.dat"
+[01:10:01.645]   [SCOPE] Push: ScriptBlock '_block_eaf16376' (prefix=_sc_a9bd5fcd_, returnTo=22, endNode=12)
+[01:10:01.645]   [BLOCK] Entering ScriptBlock '_block_eaf16376' at Node 11
+[01:10:01.646]   Status: SKIP
+[01:10:01.646]   Action: CallScriptBlock
+[01:10:01.646]   Target: _block_eaf16376
+[01:10:01.646]   [JUMP] Jumping to Node 11
+[01:10:01.647] --- Node 11 [BlockStart] ---
+[01:10:01.647]   Code: ScriptBlock _block_eaf16376
+[01:10:01.648]   Status: SKIP
+[01:10:01.649] --- Node 13 [BlockParams] ---
+[01:10:01.650]   Code: param( [string]$Scheme, [string]$Domain, [string]$Path, [string]$File )
+[01:10:01.653]   [BIND] $_sc_a9bd5fcd_Scheme = "http"
+[01:10:01.653]   [BIND] $_sc_a9bd5fcd_Domain = "noise.local"
+[01:10:01.654]   [BIND] $_sc_a9bd5fcd_Path = "/stage"
+[01:10:01.654]   [BIND] $_sc_a9bd5fcd_File = "decoy.dat"
+[01:10:01.655]   Status: SKIP
+[01:10:01.657] --- Node 14 [AssignmentStatementAst] ---
+[01:10:01.657]   Code: $url = ([string]'http') + '://' + ([string]'noise.local') + ([string]'/stage') + '/' + ([string]'decoy.dat')
+[01:10:01.821]   Status: OK
+[01:10:01.822]   VarsWritten:
+[01:10:01.822]     $url = "http://noise.local/stage/decoy.dat"
+[01:10:01.826] --- Node 15 [PipelineElement] ---
+[01:10:01.826]   Code: Write-Host ([string]'http://noise.local/stage/decoy.dat')
+[01:10:01.858]   Status: OK
+[01:10:01.860] --- Node 12 [BlockEnd] ---
+[01:10:01.860]   Code: End ScriptBlock _block_eaf16376
+[01:10:01.860]   [SCOPE] Pop: ScriptBlock '_block_eaf16376' (returnTo=22)
+[01:10:01.861]   [RETURN] Returning from ScriptBlock '_block_eaf16376' to Node 22
+[01:10:01.861] --- Node 22 [PipelineElement] ---
+[01:10:01.861]   Code: & $_block_1ec4d4a8 (https) (example.org) (/api/v1) (update.bin)
+[01:10:01.863]   [CALL] ScriptBlock: _block_1ec4d4a8 (via Ampersand detection)
+[01:10:02.043]   [ARGS] Arg[0]: (text-parsed) = $null
+[01:10:02.044]   [ARGS] Arg[1]: (text-parsed) = $null
+[01:10:02.044]   [ARGS] Arg[2]: (text-parsed) = $null
+[01:10:02.044]   [ARGS] Arg[3]: (text-parsed) = $null
+[01:10:02.045]   [SCOPE] Push: ScriptBlock '_block_1ec4d4a8' (prefix=_sc_e8ad36dd_, returnTo=4, endNode=18)
+[01:10:02.045]   [BLOCK] Entering ScriptBlock '_block_1ec4d4a8' at Node 17
+[01:10:02.046]   Status: SKIP
+[01:10:02.046]   Action: CallScriptBlock
+[01:10:02.046]   Target: _block_1ec4d4a8
+[01:10:02.047]   [JUMP] Jumping to Node 17
+[01:10:02.047] --- Node 17 [BlockStart] ---
+[01:10:02.047]   Code: ScriptBlock _block_1ec4d4a8
+[01:10:02.048]   Status: SKIP
+[01:10:02.050] --- Node 19 [BlockParams] ---
+[01:10:02.050]   Code: param( [string]$Scheme, [string]$Domain, [string]$Path, [string]$File )
+[01:10:02.052]   [BIND] $_sc_e8ad36dd_Scheme = $null
+[01:10:02.052]   [BIND] $_sc_e8ad36dd_Domain = $null
+[01:10:02.052]   [BIND] $_sc_e8ad36dd_Path = $null
+[01:10:02.053]   [BIND] $_sc_e8ad36dd_File = $null
+[01:10:02.055]   Status: SKIP
+[01:10:02.056] --- Node 20 [AssignmentStatementAst] ---
+[01:10:02.056]   Code: $url = ([string]'https') + '://' + ([string]'example.org') + ([string]'/api/v1') + '/' + ([string]'update.bin')
+[01:10:02.199]   Status: OK
+[01:10:02.200]   VarsWritten:
+[01:10:02.200]     $url = "https://example.org/api/v1/update.bin"
+[01:10:02.203] --- Node 21 [PipelineElement] ---
+[01:10:02.203]   Code: Write-Host ([string]'https://example.org/api/v1/update.bin')
+[01:10:02.242]   Status: OK
+[01:10:02.244] --- Node 18 [BlockEnd] ---
+[01:10:02.244]   Code: End ScriptBlock _block_1ec4d4a8
+[01:10:02.245]   [SCOPE] Pop: ScriptBlock '_block_1ec4d4a8' (returnTo=4)
+[01:10:02.245]   [RETURN] Returning from ScriptBlock '_block_1ec4d4a8' to Node 4
+[01:10:02.247] --- Node 4 [MainEnd] ---
+[01:10:02.247]   Code: End Main Script
+[01:10:02.248]   Status: SKIP
+[01:10:02.250] === 执行结束 ===
+[01:10:02.250] 
+[01:10:02.250] === 执行统计 ===
+[01:10:02.250] Total visits: 14
+[01:10:02.250] Unique nodes: 14
+[01:10:02.250] Runtime subgraphs: 0
+[01:10:02.251] Runtime expansion disabled: 0
+[01:10:02.251] Dynamic depth-limit stops: 0
+[01:10:02.251] Node-scoped runspace resets: 0

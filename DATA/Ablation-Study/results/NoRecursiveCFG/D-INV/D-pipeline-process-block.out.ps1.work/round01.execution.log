@@ -1,0 +1,179 @@
+[01:10:38.776] === CFG 执行开始 ===
+[01:10:38.782] Host: Core 7.5.8 [pwsh]
+[01:10:38.782] HostExe: C:\Program Files\PowerShell\7\pwsh.exe
+[01:10:38.783] MaxIterations: 1000, MaxTotalNodes: 50000
+[01:10:38.783] TimeBudget: Global=29997ms, Dynamic=5000ms
+[01:10:38.783] SafeMode: True
+[01:10:38.783] RuntimeSubgraphMode: Full
+[01:10:38.784] DynamicDepthLimit: 1
+[01:10:38.784] ExecutionStateMode: Shared
+[01:10:38.784] 
+[01:10:38.784] === 初始化子图映射 ===
+[01:10:38.787]   [INIT] Total functions: 0, ScriptBlocks: 0
+[01:10:38.801] 
+[01:10:38.822] --- Node 1 [Start] ---
+[01:10:38.822]   Code: Script Start
+[01:10:38.835]   Status: SKIP
+[01:10:38.864] --- Node 3 [MainStart] ---
+[01:10:38.864]   Code: Main Script
+[01:10:38.864]   Status: SKIP
+[01:10:38.865] --- Node 5 [AssignmentStatementAst] ---
+[01:10:38.865]   Code: $pairs = @(
+    [pscustomobject]@{
+        Scheme = 'http'
+        Domain = 'noise.local'
+        Path = '/stage'
+        File = 'decoy.dat'
+    }
+    [pscustomobject]@{
+        Scheme = ('ht' + 'tps')
+        Domain = ('example' + '.org')
+        Path = ('/api' + '/v1')
+        File = ('update' + '.bin')
+    }
+)
+[01:10:39.114]   Status: OK
+[01:10:39.115]   VarsWritten:
+[01:10:39.138]     $pairs = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.140] --- Node 6 [PipelineElement] ---
+[01:10:39.140]   Code: $pairs
+[01:10:39.156]   Status: OK
+[01:10:39.156]   VarsRead:
+[01:10:39.157]     $pairs = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.157]   VarsWritten:
+[01:10:39.158]     $_pipe_f844dfe9 = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.159]   Result: [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.160] --- Node 7 [ProcessInit] ---
+[01:10:39.161]   Code: $__pfo_in_bb918058d0ef = $_pipe_f844dfe9; $__pfo_bb918058d0ef_idx = 0; $__pfo_bb918058d0ef_out = @()
+[01:10:39.191]   Status: OK
+[01:10:39.191]   VarsRead:
+[01:10:39.192]     $_pipe_f844dfe9 = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.192]   VarsWritten:
+[01:10:39.192]     $__pfo_in_bb918058d0ef = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.192]     $__pfo_bb918058d0ef_out = [Object[]] Count=0 @()
+[01:10:39.192]     $__pfo_bb918058d0ef_idx = 0
+[01:10:39.194] --- Node 9 [ProcessCondition] ---
+[01:10:39.194]   Code: [bool]($__pfo_bb918058d0ef_idx -lt $__pfo_in_bb918058d0ef.Count)
+[01:10:39.359]   Status: OK
+[01:10:39.359]   VarsRead:
+[01:10:39.359]     $__pfo_bb918058d0ef_idx = 0
+[01:10:39.360]     $__pfo_in_bb918058d0ef = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.361]   Result: True
+[01:10:39.362]   ConditionResult: True
+[01:10:39.368] --- Node 11 [ProcessBind] ---
+[01:10:39.368]   Code: $__pfo_bb918058d0ef_cur = $__pfo_in_bb918058d0ef[$__pfo_bb918058d0ef_idx]
+[01:10:39.416]   Status: OK
+[01:10:39.416]   VarsRead:
+[01:10:39.417]     $__pfo_bb918058d0ef_idx = 0
+[01:10:39.417]     $__pfo_in_bb918058d0ef = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.417]   VarsWritten:
+[01:10:39.418]     $__pfo_bb918058d0ef_cur = [PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}
+[01:10:39.438] --- Node 12 [OutputCaptureStart] ---
+[01:10:39.438]   Code: Capture Process Output
+[01:10:39.440]   Status: OK
+[01:10:39.440]   Action: CaptureStart
+[01:10:39.441] --- Node 16 [AssignmentStatementAst] ---
+[01:10:39.441]   Code: $url = $__pfo_bb918058d0ef_cur.Scheme + '://' + $__pfo_bb918058d0ef_cur.Domain + $__pfo_bb918058d0ef_cur.Path + '/' + $__pfo_bb918058d0ef_cur.File
+[01:10:39.744]   Status: OK
+[01:10:39.744]   VarsRead:
+[01:10:39.745]     $__pfo_bb918058d0ef_cur = [PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}
+[01:10:39.745]   VarsWritten:
+[01:10:39.745]     $url = "http://noise.local/stage/decoy.dat"
+[01:10:39.747] --- Node 17 [PipelineElement] ---
+[01:10:39.747]   Code: Write-Host $url
+[01:10:39.796]   Status: OK
+[01:10:39.797]   VarsRead:
+[01:10:39.798]     $url = "http://noise.local/stage/decoy.dat"
+[01:10:39.801] --- Node 13 [OutputCaptureEnd] ---
+[01:10:39.801]   Code: Append Process Output
+[01:10:39.806]   Status: OK
+[01:10:39.806]   Action: CaptureEnd
+[01:10:39.807]   VarsWritten:
+[01:10:39.807]     $__pfo_bb918058d0ef_out = [Object[]] Count=0 @()
+[01:10:39.809] --- Node 18 [ProcessIter] ---
+[01:10:39.809]   Code: $__pfo_bb918058d0ef_idx++
+[01:10:39.830]   Status: OK
+[01:10:39.830]   VarsRead:
+[01:10:39.830]     $__pfo_bb918058d0ef_idx = 0
+[01:10:39.830]   VarsWritten:
+[01:10:39.830]     $__pfo_bb918058d0ef_idx = 1
+[01:10:39.837] --- Node 9 [ProcessCondition] ---
+[01:10:39.837]   Code: [bool]($__pfo_bb918058d0ef_idx -lt $__pfo_in_bb918058d0ef.Count)
+[01:10:39.879]   Status: OK
+[01:10:39.879]   VarsRead:
+[01:10:39.879]     $__pfo_bb918058d0ef_idx = 1
+[01:10:39.880]     $__pfo_in_bb918058d0ef = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.881]   Result: True
+[01:10:39.881]   ConditionResult: True
+[01:10:39.883] --- Node 11 [ProcessBind] ---
+[01:10:39.883]   Code: $__pfo_bb918058d0ef_cur = $__pfo_in_bb918058d0ef[$__pfo_bb918058d0ef_idx]
+[01:10:39.897]   Status: OK
+[01:10:39.897]   VarsRead:
+[01:10:39.898]     $__pfo_bb918058d0ef_idx = 1
+[01:10:39.898]     $__pfo_in_bb918058d0ef = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:39.904]   VarsWritten:
+[01:10:39.905]     $__pfo_bb918058d0ef_cur = [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin}
+[01:10:39.910] --- Node 12 [OutputCaptureStart] ---
+[01:10:39.911]   Code: Capture Process Output
+[01:10:39.911]   Status: OK
+[01:10:39.911]   Action: CaptureStart
+[01:10:39.913] --- Node 16 [AssignmentStatementAst] ---
+[01:10:39.913]   Code: $url = $__pfo_bb918058d0ef_cur.Scheme + '://' + $__pfo_bb918058d0ef_cur.Domain + $__pfo_bb918058d0ef_cur.Path + '/' + $__pfo_bb918058d0ef_cur.File
+[01:10:39.983]   Status: OK
+[01:10:39.983]   VarsRead:
+[01:10:39.983]     $__pfo_bb918058d0ef_cur = [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin}
+[01:10:39.983]   VarsWritten:
+[01:10:39.984]     $url = "https://example.org/api/v1/update.bin"
+[01:10:39.985] --- Node 17 [PipelineElement] ---
+[01:10:39.985]   Code: Write-Host $url
+[01:10:39.997]   Status: OK
+[01:10:39.997]   VarsRead:
+[01:10:39.997]     $url = "https://example.org/api/v1/update.bin"
+[01:10:39.999] --- Node 13 [OutputCaptureEnd] ---
+[01:10:39.999]   Code: Append Process Output
+[01:10:40.001]   Status: OK
+[01:10:40.001]   Action: CaptureEnd
+[01:10:40.001]   VarsWritten:
+[01:10:40.002]     $__pfo_bb918058d0ef_out = [Object[]] Count=0 @()
+[01:10:40.015] --- Node 18 [ProcessIter] ---
+[01:10:40.016]   Code: $__pfo_bb918058d0ef_idx++
+[01:10:40.025]   Status: OK
+[01:10:40.025]   VarsRead:
+[01:10:40.026]     $__pfo_bb918058d0ef_idx = 1
+[01:10:40.026]   VarsWritten:
+[01:10:40.026]     $__pfo_bb918058d0ef_idx = 2
+[01:10:40.028] --- Node 9 [ProcessCondition] ---
+[01:10:40.028]   Code: [bool]($__pfo_bb918058d0ef_idx -lt $__pfo_in_bb918058d0ef.Count)
+[01:10:40.071]   Status: OK
+[01:10:40.071]   VarsRead:
+[01:10:40.071]     $__pfo_bb918058d0ef_idx = 2
+[01:10:40.072]     $__pfo_in_bb918058d0ef = [Object[]] Count=2 @([PSCustomObject] @{Scheme=http; Domain=noise.local; Path=/stage; File=decoy.dat}, [PSCustomObject] @{Scheme=https; Domain=example.org; Path=/api/v1; File=update.bin})
+[01:10:40.072]   Result: False
+[01:10:40.072]   ConditionResult: False
+[01:10:40.075] --- Node 10 [ProcessEnd] ---
+[01:10:40.075]   Code: End ForEach-Object Process
+[01:10:40.076]   Status: SKIP
+[01:10:40.077] --- Node 19 [AssignmentStatementAst] ---
+[01:10:40.077]   Code: $_pipe_f844dfe9 = $__pfo_bb918058d0ef_out
+[01:10:40.096]   Status: OK
+[01:10:40.096]   VarsRead:
+[01:10:40.097]     $__pfo_bb918058d0ef_out = [Object[]] Count=0 @()
+[01:10:40.097]   VarsWritten:
+[01:10:40.097]     $_pipe_f844dfe9 = [Object[]] Count=0 @()
+[01:10:40.098] --- Node 20 [PipelineElement] ---
+[01:10:40.098]   Code: $_pipe_f844dfe9
+[01:10:40.120]   Status: OK
+[01:10:40.120]   VarsRead:
+[01:10:40.121]     $_pipe_f844dfe9 = [Object[]] Count=0 @()
+[01:10:40.122] --- Node 4 [MainEnd] ---
+[01:10:40.122]   Code: End Main Script
+[01:10:40.123]   Status: SKIP
+[01:10:40.125] === 执行结束 ===
+[01:10:40.125] 
+[01:10:40.125] === 执行统计 ===
+[01:10:40.126] Total visits: 24
+[01:10:40.127] Unique nodes: 16
+[01:10:40.128] Runtime subgraphs: 0
+[01:10:40.129] Runtime expansion disabled: 0
+[01:10:40.129] Dynamic depth-limit stops: 0
+[01:10:40.130] Node-scoped runspace resets: 0

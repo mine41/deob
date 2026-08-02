@@ -1,0 +1,48 @@
+[01:09:55.217] === CFG 执行开始 ===
+[01:09:55.218] Host: Core 7.5.8 [pwsh]
+[01:09:55.218] HostExe: C:\Program Files\PowerShell\7\pwsh.exe
+[01:09:55.218] MaxIterations: 1000, MaxTotalNodes: 50000
+[01:09:55.218] SafeMode: True
+[01:09:55.218] RuntimeSubgraphMode: Full
+[01:09:55.219] DynamicDepthLimit: Unlimited
+[01:09:55.219] ExecutionStateMode: Shared
+[01:09:55.219] 
+[01:09:55.219] === 初始化子图映射 ===
+[01:09:55.219]   [INIT] Function subgraph: Emit-Url -> Node 6
+[01:09:55.225]   [INIT] ScriptBlock variable: $_block_0417c173
+[01:09:55.225]   [INIT] ScriptBlock subgraph: _block_0417c173 -> Node 11
+[01:09:55.226]   [INIT] ScriptBlock variable: $_block_252da76e
+[01:09:55.226]   [INIT] ScriptBlock subgraph: _block_252da76e -> Node 17
+[01:09:55.226]   [INIT] Total functions: 1, ScriptBlocks: 2
+[01:09:55.228] 
+[01:09:55.229] --- Node 1 [Start] ---
+[01:09:55.229]   Code: Script Start
+[01:09:55.230]   Status: SKIP
+[01:09:55.233] --- Node 3 [MainStart] ---
+[01:09:55.233]   Code: Main Script
+[01:09:55.234]   Status: SKIP
+[01:09:55.237] --- Node 5 [FunctionDef] ---
+[01:09:55.237]   Code: function Emit-Url
+[01:09:55.238]   Status: SKIP
+[01:09:55.240] --- Node 16 [PipelineElement] ---
+[01:09:55.240]   Code: (& $_block_0417c173 'http' 'noise.local' '/stage' 'decoy.dat')
+[01:09:55.348]   Status: OK
+[01:09:55.348]   VarsRead:
+[01:09:55.352]     $_block_0417c173 = [ScriptBlock] \n    param(\n        [string]$Scheme,\n        [string]$Domain,\n        [string]$Path,\n        [string]$File\n    ...
+[01:09:55.354] --- Node 22 [PipelineElement] ---
+[01:09:55.354]   Code: (& $_block_252da76e ([string]'https') ([string]'example.org') ([string]'/api/v1') ([string]'update.bin'))
+[01:09:55.484]   Status: OK
+[01:09:55.485]   VarsRead:
+[01:09:55.485]     $_block_252da76e = [ScriptBlock] \n    param(\n        [string]$Scheme,\n        [string]$Domain,\n        [string]$Path,\n        [string]$File\n    ...
+[01:09:55.487] --- Node 4 [MainEnd] ---
+[01:09:55.487]   Code: End Main Script
+[01:09:55.488]   Status: SKIP
+[01:09:55.489] === 执行结束 ===
+[01:09:55.489] 
+[01:09:55.490] === 执行统计 ===
+[01:09:55.490] Total visits: 6
+[01:09:55.490] Unique nodes: 6
+[01:09:55.490] Runtime subgraphs: 0
+[01:09:55.490] Runtime expansion disabled: 0
+[01:09:55.490] Dynamic depth-limit stops: 0
+[01:09:55.490] Node-scoped runspace resets: 0

@@ -1,0 +1,56 @@
+digraph G {
+    rankdir=TB;
+    node [
+        fontname="Consolas"
+        shape=box
+        width=0
+        height=0
+        margin="0.2,0.1"
+        fontsize=10
+    ];
+    edge [fontname="Arial", arrowhead=vee, fontsize=9];
+
+    // Nodes
+    1 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 1 | Start</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Script Start</FONT></B>>, shape=oval, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    2 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 2 | End</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Script End</FONT></B>>, shape=oval, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    3 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 3 | MainStart</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Main Script</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    4 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 4 | MainEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">End Main Script</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    5 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 5 | AssignmentStatementAst</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$pairs = @(    [pscustomobject]@{        Scheme = 'http'        Domain = 'noise.local'...</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 10</FONT>>, shape=box, style="filled,rounded", fillcolor="#fff3cc", color="#cc9900", penwidth=2];
+    6 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 6 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$pairs</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">PIPE OUT: $_pipe_31d318dc</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    7 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 7 | ProcessInit</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$__pfo_in_d9c7a491a1ba = $_pipe_31d318dc; $__pfo_d9c7a491a1ba_idx = 0;...</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    8 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 8 | LoopEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Break ForEach-Object</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    9 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 9 | ProcessCondition</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">[bool]($__pfo_d9c7a491a1ba_idx -lt $__pfo_in_d9c7a491a1ba.Count)</FONT></B>>, shape=diamond, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    10 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 10 | ProcessEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">End ForEach-Object Process</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    11 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 11 | ProcessBind</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$__pfo_d9c7a491a1ba_cur = $__pfo_in_d9c7a491a1ba[$__pfo_d9c7a491a1ba_idx]</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    12 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 12 | OutputCaptureStart</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Capture Process Output</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    13 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 13 | OutputCaptureEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Append Process Output</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    14 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 14 | OutputCaptureEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Append Process Output (Break)</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    15 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 15 | OutputCaptureEnd</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Append Process Output (Continue)</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    16 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 16 | AssignmentStatementAst</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$url = $__pfo_d9c7a491a1ba_cur.Scheme + '://' + $__pfo_d9c7a491a1ba_cur.Domain +...</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">RESOLVABLE: 9</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    17 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 17 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">Write-Host $url</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    18 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 18 | ProcessIter</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$__pfo_d9c7a491a1ba_idx++</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    19 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 19 | AssignmentStatementAst</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$_pipe_31d318dc = $__pfo_d9c7a491a1ba_out</FONT></B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10" COLOR="#333333">PIPE OUT: $_pipe_31d318dc</FONT>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+    20 [label=<<FONT POINT-SIZE="9" COLOR="#666666">Id 20 | PipelineElement</FONT><BR ALIGN="LEFT"/><B><FONT POINT-SIZE="16">$_pipe_31d318dc</FONT></B>>, shape=box, style="filled,rounded", fillcolor="#ffffff", color="#333333", penwidth=1];
+
+    // Edges
+    1 -> 3;
+    3 -> 5;
+    5 -> 6;
+    6 -> 7 [label="Pipeline"];
+    7 -> 9;
+    9 -> 10 [label="No more items"];
+    9 -> 11 [label="Has next"];
+    11 -> 12;
+    12 -> 16;
+    16 -> 17;
+    17 -> 13;
+    13 -> 18;
+    15 -> 18;
+    14 -> 8;
+    18 -> 9;
+    10 -> 19;
+    8 -> 19;
+    19 -> 20 [label="Pipeline"];
+    20 -> 4;
+    4 -> 2;
+}

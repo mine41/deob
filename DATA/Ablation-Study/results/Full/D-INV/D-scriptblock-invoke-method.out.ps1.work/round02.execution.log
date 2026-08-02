@@ -1,0 +1,64 @@
+[01:10:16.576] === CFG 执行开始 ===
+[01:10:16.577] Host: Core 7.5.8 [pwsh]
+[01:10:16.577] HostExe: C:\Program Files\PowerShell\7\pwsh.exe
+[01:10:16.577] MaxIterations: 1000, MaxTotalNodes: 50000
+[01:10:16.577] SafeMode: True
+[01:10:16.577] RuntimeSubgraphMode: Full
+[01:10:16.577] DynamicDepthLimit: Unlimited
+[01:10:16.577] ExecutionStateMode: Shared
+[01:10:16.578] 
+[01:10:16.578] === 初始化子图映射 ===
+[01:10:16.578]   [INIT] ScriptBlock variable: $runner
+[01:10:16.578]   [INIT] ScriptBlock subgraph: runner -> Node 5
+[01:10:16.579]   [INIT] ScriptBlock variable: $_block_14d2117a
+[01:10:16.579]   [INIT] ScriptBlock subgraph: _block_14d2117a -> Node 11
+[01:10:16.580]   [INIT] ScriptBlock variable: $_block_8d1cd059
+[01:10:16.580]   [INIT] ScriptBlock subgraph: _block_8d1cd059 -> Node 17
+[01:10:16.580]   [INIT] Total functions: 0, ScriptBlocks: 3
+[01:10:16.581] 
+[01:10:16.582] --- Node 1 [Start] ---
+[01:10:16.582]   Code: Script Start
+[01:10:16.583]   Status: SKIP
+[01:10:16.585] --- Node 3 [MainStart] ---
+[01:10:16.585]   Code: Main Script
+[01:10:16.586]   Status: SKIP
+[01:10:16.588] --- Node 10 [AssignmentStatementAst] ---
+[01:10:16.588]   Code: $runner = {
+    param(
+        [string]$Scheme,
+        [string]$Domain,
+        [string]$Path,
+        [string]$File
+    )
+
+    $url = $Scheme + '://' + $Domain + $Path + '/' + $File
+    Write-Host $url
+}
+[01:10:16.613]   [MAPPING] $runner -> runner
+[01:10:16.614]   Status: OK
+[01:10:16.614]   VarsWritten:
+[01:10:16.616]     $runner = [ScriptBlock] \n    param(\n        [string]$Scheme,\n        [string]$Domain,\n        [string]$Path,\n        [string]$File\n    ...
+[01:10:16.618] --- Node 16 [PipelineElement] ---
+[01:10:16.618]   Code: ($_block_14d2117a).Invoke('http', 'noise.local', '/stage', 'decoy.dat')
+[01:10:16.725]   Status: OK
+[01:10:16.725]   VarsRead:
+[01:10:16.725]     $_block_14d2117a = [ScriptBlock] \n    param(\n        [string]$Scheme,\n        [string]$Domain,\n        [string]$Path,\n        [string]$File\n    ...
+[01:10:16.727] --- Node 22 [PipelineElement] ---
+[01:10:16.727]   Code: ($_block_8d1cd059).Invoke((https), (example.org), (/api/v1), (update.bin))
+[01:10:17.098]   Status: ERR
+[01:10:17.098]   VarsRead:
+[01:10:17.098]     $_block_8d1cd059 = [ScriptBlock] \n    param(\n        [string]$Scheme,\n        [string]$Domain,\n        [string]$Path,\n        [string]$File\n    ...
+[01:10:17.098]   Error: The term 'https' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+[01:10:17.100] --- Node 4 [MainEnd] ---
+[01:10:17.100]   Code: End Main Script
+[01:10:17.101]   Status: SKIP
+[01:10:17.103] === 执行结束 ===
+[01:10:17.103] 
+[01:10:17.103] === 执行统计 ===
+[01:10:17.103] Total visits: 6
+[01:10:17.103] Unique nodes: 6
+[01:10:17.103] Runtime subgraphs: 0
+[01:10:17.103] Runtime expansion disabled: 0
+[01:10:17.103] Dynamic depth-limit stops: 0
+[01:10:17.103] Node-scoped runspace resets: 0

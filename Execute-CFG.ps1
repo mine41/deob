@@ -1818,6 +1818,61 @@ function Resolve-AssignmentScriptBlockMapping {
     }
 }
 
+function Get-NormalizedScriptBlockBodyForMapping {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+
+    $normalized = $Text.Replace("`r`n", "`n").Replace("`r", "`n").Trim()
+    if ($normalized.StartsWith('{') -and $normalized.EndsWith('}')) {
+        $normalized = $normalized.Substring(1, $normalized.Length - 2).Trim()
+    }
+
+    return $normalized
+}
+
+function Resolve-RuntimeScriptBlockSubgraphName {
+    param(
+        [hashtable]$Context,
+        $Value,
+        [AllowNull()][string]$PreferredBlockName = $null
+    )
+
+    if ($null -eq $Context -or -not $Context.ScriptBlockSubgraphs -or $Context.ScriptBlockSubgraphs.Count -eq 0) {
+        return $null
+    }
+
+    $runtimeValue = Unwrap-SafePSBaseObject -Value $Value
+    if ($runtimeValue -isnot [System.Management.Automation.ScriptBlock]) {
+        return $null
+    }
+
+    $runtimeText = Get-NormalizedScriptBlockBodyForMapping -Text ([string]$runtimeValue.ToString())
+    if ([string]::IsNullOrWhiteSpace($runtimeText)) { return $null }
+
+    $matches = @()
+    foreach ($candidateName in @($Context.ScriptBlockSubgraphs.Keys)) {
+        $blockStartId = $Context.ScriptBlockSubgraphs[$candidateName]
+        $blockStartNode = Get-NodeById -CFG $Context.CFG -Id $blockStartId
+        if (-not $blockStartNode -or -not $blockStartNode.PSObject.Properties['ScriptBlockText']) { continue }
+
+        $candidateText = Get-NormalizedScriptBlockBodyForMapping -Text ([string]$blockStartNode.ScriptBlockText)
+        if (-not [string]::IsNullOrWhiteSpace($candidateText) -and
+            [string]::Equals($runtimeText, $candidateText, [System.StringComparison]::Ordinal)) {
+            $matches += [string]$candidateName
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredBlockName) -and $PreferredBlockName -in $matches) {
+        return $PreferredBlockName
+    }
+    if ($matches.Count -eq 1) {
+        return [string]$matches[0]
+    }
+
+    return $null
+}
+
 function Update-VariableScriptBlockMappingAfterNodeExecution {
     param(
         $Node,
@@ -1837,6 +1892,26 @@ function Update-VariableScriptBlockMappingAfterNodeExecution {
     if ($blockName) {
         $Context.VarToBlockMapping[$variableName] = $blockName
         Write-ExecutionLog -Context $Context -Message "  [MAPPING] `$$variableName -> $blockName"
+        return
+    }
+
+    $existingBlockName = if ($Context.VarToBlockMapping -and $Context.VarToBlockMapping.ContainsKey($variableName)) {
+        [string]$Context.VarToBlockMapping[$variableName]
+    } else {
+        $null
+    }
+    $actualName = Resolve-VariableExpressionActualName -VariableExpressionAst $Node.Ast.Left -Context $Context
+    $runtimeValue = if ([string]::IsNullOrWhiteSpace([string]$actualName)) {
+        $null
+    } else {
+        Get-VariableFromContext -ExecContext $Context.ExecContext -Name $actualName
+    }
+    $runtimeBlockName = Resolve-RuntimeScriptBlockSubgraphName -Context $Context -Value $runtimeValue -PreferredBlockName $existingBlockName
+    if (-not [string]::IsNullOrWhiteSpace([string]$runtimeBlockName)) {
+        $Context.VarToBlockMapping[$variableName] = $runtimeBlockName
+        $action = if ([string]::Equals($existingBlockName, $runtimeBlockName, [System.StringComparison]::Ordinal)) { 'Retained' } else { 'Remapped' }
+        $mappingMessage = "  [MAPPING] $action " + [char]36 + "$variableName -> $runtimeBlockName"
+        Write-ExecutionLog -Context $Context -Message $mappingMessage
         return
     }
 
@@ -1955,13 +2030,33 @@ function Add-CurrentScopeMetadataToRecord {
     if (-not $Record) { return $Record }
 
     $scopeInfo = Get-CurrentExecutionScopeMetadata -Context $Context
-    if (-not $scopeInfo) { return $Record }
+    if ($scopeInfo) {
+        foreach ($key in @($scopeInfo.Keys)) {
+            $Record[$key] = $scopeInfo[$key]
+        }
+    }
 
-    foreach ($key in @($scopeInfo.Keys)) {
-        $Record[$key] = $scopeInfo[$key]
+    $forEachInfo = Get-CurrentForEachObjectIterationMetadata -Context $Context
+    if ($forEachInfo) {
+        foreach ($key in @($forEachInfo.Keys)) {
+            if ($key -eq 'CurrentValue') { continue }
+            $Record[$key] = $forEachInfo[$key]
+        }
     }
 
     return $Record
+}
+
+function Get-CurrentForEachObjectIterationMetadata {
+    param([hashtable]$Context)
+
+    if (-not $Context -or -not $Context.ContainsKey('CurrentForEachObjectIteration')) {
+        return $null
+    }
+
+    $iteration = $Context.CurrentForEachObjectIteration
+    if (-not $iteration) { return $null }
+    return $iteration
 }
 
 function Get-ScopeAwareExecutionResultKey {
@@ -1970,12 +2065,142 @@ function Get-ScopeAwareExecutionResultKey {
         [hashtable]$Context
     )
 
+    $key = $BaseKey
     $scopeInfo = Get-CurrentExecutionScopeMetadata -Context $Context
     if ($scopeInfo -and -not [string]::IsNullOrWhiteSpace([string]$scopeInfo.ScopeInvocationId)) {
-        return "$BaseKey`:scope:$($scopeInfo.ScopeInvocationId)"
+        $key = "$key`:scope:$($scopeInfo.ScopeInvocationId)"
     }
 
-    return $BaseKey
+    $forEachInfo = Get-CurrentForEachObjectIterationMetadata -Context $Context
+    if ($forEachInfo -and -not [string]::IsNullOrWhiteSpace([string]$forEachInfo.ForEachObjectIterationKey)) {
+        $key = "$key`:pfo:$($forEachInfo.ForEachObjectIterationKey)"
+    }
+
+    return $key
+}
+
+function Get-EnclosingPipelineAstForCommandAst {
+    param([AllowNull()]$CommandAst)
+
+    $current = $CommandAst
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.Language.PipelineAst]) {
+            return $current
+        }
+        $current = $current.Parent
+    }
+
+    return $null
+}
+
+function Get-ForEachProcessMacroVariableMapForOwnerAst {
+    param(
+        [AllowNull()]$OwnerAst,
+        [hashtable]$Context
+    )
+
+    if (-not $OwnerAst -or -not $Context -or -not $Context.CFG -or -not $Context.CFG.Nodes) {
+        return $null
+    }
+
+    $initNode = @($Context.CFG.Nodes | Where-Object {
+            $_.Type -eq 'ProcessInit' -and $_.OwnerAst -eq $OwnerAst
+        } | Select-Object -First 1)
+
+    if ($initNode.Count -eq 0) { return $null }
+    return Get-ForEachProcessMacroVariableMap -Node $initNode[0] -Context $Context
+}
+
+function Clear-CurrentForEachObjectIterationIfNeeded {
+    param(
+        [AllowNull()]$Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Node -or -not $Context) { return }
+    if ($Node.Type -in @('ProcessInit', 'ProcessCondition', 'ProcessBind', 'ProcessIter', 'ProcessEnd')) {
+        $Context.CurrentForEachObjectIteration = $null
+    }
+}
+
+function Start-CurrentForEachObjectIterationFromProcessBind {
+    param(
+        [AllowNull()]$Node,
+        [hashtable]$Context
+    )
+
+    if (-not $Node -or -not $Context -or $Node.Type -ne 'ProcessBind') { return }
+    if ($Node.OwnerAst -isnot [System.Management.Automation.Language.CommandAst]) { return }
+
+    $varMap = Get-ForEachProcessMacroVariableMapForOwnerAst -OwnerAst $Node.OwnerAst -Context $Context
+    if (-not $varMap -or [string]::IsNullOrWhiteSpace([string]$varMap.CurrentVar) -or [string]::IsNullOrWhiteSpace([string]$varMap.IndexVar)) {
+        return
+    }
+
+    $currentValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name ([string]$varMap.CurrentVar)
+    $indexValue = Get-VariableFromContext -ExecContext $Context.ExecContext -Name ([string]$varMap.IndexVar)
+    if ($null -eq $indexValue) { return }
+
+    $iterationIndex = 0
+    try {
+        $iterationIndex = [int]$indexValue
+    } catch {
+        return
+    }
+
+    $inputValue = if (-not [string]::IsNullOrWhiteSpace([string]$varMap.InputVar)) {
+        Get-VariableFromContext -ExecContext $Context.ExecContext -Name ([string]$varMap.InputVar)
+    } else {
+        $null
+    }
+    $inputCount = @($inputValue).Count
+
+    $instanceId = $null
+    if ([string]$varMap.CurrentVar -match '^__pfo_([a-f0-9]+)_cur$') {
+        $instanceId = $Matches[1]
+    }
+    if ([string]::IsNullOrWhiteSpace($instanceId)) {
+        $instanceId = [guid]::NewGuid().ToString('N').Substring(0, 12)
+    }
+
+    $commandAst = $Node.OwnerAst
+    $pipelineAst = Get-EnclosingPipelineAstForCommandAst -CommandAst $commandAst
+    $pipelineStart = if ($pipelineAst -and $pipelineAst.Extent) { [int]$pipelineAst.Extent.StartOffset } else { $null }
+    $pipelineEnd = if ($pipelineAst -and $pipelineAst.Extent) { [int]$pipelineAst.Extent.EndOffset } else { $null }
+    $commandStart = if ($commandAst -and $commandAst.Extent) { [int]$commandAst.Extent.StartOffset } else { $null }
+    $commandEnd = if ($commandAst -and $commandAst.Extent) { [int]$commandAst.Extent.EndOffset } else { $null }
+
+    $iterationKey = "$instanceId`:$iterationIndex"
+    $record = [ordered]@{
+        ForEachObjectInstanceId          = $instanceId
+        ForEachObjectIterationKey        = $iterationKey
+        ForEachObjectIterationIndex      = $iterationIndex
+        ForEachObjectInputCount          = [int]$inputCount
+        ForEachObjectPipelineStartOffset = $pipelineStart
+        ForEachObjectPipelineEndOffset   = $pipelineEnd
+        ForEachObjectCommandStartOffset  = $commandStart
+        ForEachObjectCommandEndOffset    = $commandEnd
+        ForEachObjectCurrentVar          = [string]$varMap.CurrentVar
+        ForEachObjectInputVar            = [string]$varMap.InputVar
+        ForEachObjectIndexVar            = [string]$varMap.IndexVar
+        CurrentValue                     = $currentValue
+        CommandAst                       = $commandAst
+        PipelineAst                      = $pipelineAst
+    }
+
+    $Context.CurrentForEachObjectIteration = $record
+    if (-not $Context.ContainsKey('ForEachObjectProcessIterations') -or -not $Context.ForEachObjectProcessIterations) {
+        $Context.ForEachObjectProcessIterations = @()
+    }
+    if (-not $Context.ContainsKey('ForEachObjectProcessIterationMap') -or -not $Context.ForEachObjectProcessIterationMap) {
+        $Context.ForEachObjectProcessIterationMap = @{}
+    }
+
+    $mapKey = "$pipelineStart`:$pipelineEnd`:$iterationKey"
+    if (-not $Context.ForEachObjectProcessIterationMap.ContainsKey($mapKey)) {
+        $Context.ForEachObjectProcessIterationMap[$mapKey] = $true
+        $Context.ForEachObjectProcessIterations += [PSCustomObject]$record
+    }
 }
 
 function Record-CanonicalCommandInvocationResult {
@@ -9679,6 +9904,7 @@ function Invoke-NodeTraverse {
 
         Write-ExecutionLog -Context $Context -Message "--- Node $($currentNode.Id) [$($currentNode.Type)] ---"
         Write-ExecutionLog -Context $Context -Message "  Code: $($currentNode.Text)"
+        Clear-CurrentForEachObjectIterationIfNeeded -Node $currentNode -Context $Context
 
         $processMacroResult = Invoke-ForEachProcessMacroFastPath -Node $currentNode -Context $Context
         if ($processMacroResult.Applied) {
@@ -9919,6 +10145,10 @@ function Invoke-NodeTraverse {
             }
             $currentNode = $jumpNode
             continue
+        }
+
+        if ($currentNode.Type -eq 'ProcessBind' -and $execSuccess) {
+            Start-CurrentForEachObjectIterationFromProcessBind -Node $currentNode -Context $Context
         }
 
         $nextNodes = @(Get-NextNodes -CFG $Context.CFG -Node $currentNode -Context $Context)
@@ -12345,6 +12575,9 @@ function Invoke-CFGTraversal {
         LastSubgraphResult    = $null
         PipelineCurrentStack  = @()
         OutputCaptureStack    = @()
+        CurrentForEachObjectIteration = $null
+        ForEachObjectProcessIterations = @()
+        ForEachObjectProcessIterationMap = @{}
         LastPipelineFlowControl = $null
         TextParseCache            = @{}
         TextParseCacheKeyByNodeId = @{}
